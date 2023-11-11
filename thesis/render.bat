@@ -1,0 +1,1 @@
+"latexmk" "--shell-escape" "-xelatex" "main.tex"
