@@ -12,7 +12,7 @@ jobs:
       - uses: actions/checkout@v3
 
       - name: Install Python
-      - uses: actions/setup-python@v4
+        uses: actions/setup-python@v4
         with:
           python-version: '3.10'
 
@@ -22,13 +22,13 @@ jobs:
           packages: pygments
 
       - name: Install Ruby
-      - uses: ruby/setup-ruby@v1
+        uses: ruby/setup-ruby@v1
         with:
           ruby-version: '3.2'
           bundler-cache: true
       
       - name: Compile Latex
-      - uses: dante-ev/latex-action@2021-A
+        uses: dante-ev/latex-action@2021-A
         with:
           root_file: main.tex
           working_directory: thesis
@@ -38,7 +38,7 @@ jobs:
         run: mv thesis/main.pdf thesis/thesis.pdf
 
       - name: Upload PDF
-      - uses: actions/upload-artifact@v3.1.3
+        uses: actions/upload-artifact@v3.1.3
         with:
           name: Thesis
           path: thesis/thesis.pdf
