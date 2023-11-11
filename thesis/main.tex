@@ -1,0 +1,121 @@
+\documentclass[a4paper,12pt]{report}
+\usepackage{config}
+
+% Description
+\newcommand{\authorName}{CURMANSCHII Anton}
+\newcommand{\thesisTitle}{PNG}
+\newcommand{\uniGroupName}{IA1901}
+\newcommand{\thesisType}{master}
+\newcommand{\programulDeStudii}{master}
+\newcommand{\identificatorulCursului}{0613.5 Informatică aplicată}
+
+% Hardcoded for now
+\newcommand{\anexeCount}{20}
+\newcommand{\conferencesList}{I don't know what to write here}
+
+\begin{document}
+
+\input{foaie_de_titlu}
+
+\clearpage
+\tableofcontents
+
+\clearpage
+\unnumberedChapter{Lista Abrevierelor}
+\begin{acronym}
+  \acro{CI/CD}{Continuous Integration / Continuous Delivery}
+\end{acronym}
+
+
+\clearpage
+\unnumberedChapter{Adnotare}
+
+\textbf{la teza de \thesisType ``\thesisTitle'', a studentului \authorName{}, grupa \uniGroupName{}, programul de studii \programulDeStudii.}
+
+\textbf{Structura tezei.}
+Teza constă din: Introducere, \total{num_chapters} capitole, Concluzii generale și recomandări, Bibliografie \bibliographyEntryCount{} titluri.
+Textul de bază cuprinde \usefulPageCount{} de pagini și \anexeCount{} de anexe.
+
+\textbf{Cuvinte-cheie:}
+
+\textbf{Actualitatea.}
+
+\textbf{Scopul și obiectivele cercetării}.
+
+\textbf{Rezultatele preconizate și obținute} rezumă în: (1) (2) (3)
+
+\textbf{Problemele importante rezolvate} sunt:
+
+\textbf{Valoarea aplicativă.}
+
+Rezultatele obținute au fost raportate la Conferința (-ele) \textbf{\conferencesList}.
+
+% I think this one's required to be capitalized.
+\unnumberedChapter{INTRODUCERE}
+
+\markpage{usefulStuffBegin}
+
+\textbf{Actualitatea și importanța temei.}
+
+\textbf{Scopul și obiectivele.}
+
+\textbf{Suportul metodologic și tehnologic.}
+
+\textbf{Noutatea stiințifică/originalitatea.}
+
+\textbf{Valoarea aplicativă.}
+
+\textbf{Sumarul tezei.}
+
+Primul capitol, \nameref{intro_chapter_title}, aduce informații generale.
+Al doilea capitol, \nameref{architecture_chapter_title}, concretizează cerințele.
+Al treilea capitol, \nameref{implementation_chapter_title}, urmează implementarea.
+
+
+\chapter{Capitol introducere}\label{intro_chapter_title}
+
+\chapterConclusionSection{intro_chapter_title}
+
+
+\chapter{Arhitectura Aplicației}\label{architecture_chapter_title}
+
+\chapterConclusionSection{architecture_chapter_title}
+
+
+\chapter{Implementarea Sistemului}\label{implementation_chapter_title}
+
+\chapterConclusionSection{implementation_chater_title}
+
+
+\unnumberedChapter{Concluziile Finale și Recomandările}
+
+
+\newpage
+\markpage{usefulStuffEnd}
+
+
+% Bibliography
+\bibliographystyle{plain}
+\bibliography{bibliography}
+\addcontentsline{toc}{chapter}{\bibname}
+
+% Appendices
+\appendix
+
+% Number with arabic numbers instead of Roman
+\renewcommand{\thechapter}{\arabic{chapter}}
+% Prepend Anexa to section names, center them
+\titleformat{\section}[block]{\normalfont\normalsize\bfseries\filcenter}{Anexa \thesection~}{0pt}{}
+
+% Every section on new page
+% \newcommand{\sectionbreak}{\clearpage}
+
+% Since we've got just a single chapter in the appedices,
+% but which is also the name of the Appendix chapter, it should be omitted.
+% Makes little sense, but ok I guess.
+\setcounter{chapter}{1}
+
+\unnumberedChapter{Anexe}
+% insert appendices here
+
+\end{document}

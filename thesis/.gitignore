@@ -1,0 +1,17 @@
+*.pdf
+*.aux
+*.dvi
+*.log
+*.bbl
+*.blg
+errors.txt
+_minted*
+*.pyg
+*.synctex*
+*.fdb_latexmk
+*.fls
+output
+*.pagecount
+*.toc
+*.out
+*.xdv
