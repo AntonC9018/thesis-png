@@ -28,10 +28,10 @@ jobs:
           bundler-cache: true
 
       - name: Download Time New Roman
-        run: sudo apt install ttf-mscorefonts-installer
-
-      - name: Build font information caches
-        run: sudo fc-cache -rv
+        run: >
+          echo ttf-mscorefonts-installer msttcorefonts/accepted-mscorefonts-eula select true | sudo debconf-set-selections
+          sudo apt-get install ttf-mscorefonts-installer
+          sudo fc-cache -rv
       
       - name: Compile Latex
         uses: dante-ev/latex-action@2021-A
