@@ -38,7 +38,11 @@ jobs:
       
       - name: Compile Latex
         working-directory: thesis
-        run: latexmk --shell-escape -xelatex -latexoption=-file-line-error -latexoption=-interaction=nonstopmode main.tex -o thesis.pdf
+        run: latexmk --shell-escape -xelatex -latexoption=-file-line-error -latexoption=-interaction=nonstopmode main.tex
+
+      - name: Rename output
+        working-directory: thesis
+        run: mv main.pdf thesis.pdf
 
       - name: Upload PDF
         uses: actions/upload-artifact@v3.1.3
