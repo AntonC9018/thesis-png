@@ -19,9 +19,6 @@ jobs:
           python-version: '3.12.0'
           cache: pip
 
-      - name: Install Pygments
-        run: pip install pygments
-
       - name: Install Ruby
         uses: ruby/setup-ruby@v1
         with:
@@ -35,7 +32,9 @@ jobs:
           sudo fc-cache -rv
 
       - name: Install latex
-        run: sudo apt-get install texlive
+        run: |
+          sudo apt-get install texlive
+          sudo apt install latexmk
       
       - name: Compile Latex
         working-directory: thesis
