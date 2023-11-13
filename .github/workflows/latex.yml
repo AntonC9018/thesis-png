@@ -34,6 +34,7 @@ jobs:
       - name: Install Latex
         run: |
           sudo apt-get install texlive latexmk texlive-xetex
+          tlmgr install babel-romanian
       
       - name: Compile PDF with Latex
         working-directory: thesis
