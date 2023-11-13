@@ -31,11 +31,10 @@ jobs:
           sudo apt-get install ttf-mscorefonts-installer
           sudo fc-cache -rv
 
-      - name: Install Latex
-        run: |
-          sudo apt-get install texlive latexmk texlive-xetex
-          sudo tlmgr init-usertree
-          sudo tlmgr --usermode install babel-romanian
+      - name: Install TeX Live
+        uses: zauguin/install-texlive@v2
+        with:
+           package_file: babel-romanian
       
       - name: Compile PDF with Latex
         working-directory: thesis
