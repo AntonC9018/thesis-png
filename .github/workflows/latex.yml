@@ -34,14 +34,22 @@ jobs:
       - name: Install TeX Live
         uses: zauguin/install-texlive@v2
         with:
-           package_file: babel-romanian
+           packages: texliveonfly 
 
       - name: Install latexmk
         run: sudo apt-get install latexmk texlive-xetex
       
       - name: Compile PDF with Latex
         working-directory: thesis
-        run: latexmk --shell-escape -xelatex -latexoption=-file-line-error -latexoption=-interaction=nonstopmode main.tex
+        run: >
+          texliveonfly
+          --compiler=latexmk 
+          --arguments='
+            --shell-escape 
+            -xelatex 
+            -latexoption=-file-line-error 
+            -latexoption=-interaction=nonstopmode' 
+          main.tex
 
       - name: Rename the PDF
         working-directory: thesis
