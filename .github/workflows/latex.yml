@@ -31,20 +31,19 @@ jobs:
           sudo apt-get install ttf-mscorefonts-installer
           sudo fc-cache -rv
 
-      - name: Install latex
+      - name: Install Latex
         run: |
-          sudo apt-get install texlive
-          sudo apt install latexmk
+          sudo apt-get install texlive latexmk texlive-xetex
       
-      - name: Compile Latex
+      - name: Compile PDF with Latex
         working-directory: thesis
         run: latexmk --shell-escape -xelatex -latexoption=-file-line-error -latexoption=-interaction=nonstopmode main.tex
 
-      - name: Rename output
+      - name: Rename the PDF
         working-directory: thesis
         run: mv main.pdf thesis.pdf
 
-      - name: Upload PDF
+      - name: Upload the PDF
         uses: actions/upload-artifact@v3.1.3
         with:
           name: Thesis
