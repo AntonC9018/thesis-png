@@ -10,16 +10,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
+        with:
+          sparse-checkout: thesis
 
       - name: Install Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.10'
+          python-version: '3.12.0'
+          cache: pip
 
-      - name: Install Pip
-        uses: BSFishy/pip-action@v1
-        with:
-          packages: pygments
+      - name: Install Pygments
+        run: pip install pygments
 
       - name: Install Ruby
         uses: ruby/setup-ruby@v1
@@ -27,21 +28,18 @@ jobs:
           ruby-version: '3.2'
           bundler-cache: true
 
-      - name: Download Time New Roman
+      - name: Download Times New Roman
         run: |
           echo ttf-mscorefonts-installer msttcorefonts/accepted-mscorefonts-eula select true | sudo debconf-set-selections
           sudo apt-get install ttf-mscorefonts-installer
           sudo fc-cache -rv
+
+      - name: Install latex
+        run: sudo apt-get install texlive
       
       - name: Compile Latex
-        uses: dante-ev/latex-action@2021-A
-        with:
-          root_file: main.tex
-          working_directory: thesis
-          args: --shell-escape -xelatex -latexoption=-file-line-error -latexoption=-interaction=nonstopmode
-
-      - name: Rename output PDF
-        run: mv thesis/main.pdf thesis/thesis.pdf
+        working-directory: thesis
+        run: latexmk --shell-escape -xelatex -latexoption=-file-line-error -latexoption=-interaction=nonstopmode main.tex -o thesis.pdf
 
       - name: Upload PDF
         uses: actions/upload-artifact@v3.1.3
@@ -50,4 +48,3 @@ jobs:
           path: thesis/thesis.pdf
           if-no-files-found: error
           
-
