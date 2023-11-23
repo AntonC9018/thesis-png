@@ -9,51 +9,24 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           sparse-checkout: thesis
 
-      - name: Install Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.12.0'
-          cache: pip
+      - name: Install required packages
+        run: sudo apt install texlive latexmk texlive-xetex texlive-lang-european xz-utils
 
-      - name: Install Ruby
-        uses: ruby/setup-ruby@v1
-        with:
-          ruby-version: '3.2'
-          bundler-cache: true
-
-      - name: Download Times New Roman
+      - name: Install Times New Roman
         run: |
-          echo ttf-mscorefonts-installer msttcorefonts/accepted-mscorefonts-eula select true | sudo debconf-set-selections
-          sudo apt-get install ttf-mscorefonts-installer
-          sudo fc-cache -rv
-
-      - name: Install TeX Live
-        uses: zauguin/install-texlive@v2
-        with:
-           packages: texliveonfly 
-
-      - name: Install latexmk
-        run: sudo apt-get install latexmk texlive-xetex
+          curl -L -O https://notabug.org/ArtikusHG/times-new-roman/raw/master/times.tar.xz
+          sudo tar -xf times.tar.xz -C /usr/share/fonts/
+          fc-cache -f -v
       
       - name: Compile PDF with Latex
         working-directory: thesis
-        run: >
-          texliveonfly
-          --compiler=latexmk 
-          --arguments='
-            --shell-escape 
-            -xelatex 
-            -latexoption=-file-line-error 
-            -latexoption=-interaction=nonstopmode' 
-          main.tex
-
-      - name: Rename the PDF
-        working-directory: thesis
-        run: mv main.pdf thesis.pdf
+        run: |
+          latexmk --shell-escape -xelatex -latexoption=-file-line-error -latexoption=-interaction=nonstopmode main.tex
+          mv main.pdf thesis.pdf
 
       - name: Upload the PDF
         uses: actions/upload-artifact@v3.1.3
