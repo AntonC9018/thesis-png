@@ -24,6 +24,9 @@
 \unnumberedChapter{Lista Abrevierelor}
 \begin{acronym}
   \acro{CI/CD}{Continuous Integration / Continuous Delivery}
+  \acro{GUI}{Graphical User Interface}
+  \acro{PNG}{Portable Network Graphics}
+
 \end{acronym}
 
 
@@ -83,6 +86,14 @@ Al treilea capitol, \nameref{implementation_chapter_title}, urmează implementar
 
 
 \chapter{Implementarea Sistemului}\label{implementation_chapter_title}
+
+În continuare, se va prezenta implementarea unui decoder PNG care va fi folosit
+pentru a vizualiza formatul PNG printr-o aplicație \ac{GUI}. 
+Decoderul va fi implementat în limbajul de programare Zig\cite{zig} după specificația \ac{PNG}, versiunea 1.2\cite{png_spec}.
+Interfața grafică va fi implementată folosind Raylib\cite{raylib}, tot în Zig.
+
+
+
 
 \chapterConclusionSection{implementation_chater_title}
 
