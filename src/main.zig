@@ -19,10 +19,18 @@ pub fn main() !void {
     var buffer = try reader.readAllAlloc(allocator, std.math.maxInt(usize));
     defer allocator.free(buffer);
 
-    const bufferObject = [_](@TypeOf(buffer)){ buffer };
+    const bufferObject = [_]p.Segment
+    { 
+        .{
+            .array = buffer,
+            .len = @intCast(buffer.len),
+        },
+    };
     var sequence = p.Sequence {
         .buffer = .{
             .segments = &bufferObject,
+            .segmentAbsolutePositions = &[_]usize { 0 },
+            .firstSegmentOffset = 0,
         },
         .range = .{
             .start = .{ .segment = 0, .position = 0, },
@@ -35,6 +43,8 @@ pub fn main() !void {
         .NoMatch => return PngSignatureError.SignatureMismatch,
         .Removed => {},
     }
+
+    std.debug.print("Signature matched\n", .{});
 }
 
 const pngFileSignature = "\x89PNG\r\n\x1A\n";
