@@ -24,17 +24,17 @@ pub fn main() !void {
         .{
             .array = buffer,
             .len = @intCast(buffer.len),
+            .bytePosition = 0,
         },
     };
     var sequence = p.Sequence {
         .buffer = .{
             .segments = &bufferObject,
-            .segmentAbsolutePositions = &[_]usize { 0 },
             .firstSegmentOffset = 0,
         },
         .range = .{
-            .start = .{ .segment = 0, .position = 0, },
-            .end = .{ .segment = 0, .position = @intCast(buffer.len), }
+            .start = .{ .segment = 0, .offset = 0, },
+            .end = .{ .segment = 0, .offset = @intCast(buffer.len), }
         },
     };
     switch (validateSignature(&sequence))
@@ -50,6 +50,7 @@ pub fn main() !void {
 const pngFileSignature = "\x89PNG\r\n\x1A\n";
 
 const p = @import("pipelines.zig");
+test { _ = p; }
 
 fn validateSignature(slice: *p.Sequence) p.RemoveResult {
     const removeResult = slice.removeFront(pngFileSignature);
