@@ -36,7 +36,7 @@ pub fn main() !void {
         const readResult = try reader.read();
         var sequence = readResult.sequence;
 
-        const maybeParseError = (while (true) inner:
+        try while (true) inner:
         {
             switch (readState.state)
             {
@@ -51,9 +51,8 @@ pub fn main() !void {
                 },
                 .Done => break,
             }
-        } else null);
-
-        if (maybeParseError) |parseError|
+        }
+        catch |parseError|
         {
             switch (parseError)
             {
@@ -68,7 +67,7 @@ pub fn main() !void {
                 error.SignatureMismatch => std.debug.print("Signature mismatch\n", .{}),
                 // else => std.debug.print("Some other error: {}\n", .{err}),
             }
-        }
+        };
 
         if (readResult.isEnd)
         {
