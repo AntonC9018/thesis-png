@@ -31,10 +31,11 @@ pub fn build(b: *std.Build) !void {
     {
         const unit_tests = b.addTest(.{
             .name = "png-test",
-            .root_source_file = exe.root_src,
+            .root_source_file = exe.root_src.?,
             .target = exe.target,
             .optimize = exe.optimize,
         });
+        b.installArtifact(unit_tests);
 
         const run_unit_tests = b.addRunArtifact(unit_tests);
 
