@@ -35,7 +35,8 @@ pub fn main() !void {
             .sequence = &readResult.sequence,
         };
 
-        doParsing(&context) catch |err|
+        var isNonRecoverableError = false;
+        doMaximumAmountOfParsing(&context) catch |err|
         {
             switch (err)
             {
@@ -47,10 +48,20 @@ pub fn main() !void {
                         break :outerLoop;
                     }
                 },
-                error.SignatureMismatch => std.debug.print("Signature mismatch\n", .{}),
+                error.SignatureMismatch => 
+                {
+                    std.debug.print("Signature mismatch\n", .{});
+                },
                 // else => std.debug.print("Some other error: {}\n", .{err}),
             }
+
+            isNonRecoverableError = true;
         };
+
+        if (isNonRecoverableError)
+        {
+            break;
+        }
 
         if (readResult.isEnd)
         {
@@ -94,26 +105,30 @@ const ParserContext = struct
     sequence: *p.Sequence,
 };
 
-fn doParsing(context: *ParserContext) !void
+fn doMaximumAmountOfParsing(context: *ParserContext) !void
 {
-    while (true)
+    while (context.state.key != .Done)
     {
-        switch (context.state.key)
-        {
-            .Signature => 
-            {
-                switch (validateSignature(context.sequence))
-                {
-                    .NotEnoughBytes => return error.NotEnoughBytes,
-                    .NoMatch => return error.SignatureMismatch,
-                    .Removed => context.state.key = .Done,
-                }
-            },
-            .Done => return,
-        }
+        try parseNextThing(context);
     }
 }
 
+fn parseNextThing(context: *ParserContext) !void
+{
+    switch (context.state.key)
+    {
+        .Signature => 
+        {
+            switch (validateSignature(context.sequence))
+            {
+                .NotEnoughBytes => return error.NotEnoughBytes,
+                .NoMatch => return error.SignatureMismatch,
+                .Removed => context.state.key = .Done,
+            }
+        },
+        .Done => unreachable,
+    }
+}
 
 const pngFileSignature = "\x89PNG\r\n\x1A\n";
 
