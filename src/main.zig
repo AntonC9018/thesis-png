@@ -1,6 +1,7 @@
 const std = @import("std");
 
-const PngSignatureError = error {
+const PngSignatureError = error 
+{
     FileTooShort,
     SignatureMismatch,
 };
@@ -23,38 +24,20 @@ pub fn main() !void {
     };
     defer reader.deinit();
 
-    const State = enum {
-        Signature,
-        Done,
-    };
-    var readState = struct {
-        state: State = .Signature,
-    }{};
+    var parserState = ParserState{};
 
     outerLoop: while (true)
     {
-        const readResult = try reader.read();
-        var sequence = readResult.sequence;
+        var readResult = try reader.read();
+        var context = ParserContext
+        { 
+            .state = &parserState,
+            .sequence = &readResult.sequence,
+        };
 
-        try while (true) inner:
+        doParsing(&context) catch |err|
         {
-            switch (readState.state)
-            {
-                .Signature => 
-                {
-                    switch (validateSignature(&sequence))
-                    {
-                        .NotEnoughBytes => break :inner error.NotEnoughBytes,
-                        .Removed => readState.state = .Done,
-                        .NoMatch => break :inner error.SignatureMismatch,
-                    }
-                },
-                .Done => break,
-            }
-        }
-        catch |parseError|
-        {
-            switch (parseError)
+            switch (err)
             {
                 error.NotEnoughBytes => 
                 {
@@ -71,19 +54,66 @@ pub fn main() !void {
 
         if (readResult.isEnd)
         {
-            const remaining = sequence.len();
+            const remaining = context.sequence.len();
             if (remaining > 0)
             {
                 std.debug.print("Not all output consumed. Remaining length: {}\n", .{remaining});
             }
 
+            if (parserState.key != .Done)
+            {
+                std.debug.print("Ended in a non-terminal state.", .{});
+            }
+
             break;
         }
+        else if (parserState.key == .Done)
+        {
+            std.debug.print("Done, but not all input has been consumed.\n", .{});
+        }
 
-        try reader.advance(sequence);
+        try reader.advance(context.sequence.start());
     }
 
 }
+
+const ParserStateKey = enum 
+{
+    Signature,
+    Done,
+};
+
+const ParserState = struct
+{
+    key: ParserStateKey = .Signature, 
+};
+
+const ParserContext = struct
+{
+    state: *ParserState,
+    sequence: *p.Sequence,
+};
+
+fn doParsing(context: *ParserContext) !void
+{
+    while (true)
+    {
+        switch (context.state.key)
+        {
+            .Signature => 
+            {
+                switch (validateSignature(context.sequence))
+                {
+                    .NotEnoughBytes => return error.NotEnoughBytes,
+                    .NoMatch => return error.SignatureMismatch,
+                    .Removed => context.state.key = .Done,
+                }
+            },
+            .Done => return,
+        }
+    }
+}
+
 
 const pngFileSignature = "\x89PNG\r\n\x1A\n";
 
