@@ -26,6 +26,8 @@
   \acro{CI/CD}{Continuous Integration / Continuous Delivery}
   \acro{GUI}{Graphical User Interface}
   \acro{PNG}{Portable Network Graphics}
+  \acro{I/O}{Input/Output}
+  \acro{MVP}{Produsul Minim Viabil}
 
 \end{acronym}
 
@@ -92,6 +94,45 @@ pentru a vizualiza formatul PNG printr-o aplicație \ac{GUI}.
 Decoderul va fi implementat în limbajul de programare Zig\cite{zig} după specificația \ac{PNG}, versiunea 1.2\cite{png_spec}.
 Interfața grafică va fi implementată folosind Raylib\cite{raylib}, tot în Zig.
 
+Deoarece autorul nu a cunoscut atât de bine limbajul Zig anterior,
+și deoarece a dorit să facă o abstracție pentru citire a stream-urilor de date,
+a fost implementată o librărie mică pentru aceasta.
+Autorul a lucrat anterior cu librăria \texttt{System.IO.Pipelines}\cite{system_io_pipelines} din C\#,
+și a observat că codul scris folosind această librărie are următoarele avantaje 
+asupra codului obișnuit:
+\begin{itemize}
+  \item 
+    Realizarea unei implementări corecte care se ocupă de toate cazurile-limită 
+    este ușurată datorită faptului că partea majoră a complexității este gestionată de librărie.
+    Ca exemplu, librăria se ocupă cu alocarea și ștergerea buferilor,
+    precum și înfășurarea datelor pe mai multe segmente consecutive.
+
+  \item 
+    Duce la un cod mai flexibil, unde implementarea de obicei la sfârșit ajunge 
+    la un automat finit.
+    Aceasta implică că codul care prelucrează datele poate
+    fi oprit și pe urmă rerulat dintr-o careva stare sălvată anterior.
+
+  \item
+    Duce la un cod mai eficient, deoarece se soluționează cazurile unde să se aibă nevoie de
+    a copia datele într-un bufer temporar, sau a stoca mai multe sau mai puține date deoadată
+    decât este optim.
+
+  \item
+    Duce la centralizarea logicii de citire în formă de un ciclu centralizat de citire a datelor.
+    Acesta duce la reducerea duplicării a codului de citire.
+
+  \item
+    Permite separearea completă a modulelor de citire și de scriere.
+    Datele pot fi preluate într-un fir separat de cel care le procesează,
+    ceea ce elimină timpul pierdut la \ac{I/O} în timpul procesării.
+\end{itemize}
+    
+Ca prototip, autorul a hotărât să realizeze o implementare a unei librării similare în Zig,
+însă fără ultimul punct de separare a modulelor de citire și de scriere,
+deoarece acesta ar adăuga destul de multă complexitate din cauza că s-ar trebui
+să se sincronizeze acele fire, deoarece datele ar fi scrise în memorie partajată.
+Partea această de cod poate fi realizată mai târziu și nu este crucială pentru un \ac{MVP}.
 
 
 
