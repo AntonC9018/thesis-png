@@ -94,50 +94,11 @@ pub const Segment = struct
     }
 };
 
-pub const BufferSlice = struct
-{
-    segments: []const Segment,
-    firstSegmentOffset: usize,
-    
-    fn getFirstSegmentOffset(self: *const BufferSlice) usize
-    {
-        return self.firstSegmentOffset;
-    }
-
-    fn getSegmentIndex(self: *const BufferSlice, segmentIndex: u32) usize
-    {
-        const f_ = self.getFirstSegmentOffset();
-        std.debug.assert(segmentIndex >= f_);
-        const result = @as(usize, segmentIndex) - f_;
-        return result;
-    }
-
-    pub fn getSegment(self: *const BufferSlice, segmentIndex: u32) []const u8
-    {
-        const actualIndex = getSegmentIndex(self, segmentIndex);
-        return self.segments[actualIndex].getSlice();
-    }
-
-    pub fn getBytePosition(self: *const BufferSlice, position: SequencePosition) usize
-    {
-        const actualIndex = getSegmentIndex(self, position.segment);
-        return self.segments[actualIndex].getBytePosition() + position.offset;
-    }
-};
-
 pub const Buffer = struct 
 {
     segments: std.ArrayListUnmanaged(Segment),
     firstSegmentOffset: u32,
-
-    pub fn slice(self: *const Buffer) BufferSlice
-    {
-        const i = self.getFirstSegmentOffset();
-        return .{
-            .segments = self.segments.items,
-            .firstSegmentOffset = i,
-        };
-    }
+    totalBytes: usize,
 
     fn getFirstSegmentOffset(self: *const Buffer) u32
     {
@@ -146,24 +107,40 @@ pub const Buffer = struct
 
     pub fn getSegment(self: *const Buffer, segmentIndex: u32) []const u8
     {
-        return self.slice().getSegment(segmentIndex);
+        const segments_ = self.segments.items;
+        const actualIndex = getSegmentIndex(self, segmentIndex);
+        return segments_[actualIndex].getSlice();
     }
 
-    pub fn getAbsolutePosition(self: *const Buffer, position: SequencePosition) usize
+    fn getSegmentIndex(self: *const Buffer, segmentIndex: u32) usize
     {
-        return self.slice().getBytePosition(position);
+        const f_ = self.getFirstSegmentOffset();
+        std.debug.assert(segmentIndex >= f_);
+        const result = @as(usize, segmentIndex) - f_;
+        return result;
     }
 
-    pub fn allByteCount(self: *const Buffer) usize
+    pub fn getBytePosition(self: *const Buffer, position: SequencePosition) usize
     {
         const segments_ = self.segments.items;
         if (segments_.len == 0)
         {
-            return 0;
+            return self.totalBytes;
         }
 
-        const lastSegment = &segments_[segments_.len - 1];
-        return lastSegment.getBytePosition() + lastSegment.len;
+        const actualIndex = self.getSegmentIndex(position.segment);
+        return segments_[actualIndex].getBytePosition() + position.offset;
+    }
+
+    pub fn allByteCount(self: *const Buffer) usize
+    {
+        return self.totalBytes;
+    }
+
+    pub fn appendSegment(self: *Buffer, segment: Segment, allocator: std.mem.Allocator) !void
+    {
+        try self.segments.append(allocator, segment);
+        self.totalBytes += segment.len;
     }
 };
 
@@ -214,10 +191,10 @@ pub const SequenceRange = struct {
 
 pub const Sequence = struct 
 {
-    buffer: BufferSlice,
+    buffer: *const Buffer,
     range: SequenceRange,
 
-    pub fn createEmpty(buffer: BufferSlice) Sequence
+    pub fn createEmpty(buffer: *const Buffer) Sequence
     {
         const pos = SequencePosition {
             .offset = 0,
@@ -263,7 +240,7 @@ pub const Sequence = struct
         const startOffset = self.buffer.getBytePosition(self.start());
         const targetBytePosition = startOffset + offset;
 
-        const segments_ = self.buffer.segments;
+        const segments_ = self.buffer.segments.items;
         // let's just linearly search for now.
         for (segments_, 0 ..) |*s, i|
         {
@@ -571,12 +548,12 @@ pub fn Reader(comptime ReaderType: type) type
             const segments_ = buffer_.segments.items;
             if (segments_.len == 0)
             {
-                return Sequence.createEmpty(buffer_.slice());
+                return Sequence.createEmpty(buffer_);
             }
 
             const lastSegment_ = &segments_[segments_.len - 1];
             return .{
-                .buffer = buffer_.slice(),
+                .buffer = buffer_,
                 .range = .{
                     .start = self._consumedUntilPosition,
                     .end = .{ 
@@ -638,7 +615,7 @@ pub fn Reader(comptime ReaderType: type) type
 
                 // You should only call advance once you've scanned all of the input.
                 // Or you know you need more.
-                try buffer_.segments.append(self.allocator, newSegment);
+                try buffer_.appendSegment(newSegment, self.allocator);
             }
 
             self._consumedUntilPosition = newSequence_.start();
@@ -658,7 +635,7 @@ pub fn Reader(comptime ReaderType: type) type
                 const newSegment = try self.readOneMoreSegment();
                 errdefer self.allocator.free(newSegment.array);
 
-                try buffer_.segments.append(self.allocator, newSegment);
+                try buffer_.appendSegment(newSegment, self.allocator);
             }
 
             return .{
@@ -719,7 +696,7 @@ test "basic integration tests" {
 
         const sequence = readResult.sequence;
         try t.expectEqual(@as(usize, 4), sequence.len());
-        try t.expectEqual(@as(usize, 1), sequence.buffer.segments.len);
+        try t.expectEqual(@as(usize, 1), sequence.buffer.segments.items.len);
 
         try helper.check(sequence, "0123");
         
@@ -732,7 +709,7 @@ test "basic integration tests" {
 
         const sequence = readResult.sequence;
         try t.expectEqual(@as(usize, 8), sequence.len());
-        try t.expectEqual(@as(usize, 2), sequence.buffer.segments.len);
+        try t.expectEqual(@as(usize, 2), sequence.buffer.segments.items.len);
 
         const secondBufferStartPosition = sequence.getPosition(4);
         try helper.check(sequence.slice(.{
