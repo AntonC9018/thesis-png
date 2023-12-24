@@ -36,11 +36,12 @@ pub fn main() !void {
         const readResult = try reader.read();
         var sequence = readResult.sequence;
 
-        const maybeParseError = while (true) inner:
+        const maybeParseError = (while (true) inner:
         {
             switch (readState.state)
             {
-                .Signature => {
+                .Signature => 
+                {
                     switch (validateSignature(&sequence))
                     {
                         .NotEnoughBytes => break :inner error.NotEnoughBytes,
@@ -50,8 +51,7 @@ pub fn main() !void {
                 },
                 .Done => break,
             }
-            break :inner null;
-        };
+        } else null);
 
         if (maybeParseError) |parseError|
         {
