@@ -14,40 +14,76 @@ pub fn main() !void {
     var file = try testDir.openFile("test.png", .{ .mode = .read_only, });
     defer file.close();
 
-    var allocator = std.heap.page_allocator;
-    var reader = file.reader();
-    const buffer = try reader.readAllAlloc(allocator, std.math.maxInt(usize));
-    defer allocator.free(buffer);
-
-    var segments = [_]p.Segment
-    { 
-        .{
-            .array = buffer,
-            .len = @intCast(buffer.len),
-            .bytePosition = 0,
-        },
-    };
-    const bufferObject = p.Buffer 
-    { 
-        .segments = .{ .items = &segments, .capacity = 1 }, 
-        .totalBytes = @intCast(buffer.len),
-        .firstSegmentOffset = 0,
-    };
-    var sequence = p.Sequence {
-        .buffer = &bufferObject,
-        .range = .{
-            .start = .{ .segment = 0, .offset = 0, },
-            .end = .{ .segment = 0, .offset = @intCast(buffer.len), }
-        },
-    };
-    switch (validateSignature(&sequence))
+    const allocator = std.heap.page_allocator;
+    var reader = p.Reader(@TypeOf(file.reader()))
     {
-        .NotEnoughBytes => return PngSignatureError.FileTooShort,
-        .NoMatch => return PngSignatureError.SignatureMismatch,
-        .Removed => {},
+        .dataProvider = file.reader(),
+        .allocator = allocator,
+        .preferredBufferSize = 4096, // TODO: Get optimal block size from OS.
+    };
+    defer reader.deinit();
+
+    const State = enum {
+        Signature,
+        Done,
+    };
+    var readState = struct {
+        state: State = .Signature,
+    }{};
+
+    outerLoop: while (true)
+    {
+        const readResult = try reader.read();
+        var sequence = readResult.sequence;
+
+        const maybeParseError = while (true) inner:
+        {
+            switch (readState.state)
+            {
+                .Signature => {
+                    switch (validateSignature(&sequence))
+                    {
+                        .NotEnoughBytes => break :inner error.NotEnoughBytes,
+                        .Removed => readState.state = .Done,
+                        .NoMatch => break :inner error.SignatureMismatch,
+                    }
+                },
+                .Done => break,
+            }
+            break :inner null;
+        };
+
+        if (maybeParseError) |parseError|
+        {
+            switch (parseError)
+            {
+                error.NotEnoughBytes => 
+                {
+                    if (readResult.isEnd)
+                    {
+                        std.debug.print("File ended but expected more data\n", .{});
+                        break :outerLoop;
+                    }
+                },
+                error.SignatureMismatch => std.debug.print("Signature mismatch\n", .{}),
+                // else => std.debug.print("Some other error: {}\n", .{err}),
+            }
+        }
+
+        if (readResult.isEnd)
+        {
+            const remaining = sequence.len();
+            if (remaining > 0)
+            {
+                std.debug.print("Not all output consumed. Remaining length: {}\n", .{remaining});
+            }
+
+            break;
+        }
+
+        try reader.advance(sequence);
     }
 
-    std.debug.print("Signature matched\n", .{});
 }
 
 const pngFileSignature = "\x89PNG\r\n\x1A\n";

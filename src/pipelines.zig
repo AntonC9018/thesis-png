@@ -512,9 +512,9 @@ pub fn Reader(comptime ReaderType: type) type
         _consumedUntilPosition: SequencePosition = SequencePosition.Start,
         _eofState: EOFState = .FirstRead,
 
-        pub fn deinit(self: *Self) !void
+        pub fn deinit(self: *Self) void
         {
-            for (self._buffer.segments) |*s|
+            for (self._buffer.segments.items) |*s|
             {
                 self.allocator.free(s.array);
             }
