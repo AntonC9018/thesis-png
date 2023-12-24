@@ -510,7 +510,7 @@ pub fn Reader(comptime ReaderType: type) type
 
         _buffer: Buffer = std.mem.zeroes(Buffer),
         _consumedUntilPosition: SequencePosition = SequencePosition.Start,
-        _eofState: EOFState = .NotReached,
+        _eofState: EOFState = .FirstRead,
 
         pub fn deinit(self: *Self) !void
         {
@@ -522,7 +522,9 @@ pub fn Reader(comptime ReaderType: type) type
 
         fn readOneMoreSegment(self: *Self) !Segment
         {
-            std.debug.assert(self._eofState == .NotReached);
+            std.debug.assert(
+                self._eofState == .NotReached
+                or self._eofState == .FirstRead);
 
             const newBuffer = try self.allocator.alloc(u8, self.preferredBufferSize);
             errdefer self.allocator.free(newBuffer);
@@ -584,18 +586,9 @@ pub fn Reader(comptime ReaderType: type) type
                     .start = sequence_.start(),
                     .end = newSequence_.start(),
                 });
-                std.debug.print("Start and end position of removed sequence: {}:{} {}:{}\n", .{
-                    removedSequence.start().segment,
-                    removedSequence.start().offset,
-                    removedSequence.end().segment,
-                    removedSequence.end().offset,
-                });
 
                 const segments = &buffer_.segments.items;
                 const removedSegmentsCount = removedSequence.getSegmentCount();
-                std.debug.print("Removed segments count: {}\n", .{ removedSegmentsCount });
-
-                std.debug.print("Total segment cout: {}\n", .{ segments.len });
 
                 for (0 .. removedSegmentsCount) |i|
                 {
@@ -638,8 +631,14 @@ pub fn Reader(comptime ReaderType: type) type
                 try buffer_.appendSegment(newSegment, self.allocator);
             }
 
+            const isEnd = self._eofState == .Reached;
+            if (isEnd)
+            {
+                self._eofState = .AlreadySignaled;
+            }
+
             return .{
-                .isEnd = self._eofState == .Reached,
+                .isEnd = isEnd,
                 .sequence = self.currentSequence(),
             };
         }
@@ -688,13 +687,21 @@ test "basic integration tests" {
         .allocator = allocator,
     };
 
-    std.debug.print("Hhello", .{});
-
     {
         const readResult = try reader.read();
         try t.expect(!readResult.isEnd);
 
         const sequence = readResult.sequence;
+        try t.expectEqualDeep(SequenceRange{
+            .start = .{
+                .segment = 0,
+                .offset = 0,
+            },
+            .end = .{
+                .segment = 0,
+                .offset = 4,
+            },
+        }, sequence.range);
         try t.expectEqual(@as(usize, 4), sequence.len());
         try t.expectEqual(@as(usize, 1), sequence.buffer.segments.items.len);
 
@@ -708,6 +715,16 @@ test "basic integration tests" {
         try t.expect(!readResult.isEnd);
 
         const sequence = readResult.sequence;
+        try t.expectEqualDeep(SequenceRange{
+            .start = .{
+                .segment = 0,
+                .offset = 0,
+            },
+            .end = .{
+                .segment = 1,
+                .offset = 4,
+            },
+        }, sequence.range);
         try t.expectEqual(@as(usize, 8), sequence.len());
         try t.expectEqual(@as(usize, 2), sequence.buffer.segments.items.len);
 
@@ -738,6 +755,16 @@ test "basic integration tests" {
         try t.expect(readResult.isEnd);
 
         const sequence = readResult.sequence;
+        try t.expectEqualDeep(SequenceRange{
+            .start = .{
+                .segment = 0,
+                .offset = 2,
+            },
+            .end = .{
+                .segment = 2,
+                .offset = 2,
+            },
+        }, sequence.range);
         try t.expectEqual(@as(usize, 8), sequence.len());
         try helper.check(sequence, "23456789");
 

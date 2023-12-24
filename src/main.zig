@@ -19,7 +19,7 @@ pub fn main() !void {
     const buffer = try reader.readAllAlloc(allocator, std.math.maxInt(usize));
     defer allocator.free(buffer);
 
-    const bufferObject = [_]p.Segment
+    var segments = [_]p.Segment
     { 
         .{
             .array = buffer,
@@ -27,11 +27,14 @@ pub fn main() !void {
             .bytePosition = 0,
         },
     };
+    const bufferObject = p.Buffer 
+    { 
+        .segments = .{ .items = &segments, .capacity = 1 }, 
+        .totalBytes = @intCast(buffer.len),
+        .firstSegmentOffset = 0,
+    };
     var sequence = p.Sequence {
-        .buffer = .{
-            .segments = &bufferObject,
-            .firstSegmentOffset = 0,
-        },
+        .buffer = &bufferObject,
         .range = .{
             .start = .{ .segment = 0, .offset = 0, },
             .end = .{ .segment = 0, .offset = @intCast(buffer.len), }
