@@ -16,7 +16,7 @@ pub fn main() !void {
 
     var allocator = std.heap.page_allocator;
     var reader = file.reader();
-    var buffer = try reader.readAllAlloc(allocator, std.math.maxInt(usize));
+    const buffer = try reader.readAllAlloc(allocator, std.math.maxInt(usize));
     defer allocator.free(buffer);
 
     const bufferObject = [_]p.Segment
