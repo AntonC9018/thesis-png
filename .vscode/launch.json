@@ -10,8 +10,8 @@
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
             "environment": [],
-            "externalConsole": false,
-            "preLaunchTask": "windows_build"
+            "preLaunchTask": "windows_build",
+            "console": "externalTerminal"
         },
         {
             "name": "(msvc) Launch Tests",
@@ -22,8 +22,8 @@
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
             "environment": [],
-            "externalConsole": false,
-            "preLaunchTask": "windows_build"
+            "preLaunchTask": "windows_build",
+            "console": "externalTerminal"
         }
     ]
 }

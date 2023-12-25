@@ -1,11 +1,5 @@
 const std = @import("std");
 
-const PngSignatureError = error 
-{
-    FileTooShort,
-    SignatureMismatch,
-};
-
 pub fn main() !void {
     var cwd = std.fs.cwd();
 
