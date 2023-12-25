@@ -228,6 +228,16 @@ pub const Sequence = struct
         return endAbsolute - startAbsolute;
     }
 
+    pub fn getStartOffset(self: *const Sequence) usize
+    {
+        return getOffset(self, self.start());
+    }
+
+    pub fn getOffset(self: *const Sequence, position: SequencePosition) usize
+    {
+        return self.buffer.getBytePosition(position);
+    }
+
     pub fn getPosition(self: *const Sequence, offset: usize) SequencePosition
     {
         std.debug.assert(offset <= self.len());
@@ -369,46 +379,6 @@ pub const Sequence = struct
         };
     }
 
-    pub fn removeFront(self: *Sequence, string: []const u8) RemoveResult
-    {
-        var string_ = string;
-        if (string_.len == 0)
-        {
-            return RemoveResult.Removed;
-        }
-
-        var iter = SegmentIterator.create(self);
-        while (true)
-        {
-            const currentPosition = iter.getCurrentPosition();
-            if (iter.next()) |segment|
-            {
-                const bytesToCheck: u32 = @intCast(@min(segment.len, string_.len));
-                for (0 .. bytesToCheck) |i|
-                {
-                    const a = segment[i];
-                    const b = string_[i];
-                    if (a != b)
-                    {
-                        self.range.start = currentPosition.add(@intCast(i));
-                        return .NoMatch;
-                    }
-                }
-                string_ = string_[bytesToCheck .. string_.len];
-                if (string_.len == 0)
-                {
-                    self.range.start = currentPosition.add(bytesToCheck);
-                    return .Removed;
-                }
-            }
-            else
-            {
-                self.range.start = self.range.end;
-                return .NotEnoughBytes;
-            }
-        }
-    }
-
     pub fn copyTo(self: *const Sequence, buffer: []u8) void
     {
         var buffer_ = buffer;
@@ -429,15 +399,15 @@ pub const Sequence = struct
 
         unreachable;
     }
+
+    pub fn getFirstSegment(self: *const Sequence) []const u8
+    {
+        return self.buffer.getSegment(self.start().segment);
+    }
 };
 
-pub const RemoveResult = enum {
-    NotEnoughBytes,
-    Removed,
-    NoMatch,
-};
-
-pub const SegmentIterator = struct {
+pub const SegmentIterator = struct 
+{
     sequence: *const Sequence,
     currentPosition: SequencePosition,
 
@@ -456,6 +426,8 @@ pub const SegmentIterator = struct {
 
     pub fn next(self: *SegmentIterator) ?[] const u8
     {
+        // TODO: Updating it at the start would be easier to use.
+
         const start_ = &self.currentPosition;
         const end_ = self.sequence.end();
         if (start_.segment > end_.segment)
@@ -781,4 +753,126 @@ test "basic integration tests" {
             try t.expect(error.ReadAfterEnd == err);
         }
     }
+}
+
+const RemoveResult = error{NotEnoughBytes,NoMatch}!void;
+
+pub fn removeFront(self: *Sequence, string: []const u8) RemoveResult
+{
+    var string_ = string;
+    if (string_.len == 0)
+    {
+        return;
+    }
+
+    var iter = SegmentIterator.create(self);
+    while (true)
+    {
+        const currentPosition = iter.getCurrentPosition();
+        if (iter.next()) |segment|
+        {
+            const bytesToCheck: u32 = @intCast(@min(segment.len, string_.len));
+            for (0 .. bytesToCheck) |i|
+            {
+                const a = segment[i];
+                const b = string_[i];
+                if (a != b)
+                {
+                    self.range.start = currentPosition.add(@intCast(i));
+                    return error.NoMatch;
+                }
+            }
+            string_ = string_[bytesToCheck .. string_.len];
+            if (string_.len == 0)
+            {
+                self.range.start = currentPosition.add(bytesToCheck);
+                return;
+            }
+        }
+        else
+        {
+            self.range.start = self.range.end;
+            return error.NotEnoughBytes;
+        }
+    }
+}
+
+pub fn isLittleEndian() bool
+{
+    const one: [4]u8 = @bitCast(@as(u32, 1));
+    return one[0] == 1;
+}
+
+pub fn readNetworkU31(self: *Sequence) error{NotEnoughBytes,NumberTooLarge}!u31
+{
+    if (self.len() < 4)
+    {
+        return error.NotEnoughBytes;
+    }
+
+    const firstByte = self.getFirstSegment()[0];
+    if (firstByte & 0x80 != 0)
+    {
+        return error.NumberTooLarge;
+    }
+
+    return @intCast(readNetworkU32_impl(self));
+}
+
+// Reverses the byte order if the host is little endian.
+pub fn readNetworkU32(self: *Sequence) error{NotEnoughBytes}!u32
+{
+    if (self.len() < 4)
+    {
+        return error.NotEnoughBytes;
+    }
+
+    return readNetworkU32_impl(self);
+}
+
+// Assumes the length is at least 4.
+fn readNetworkU32_impl(self: *Sequence) error{NotEnoughBytes}!u32
+{
+    const reverseBytes = isLittleEndian();
+    var resultBytes: [4]u8 = undefined;
+    var bytesLeftToWrite: u2 = 4;
+
+    var iter = SegmentIterator.create(self);
+    while (true)
+    {
+        const position = iter.getCurrentPosition();
+        const segment = iter.next().?;
+
+        const bytesToCopy = @min(segment.len, bytesLeftToWrite);
+        // We shouldn't ever allow empty segments (I think?).
+        std.debug.assert(bytesToCopy > 0);
+
+        if (reverseBytes)
+        {
+            for (0 .. bytesToCopy) |i|
+            {
+                resultBytes[bytesLeftToWrite - 1 - i] = segment[i];
+            }
+        }
+        else
+        {
+            @memcpy(
+                resultBytes[4 - bytesLeftToWrite .. bytesToCopy],
+                segment[0 .. bytesToCopy]);
+        }
+
+        bytesLeftToWrite -= bytesToCopy;
+        if (bytesLeftToWrite == 0)
+        {
+            self.* = self.slice(.{
+                .start = position.add(bytesToCopy),
+                .end = self.end(),
+            });
+
+            const result: u32 = @bitCast(resultBytes);
+            return result;
+        }
+    }
+
+    unreachable;
 }
