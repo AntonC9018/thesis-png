@@ -835,7 +835,7 @@ fn readNetworkU32_impl(self: *Sequence) error{NotEnoughBytes}!u32
 {
     const reverseBytes = isLittleEndian();
     var resultBytes: [4]u8 = undefined;
-    var bytesLeftToWrite: u2 = 4;
+    var bytesLeftToWrite: u3 = 4;
 
     var iter = SegmentIterator.create(self);
     while (true)
