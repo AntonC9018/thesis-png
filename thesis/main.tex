@@ -183,7 +183,7 @@ Așa este natura dezvoltării software.
 Faptul este că planificarea și gândirea de prisos înainte de a începe a scrie codul
 de obicei aduce la un design incorect sau inferior, deoarece în timpul programării
 se descoper anumite probleme care nu au fost luate în considerare înainte,
-din cauza că cunoașterea întregul sistem ca unul singur încă nu era atinsă de programator.
+din cauza că cunoașterea întregului sistem ca unul singur încă nu era atinsă de programator.
 Din această cauză nu ar fi înțelept să se planifice întregul sistem
 dinainte, și numai după aceasta să se înceapă procesul de dezvoltare.
 Însă, planificarea la nivel înalt a structurii aplicației,
@@ -193,7 +193,7 @@ este totuși utilă pentru a putea descompune problema în subprobleme mai mici,
 și a putea începe să se implementeze o soluție.
  
 Acestea fiind spuse, ar trebui să se evidențieze imaginea sistemului la nivel înalt a autorului,
-la care acesta a ajuns pe baza intuiției derivate din experiență și pe baza cerințelor.
+la care el a ajuns pe baza intuiției derivate din experiență și pe baza cerințelor.
 
 În primul rând, aplicația ar trebui să fie împărțită în mai multe module:
 \begin{itemize}
@@ -202,7 +202,7 @@ la care acesta a ajuns pe baza intuiției derivate din experiență și pe baza 
   să gestioneze și cache-area segmentelor vizualizate în momentul dat,
   precum și ștergerea segmentelor nedorite din memorie,
   și citirea datelor din fișier atunci când este nevoie.
-  Acest modul este o abstracție importantă pentru a simplica interacționa cu
+  Acest modul este o abstracție importantă pentru a simplica interacțiunea cu
   fișierele PNG, ca acest proces să fie mai declarativ și ca module băzate pe
   acesta să nu fie nevoite a face operațiuni de nivel foarte jos.
 
@@ -218,15 +218,15 @@ la care acesta a ajuns pe baza intuiției derivate din experiență și pe baza 
   \item
   Propriu zis \textbf{parser}, care să poată transforma
   datele din fișier într-un arbore sintactic, la cerere.
-  Acesta nu trebuie să existe ca un obiect, ajunge și niște funcții care să poată
-  fi apelate pentru a realiza transformarea.
+  Acesta nu trebuie să existe ca un obiect, ajung și niște funcții care să poată
+  fi apelate pentru a realiza această transformare.
 
   \item
   \textbf{Modulul de interfață cu utilizatorul}.
   Acesta ar trebui să folosească arborele sintactic al fișierului dat pentru
   a arăta utilizatului informațiile păstrate în arbore într-o formă captivantă.
-  Acest modul ar trebui să aibă control asupra pozițiilor de start și de sfârșit ale segmentelor de fișier
-  care sunt vizualizate în momentul dat, 
+  Acest modul ar trebui să aibă control asupra pozițiilor de start și de sfârșit
+  ale segmentelor din fișier care sunt vizualizate în momentul dat, 
   permitând utilizatorului să actualizeze acestea în dependență 
   de care chunk-uri sunt afișate în interfață.
 \end{itemize}
