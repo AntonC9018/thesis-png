@@ -135,6 +135,105 @@ să se sincronizeze acele fire, deoarece datele ar fi scrise în memorie partaja
 Partea această de cod poate fi realizată mai târziu și nu este crucială pentru un \ac{MVP}.
 
 
+\section{Ideea aplicației la nivel înalt}
+
+Cu toate că autorul a hotărât să întreprindă o abordare explorativă față de proiect,
+adică să programeze aplicația având doar o imagine vagă a rezultatului dorit,
+totuși ar fi dorit să fie evidențiată vederea generală a autorului asupra aplicației.
+
+Având în vedere faptul că scopul aplicației este să poată explora structura fișierilor PNG,
+funcționalitatea aplicației ar trebui să fie într-un fel impusă de structura acestora.
+Se are în vedere faptul că modul de folosire și de interpretare a interfeței grafice 
+ar trebui să fie inspirat de structura fișierelor PNG.
+
+Fișierele PNG sunt constituite de așa numite chunk-uri,
+unde fiecare chunk are o anumită destinație funcțională.
+De exemplu, chunk-ul critic \texttt{IHDR} conține niște informații generale despre imagine,
+ca lățimea și înălțimea, numărul de biți per pixel, ș.a.
+Ideea autorului este ca interfața să evidențieze fiecare așa chunk,
+oferind utilizatorului diferite informații despre acesta,
+și permitându-i a modifica valorile, dacă lucrul acesta n-ar strica integritatea fișierului.
+Informațiile ar fi prezentate per chunk, atunci când utilizatorul îl alege,
+iar fiecare chunk trebuie să fie evidențiat, pentru a-l putea alege și vizualiza.
+
+Deoarece este importantă legarea chunk-urilor la octeți din fișier, că se realizează explorarea
+\it{formatului} PNG, dar nu pur și simplu lucrul cu imagini folosind formatul PNG, s-ar dori să se aibă
+un fel de editor hexazecimal, unde s-ar fi afișate valorile la fiecare octet,
+precum și informația vizuală pentru a putea distinge chunk-urile.
+Ar fi bine ca acesta să aibă funcția care să permită ca utilizatorul să poată micșora anumite chunk-uri,
+apăsând o iconiță pe ele, deoarece mai multe chunk-uri conțin date de pixeli,
+și nu sunt direct utile pentru înțelegea formatului.
+
+Alegerea unui chunk ar trebui să afișeze informații despre acesta,
+ca numele, descrierea, lungimea ș.a.
+Fiecare chunk în sine are o structură specifică, care ar trebui să fie afișată.
+
+
+\section{Imaginea inițială a implementării la nivel înalt}
+
+În dezvoltarea software de obicei are sens să soluționeze
+problemele atunci când acestea trebuie a fi abordate,
+însă și procesul de gândire și modul în care programatorul ajunge la o soluție
+tot are valoare dacă este partajat.
+Lucrurile înregistrate aici nu sunt garantate să aducă la o soluție bună,
+sau chiar la o soluție funcțională, iar anumite probleme legate de implementare
+sunt cu totul ignorate, înainte de a fi de fapt întâmpinate în procesul de realizare a programului.
+
+Așa este natura dezvoltării software.
+Faptul este că planificarea și gândirea de prisos înainte de a începe a scrie codul
+de obicei aduce la un design incorect sau inferior, deoarece în timpul programării
+se descoper anumite probleme care nu au fost luate în considerare înainte,
+din cauza că cunoașterea întregul sistem ca unul singur încă nu era atinsă de programator.
+Din această cauză nu ar fi înțelept să se planifice întregul sistem
+dinainte, și numai după aceasta să se înceapă procesul de dezvoltare.
+Însă, planificarea la nivel înalt a structurii aplicației,
+adică luarea în considerare a cerințelor și folosirea experienței și intuiției pentru
+a putea ajunge la o reprezentare mentală la nivel înalt a aplicației,
+este totuși utilă pentru a putea descompune problema în subprobleme mai mici,
+și a putea începe să se implementeze o soluție.
+ 
+Acestea fiind spuse, ar trebui să se evidențieze imaginea sistemului la nivel înalt a autorului,
+la care acesta a ajuns pe baza intuiției derivate din experiență și pe baza cerințelor.
+
+În primul rând, aplicația ar trebui să fie împărțită în mai multe module:
+\begin{itemize}
+  \item 
+  \textbf{Modulul de acces la fișiere după poziții absolute} care
+  să gestioneze și cache-area segmentelor vizualizate în momentul dat,
+  precum și ștergerea segmentelor nedorite din memorie,
+  și citirea datelor din fișier atunci când este nevoie.
+  Acest modul este o abstracție importantă pentru a simplica interacționa cu
+  fișierele PNG, ca acest proces să fie mai declarativ și ca module băzate pe
+  acesta să nu fie nevoite a face operațiuni de nivel foarte jos.
+
+  \item
+  \textbf{Arborele sintactic al fișierului PNG}.
+  Ideal, s-ar trebui să se păstreze în memorie doar arborele pentru acele chunk-uri
+  care sunt vizualizate în momentul dat, și să se șteargă restul.
+  Acest lucru ar putea fi implementat așa ca modulul de interfață cu utilizatorul să semnalizeze
+  ce segmente din fișier acesta dorește să vizualizeze, indicate prin poziții absolute 
+  de start și de sfârșit ale acestora în fișier.
+  Modulul acesta ar permite accesul la niște informații structurate despre fișier.
+
+  \item
+  Propriu zis \textbf{parser}, care să poată transforma
+  datele din fișier într-un arbore sintactic, la cerere.
+  Acesta nu trebuie să existe ca un obiect, ajunge și niște funcții care să poată
+  fi apelate pentru a realiza transformarea.
+
+  \item
+  \textbf{Modulul de interfață cu utilizatorul}.
+  Acesta ar trebui să folosească arborele sintactic al fișierului dat pentru
+  a arăta utilizatului informațiile păstrate în arbore într-o formă captivantă.
+  Acest modul ar trebui să aibă control asupra pozițiilor de start și de sfârșit ale segmentelor de fișier
+  care sunt vizualizate în momentul dat, 
+  permitând utilizatorului să actualizeze acestea în dependență 
+  de care chunk-uri sunt afișate în interfață.
+\end{itemize}
+
+După cum s-a argumentat înainte, design-ul acesta este inițial,
+și implicările de folosire a acestuia deliberat nu au fost analizate profund.
+
 
 \chapterConclusionSection{implementation_chater_title}
 
