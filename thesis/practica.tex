@@ -79,8 +79,12 @@
   \acro{PNG}{Portable Network Graphics}
   \acro{I/O}{Input/Output}
   \acro{MVP}{Produs Minim Viabil}
+  \acro{PDF}{Portable Document Format}
+  \acro{LSP}{Language Server Protocol}
 
   \acro{DSL}{Domain Specific Language}
+  \acro{GIF}{Graphics Interchange Format}
+  \acro{JPEG}{Joint Photographic Experts Group}
 \end{acronym}
 
 \chapter{Detaliile privind locul de practică}
@@ -88,10 +92,14 @@
 \section{Laboratorul AVR}
 
 Practica s-a petrecut la universitate, în laboratorul AVR.
-Laboratorul acesta este o sală de calculatori, destul de largă, conținând mai mult ca 15 de calculatori moderne și puternice, un printer \ac{3D}, echipamentul \ac{XR} divers, adică căști și controller-uri \ac{VR}.
+Laboratorul acesta este o sală de calculatori, destul de largă,
+conținând mai mult ca 15 de calculatori moderne și puternice,
+un printer \ac{3D}, echipamentul \ac{XR} divers,
+adică căști și controller-uri \ac{VR}.
 Această sală este perfectă pentru elaborarea eficientă și avansată a jocurilor video.
 
-Sala de calculători era deschisă în aproape orice zi de lucru, de la 11:00 dimineața până 20:00 seara, și am avut posibilitate s-o folosesc spre folosul meu.
+Sala de calculători era deschisă în aproape orice zi de lucru,
+de la 11:00 dimineața până 20:00 seara, și am avut posibilitate s-o folosesc spre folosul meu.
 
 
 \section{Procesul de lucru în laborator}
@@ -126,15 +134,15 @@ precum și să se înceapă lucrul asupra tezei.
 
 \section{Prezentarea temei tezei}
 
-Tema tezei sună astfel --- \textit{Explorarea formatului de fișier PNG}.
-Acesta presupune precum studierea, înțelegerea și sumarizarea formatului de fișier PNG,
+Tema tezei sună astfel --- \textit{Explorarea formatului de fișier \ac{PNG}}.
+Acesta presupune precum studierea, înțelegerea și sumarizarea formatului de fișier \ac{PNG},
 atât și elaborarea unei aplicații de interfață grafică care să poată ajuta la studierea formatului.
-Ideea principală este să poată explica formatul de fișier PNG 
+Ideea principală este să poată explica formatul de fișier \ac{PNG} 
 și să poată lucra cu acesta în cod.
 
 Așadar, teza poate fi descompusă în cel puțin trei sarcini:
 \begin{enumerate}
-  \item Studierea formatului de fișier PNG;
+  \item Studierea formatului de fișier \ac{PNG};
   \item Planificarea aplicației de vizualizare la nivel înalt;
   \item Realizarea aplicației și a tuturor componentelor necesare ca aceasta să funcționeze corect.
 \end{enumerate}
@@ -150,7 +158,7 @@ Dinafara propriu zise teze, ar fi dorit să se aibă un fel de infrastructură p
   \item Să poată lucra de pe orice calculator --- deci ca setup-ul să fie cât mai portabil.
 \end{enumerate}
 
-Aceste puncte vor fi disutate și în continuare în acest raport.
+Aceste puncte vor fi discutate și în continuare în acest raport.
 
 
 \chapter{Realizarea sarcinii de practică}
@@ -161,7 +169,7 @@ Aceste puncte vor fi disutate și în continuare în acest raport.
 
 Primul lucru care s-a realizat în timpul practicii a fost setarea \ac{CI/CD} pentru textul tezei.
 Ideea este ca atunci când se face o schimbare la textul tezei pe GitHub pe branch-ul principal,
-ca să se compileze documentul și să se genereze un PDF în mod automat.
+ca să se compileze documentul și să se genereze un \ac{PDF} în mod automat.
 Documentul general poate fi partajat direct folosind un link, și este pus în acces public.
 
 S-a folosit GitHub Actions pentru a realiza acest lucru, deoarece acesta integrează direct cu 
@@ -188,7 +196,7 @@ Au fost întâlnite anumite probleme:
     și a fost în sfârșit abandonată în favoarea instalării tuturor pachetelor manuale.
 
     \item
-    Instalarea fontului \texttt{Times New Roman} folosirea cărui se cere numaidecât de universitate
+    Instalarea fontului \texttt{Times New Roman} folosirea cărui se cere numaidecât de universitatea
     din surse oficiale a fost foarte lentă, de o sută de ori mai lentă decât instalarea fontului dorit
     dintr-un fișier, deoarece sursa oficială le instalează pe toate fonturile lui Microsoft.
     Cu toate că Copyright-ul lui Microsoft interzice redistribuirea fonturilor lor,
@@ -210,7 +218,7 @@ unelor instrumente pentru a ajuta la dezvoltare.
 În cazul dat, deoarece s-a decis ca aplicația să fie realizată în limbajul de programare Zig,
 ar trebui să fie folosit un mediu de dezvoltare cu suport pentru Zig.
 Documentația oficială a limbajului Zig\cite{zig} recomandă folosirea lui VS Code, deoarece acesta
-are o extensiune care poate automat instala Zls\cite{zls}, un server de LSP pentru Zig,
+are o extensiune care poate automat instala Zls\cite{zls}, un server de \ac{LSP} pentru Zig,
 și oferă un nivel de integrare bună cu acesta pentru editor.
 
 S-a realizat și configurația de compilare și de rulare în VS Code,
@@ -234,23 +242,23 @@ interfața grafică, și a binding-urile la funcții din această librărie pent
 \inputminted{zig}{../build.zig}
 
 
-\section{Descrierea la nivel înalt a formatului de fișier PNG}
+\section{Descrierea la nivel înalt a formatului de fișier \ac{PNG}}
 
-În timpul practicii s-a studiat formatul de fișier PNG.
+În timpul practicii s-a studiat formatul de fișier \ac{PNG}\cite{png_spec}.
 Urmează o descriere scurtă a formatului.
 
 \subsection{Scopul formatului}
 
-Formatul PNG este un format portabil destinat pentru reprezentarea imaginilor fără pierderi.
-Inițial a fost creat pentru a înlocui formatul GIF, fiind un format mai flexibil și mai eficient.
+Formatul \ac{PNG} este un format portabil destinat pentru reprezentarea imaginilor fără pierderi.
+Inițial a fost creat pentru a înlocui formatul \ac{GIF}, fiind un format mai flexibil și mai eficient.
 
-Design-ul formatului PNG a fost proiectat ținând cont că acesta va fi folosit pe Internet,
+Design-ul formatului \ac{PNG} a fost proiectat ținând cont că acesta va fi folosit pe Internet,
 de aceea mai multe capacități au fost realizate în parte
 pentru a satisface cerințele de pe Internet.
 
 \subsection{Catacteristici principale}
 
-Capacitățile principale ale formatului PNG sunt următoarele:
+Capacitățile principale ale formatului \ac{PNG} sunt următoarele:
 \begin{itemize}
   \item 
   \textbf{Portabilitate}: formatul este portabil, adică poate fi folosit pe orice platformă.
@@ -260,15 +268,15 @@ Capacitățile principale ale formatului PNG sunt următoarele:
   ceea ce înseamnă că imaginea inițială poate fi reprodusă exact din forma sa compresată.
 
   \item
-  Suport pentru \textbf{transparență}
+  Suport pentru \textbf{transparență}.
 
   \item
-  Are suport pentru \textbf{paletă de culori}.
+  Suport pentru \textbf{paletă de culori}.
   Acesta înseamnă că culorile pot fi reprezentate prin indici de o mărime optimale,
   adresându-se la culori din paletă.
   
   \item
-  \textbf{Capacitatea de streaming}: imaginile în formatul PNG pot fi citite în mod incremental,
+  \textbf{Capacitatea de streaming}: imaginile în formatul \ac{PNG} pot fi citite în mod incremental,
   ceea ce permite să se facă rendering la imagine de o calitate scăzută în timp ce 
   aceasta este încărcată într-o calitate mai bună.
 
@@ -277,14 +285,14 @@ Capacitățile principale ale formatului PNG sunt următoarele:
   având și flaguri speciale standarte pentru a indica proprietățile diferite ale unui chunk.
 \end{itemize}
 
-Datorită capacităților enumerate mai sus, formatul PNG este folosit
+Datorită capacităților enumerate mai sus, formatul \ac{PNG} este folosit
 pe larg pentru imagini pe Internet,
 însă este o alegere bună și în artă digitală, și în dezvoltarea jocurilor.
 
 
 \subsection{Structura formatului}
 
-Structura fișierelor PNG este bazată pe o serie de blocuri,
+Structura fișierelor \ac{PNG} este bazată pe o serie de blocuri,
 cunoscute sub numele de ``chunk-uri''.
 Fiecare chunk are o structură specifică și o funcție definită,
 contribuind la crearea și interpretarea corectă a imaginii.
@@ -295,50 +303,224 @@ iar la cele auxiliare este minusculă.
 
 \begin{itemize}
   \item
-  \textbf{Header Chunk (IHDR)}: Acesta este primul chunk din orice fișier PNG.
+  \textbf{Header Chunk (\texttt{IHDR})}: Acesta este primul chunk din orice fișier \ac{PNG}.
   Conține informații esențiale despre imagine, cum ar fi lățimea,
   înălțimea, tipul de culoare, compresia, filtrarea și interlacing.
 
   \item
-  \textbf{Palette Chunk (PLTE)}: Acest chunk este necesar pentru imagini
+  \textbf{Palette Chunk (\texttt{PLTE})}: Acest chunk este necesar pentru imagini
   care utilizează paletă de culori.
   Conține o tabelă de culori utilizate în imagine.
 
   \item
-  \textbf{Image Data Chunks (IDAT)}: Aceste chunk-uri conțin datele efective ale imaginii,
-  comprimate conform algoritmului de compresie fără pierderi al formatului PNG.
+  \textbf{Image Data Chunks (\texttt{IDAT})}: Aceste chunk-uri conțin datele efective ale imaginii,
+  comprimate conform algoritmului de compresie fără pierderi al formatului \ac{PNG}.
 
   \item
-  \textbf{Transparency Chunk (tRNS)}: Oferă informații despre transparența anumitor culori din imagine, 
+  \textbf{Transparency Chunk (\texttt{tRNS})}: Oferă informații despre transparența anumitor culori din imagine, 
   permițând, de exemplu, un fundal transparent.
 
   \item
-  \textbf{Textual Information Chunks (tEXt, zTXt, iTXt)}: Aceste chunk-uri pot conține text
+  \textbf{Textual Information Chunks (\texttt{tEXt}, \texttt{zTXt}, \texttt{iTXt})}:
+  Aceste chunk-uri pot conține text
   pentru informații diverse despre imagine, cum ar fi titlul, autorul, descrierea, etc.
 
   \item
-  \textbf{End Chunk (IEND)}: Acest chunk marchează sfârșitul fișierului PNG și nu conține date.
+  \textbf{End Chunk (\texttt{IEND})}:
+  Acest chunk marchează sfârșitul fișierului \ac{PNG} și nu conține date.
 \end{itemize}
 
 \subsection{Interlacing și Compresie}
 
 PNG utilizează un mecanism numit interlacing, care permite o încărcare progresivă a imaginii.
-În formatul PNG, interlacing-ul este realizat prin algoritmul Adam7,
+În formatul \ac{PNG}, interlacing-ul este realizat prin algoritmul Adam7,
 care împarte imaginea în mai multe trepte de încărcare,
 îmbunătățind experiența vizuală în timpul încărcării lente a imaginii.
 
-Compresia în PNG este realizată prin algoritmul de compresie DEFLATE,
+Compresia în \ac{PNG} este realizată prin algoritmul de compresie DEFLATE,
 care este eficient și permite compresia fără pierderi.
 Acesta combină o metodă de comprimare cu dictionar (LZ77) și o codificare Huffman.
 
 \subsection{Utilizări și Limitări}
 
-Deși formatul PNG este versatil și oferă o calitate ridicată a imaginii, are și câteva limitări.
-Nu suportă animații native (spre deosebire de formatul GIF)
+Deși formatul \ac{PNG} este versatil și oferă o calitate ridicată a imaginii, are și câteva limitări.
+Nu suportă animații native (spre deosebire de formatul \ac{GIF})
 și nu este ideal pentru fotografii datorită dimensiunii mai mari a fișierului comparativ
-cu formatele comprimate cu pierderi, cum ar fi JPEG.
+cu formatele comprimate cu pierderi, cum ar fi \ac{JPEG}.
 Cu toate acestea, este foarte popular pentru grafică web,
 datorită transparenței și calității imaginii.
 
 
 \section{Planificarea aplicației de vizualizare}
+
+\subsection{Modulul de citire a stream-urilor}
+
+Pentru a facilita interacțiunea cu stream-uri de date și a crea o abstracție în acest sens,
+a fost dezvoltată o mică bibliotecă.
+Experiența anterioară cu biblioteca \texttt{System.IO.Pipelines}\cite{system_io_pipelines}
+din C\# a relevat mai multe avantaje în utilizarea unei astfel de abordări:
+\begin{itemize}
+  \item
+  Implementarea corectă core să țină cont de toate cazurile-limită
+  este facilitată de gestionarea complexității de către
+  bibliotecă, cum ar fi alocarea și ștergerea buferelor,
+  sau înfășurarea datelor pe mai multe segmente consecutive.
+
+  \item
+  Flexibilitatea codului crește, permițând implementarea unui automat finit
+  și o rerulare din stări salvate anterior.
+
+  \item
+  Eficiența crescută prin soluționarea cazurilor de copiere a datelor în bufere temporare
+  de o mărime neoptimă pentru cititor.
+
+  \item
+  Centralizarea logicii de citire într-un ciclu unificat,
+  reducând duplicarea codului.
+
+  \item
+  Separarea completă a modulelor de citire și scriere,
+  permițând procesarea datelor în fire separate,
+  ceea ce elimină timpul pierdut la \ac{I/O} în timpul procesării.
+\end{itemize}
+
+Un prototip al unei biblioteci similare în Zig a fost dezvoltat,
+omitând însă separarea modulelor de citire și scriere pentru a reduce complexitatea.
+Această parte poate fi adăugată ulterior, nefiind esențială pentru un \ac{MVP}.
+
+Se se vadă Anexa \ref{appendix:pipelines_prototype} pentru codul sursă al bibliotecii.
+
+\subsection{Ideea aplicației la nivel înalt}
+
+Având la bază o abordare explorativă, s-a decis programarea aplicației
+pornind de la o imagine vagă a rezultatului dorit,
+însă cu o direcție clară în ceea ce privește obiectivul general.
+
+Având în vedere faptul că scopul principal al aplicației
+este de a facilita explorarea structurii fișierelor \ac{PNG},
+s-ar dori ca funcționalitatea să fie direct
+influențată și determinată de această structură.
+Designul interfeței grafice este conceput pentru a reflecta
+caracteristicile specifice ale fișierelor \ac{PNG}.
+
+Fișierele \ac{PNG} sunt compuse din secvențe denumite chunk-uri,
+fiecare având o funcție specifică.
+De exemplu, chunk-ul \texttt{IHDR} conține informații vitale despre imagine,
+precum lățimea, înălțimea, numărul de biți per pixel ș.a.
+Se intenționează ca interfața aplicației să pună
+în evidență aceste chunk-uri, oferind detalii despre ele utilizatorilor
+și permițând modificarea valorilor într-un mod
+care nu afectează integritatea fișierului.
+Informațiile ar fi prezentate per chunk, atunci când utilizatorul îl alege,
+iar fiecare chunk trebuie să fie evidențiat, pentru a-l putea alege și vizualiza.
+
+Pentru a sublinia aspectul de explorare a \textit{formatului} \ac{PNG},
+și nu doar manipularea imaginilor în acest format,
+se va include în aplicație un editor hexazecimal.
+Acesta va prezenta valorile fiecărui octet și
+va oferi reprezentări vizuale pentru a facilita distingerea diferitelor chunk-uri.
+O caracteristică utilă a editorului va fi funcționalitatea
+de a minimiza anumite chunk-uri, utilizând o iconiță dedicată,
+deoarece multe dintre ele conțin date de pixeli
+care nu sunt esențiale pentru înțelegerea formatului.
+
+La selectarea unui chunk, vor fi afișate informații detaliate despre acesta,
+incluzând numele, descrierea și lungimea.
+Este crucial ca fiecare chunk să fie prezentat cu o structură specifică,
+pentru a oferi o înțelegere completă a compoziției și funcționalității fișierelor \ac{PNG}.
+
+
+\subsection{Imaginea inițială a implementării la nivel înalt}
+
+În dezvoltarea software, este adesea practic să se abordeze problemele pe măsură ce apar.
+Însă procesul de gândire și modul în care se ajunge la soluții
+pot adăuga valoare dacă sunt împărtășite.
+Deși nu există garanția că ideile înregistrate vor duce
+la o soluție optimă sau chiar una funcțională,
+și anumite probleme de implementare sunt ignorate la această etapă inițială,
+această abordare reflectă natura evolutivă a dezvoltării software.
+
+Excesul de planificare și gândire înainte de începerea scrierii codului
+poate adesea conduce la un design incorect sau inferior.
+Acest lucru se datorează faptului că în timpul programării pot apărea probleme neanticipate,
+din cauza lipsei unei viziuni complete asupra întregului sistem.
+Din acest motiv, planificarea detaliată a întregului sistem înainte de începerea dezvoltării
+nu este întotdeauna cea mai înțeleaptă abordare.
+Cu toate acestea, planificarea la nivel înalt a structurii aplicației,
+ținând cont de cerințe și pe baza experienței,
+este utilă pentru a descompune problema în subprobleme gestionabile
+și pentru a începe implementarea unei soluții.
+
+Pentru a reflecta această viziune, s-a stabilit ca aplicația
+să fie împărțită în mai multe module esențiale:
+\begin{itemize}
+  \item 
+  \textbf{Modulul de acces la fișiere după poziții absolute},
+  care va gestiona cache-ul segmentelor vizualizate în prezent,
+  ștergerea segmentelor nedorite din memorie și citirea datelor din fișier la necesitate.
+  Acest modul este o abstracție cheie pentru a simplifica interacțiunea cu fișierele \ac{PNG}.
+
+  \item
+  \textbf{Arborele sintactic al fișierului \ac{PNG}},
+  care ar trebui să păstreze în memorie doar informațiile despre
+  chunk-urile vizualizate la un moment dat.
+  Acesta ar permite accesul la informații structurate despre fișier
+  și ar fi interfațat cu modulul de interacțiune cu utilizatorul
+  pentru a indica ce segmente din fișier sunt vizualizate.
+
+  \item
+  \textbf{Parser-ul}, responsabil pentru transformarea datelor
+  din fișier într-un arbore sintactic la cerere.
+  Acest modul poate consta dintr-un set de funcții specifice pentru această transformare.
+
+  \item
+  \textbf{Modulul de interfață cu utilizatorul},
+  care va folosi arborele sintactic al fișierului pentru
+  a prezenta utilizatorului informații într-o formă atractivă și interactivă.
+  Modulul va avea control asupra segmentelor din fișier care sunt vizualizate,
+  permitând utilizatorului să actualizeze aceste segmente
+  în funcție de chunk-urile afișate în interfață.
+\end{itemize}
+
+Așa cum s-a discutat, acest design inițial este un punct de plecare,
+iar implicațiile utilizării acestuia urmează să fie analizate pe parcursul dezvoltării.
+
+\subsection{Implementarea inițială a codului de bază al parser-ului}
+
+În timpul practicii s-a realizat ciclul de bază a parser-ului care poate citi
+primele octeți din fișier și le poate valida.
+
+Să se vadă Anexa \ref{appendix:parser_prototype}.
+
+\unnumberedChapter{Concluziile Finale și Recomandările}
+
+\newpage
+\markpage{usefulStuffEnd}
+
+% Bibliography
+\bibliographystyle{plain}
+\bibliography{bibliography}
+\addcontentsline{toc}{chapter}{\bibname}
+
+% Appendices
+\appendix
+
+% Number with arabic numbers instead of Roman
+\renewcommand{\thechapter}{\arabic{chapter}}
+% Prepend Anexa to section names, center them
+\titleformat{\section}[block]{\normalfont\normalsize\bfseries\filcenter}{Anexa \thesection~}{0pt}{}
+
+% Since we've got just a single chapter in the appedices,
+% but which is also the name of the Appendix chapter, it should be omitted.
+% Makes little sense, but ok I guess.
+\setcounter{chapter}{1}
+
+\unnumberedChapter{Anexe}
+
+\section{pipelines.zig}\label{appendix:pipelines_prototype}
+\inputminted{zig}{../src/pipelines.zig}
+
+\clearpage\section{main.zig}\label{appendix:parser_prototype}
+\inputminted{zig}{../src/main.zig}
+
+\end{document}
