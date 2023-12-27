@@ -1,0 +1,243 @@
+\documentclass[a4paper,12pt]{report}
+\usepackage{config}
+
+% Description
+\newcommand{\authorName}{CURMANSCHII Anton}
+\newcommand{\documentTitle}{Raport la practică de specialitate}
+\newcommand{\uniGroupName}{MIA2201}
+\newcommand{\thesisType}{master}
+\newcommand{\programulDeStudii}{master}
+\newcommand{\identificatorulCursului}{0613.5 Informatică aplicată}
+
+% Hardcoded for now
+\newcommand{\anexeCount}{20}
+\newcommand{\conferencesList}{I don't know what to write here}
+
+\begin{document}
+
+% Prevent spills over margin
+\sloppy
+
+\begin{titlepage}
+  \vspace*{\fill}
+  \begin{center}
+      \vspace*{1cm}
+
+      \large
+      \uppercase{\textbf{UNIVERSITATEA DE STAT DIN MOLDOVA\\}}
+
+      \normalsize
+      \uppercase{\textbf{FACULTATEA DE MATEMATICĂ SI INFORMATICĂ}}
+      \vspace{0.1cm}
+
+      \normalsize
+      \uppercase{\textbf{SPECIALITATEA INFORMATICA APLICATĂ}}
+      \vspace{3.0cm}
+
+      \large
+      \textbf{\uppercase\expandafter{\authorName}}
+      \vspace{1.5cm}
+
+      \Large
+      \textbf{\uppercase\expandafter{\documentTitle}}
+      \vspace{0.75cm}
+
+    \end{center}
+  \vfill
+
+  \normalsize
+
+  \begin{flushleft}
+    \begin{tabular}{ p{4cm} p{4cm} p{8cm}}
+      Conducătorul științific: & \underscores{4cm} & PERETEATCU Sergiu,\\
+                               &                   & doctor, conferențiar universitar\\
+      Autor:                   & \underscores{4cm} & \authorName,\\
+                               &                   & student din grupa IA1901\\
+    \end{tabular}
+  \end{flushleft}
+
+  \vspace{1cm}
+
+  \begin{center}
+    \textbf{Chișinău -- 2023}
+  \end{center}
+
+\end{titlepage}
+
+\clearpage
+\tableofcontents
+
+\clearpage
+\unnumberedChapter{Lista abrevierelor}
+\begin{acronym}
+  \acro{XR}{Extended Reality}
+  \acro{VR}{Virtual Reality}
+  \acro{3D}{3-Dimensional}
+
+  \acro{CI/CD}{Continuous Integration / Continuous Delivery}
+  \acro{GUI}{Graphical User Interface}
+  \acro{PNG}{Portable Network Graphics}
+  \acro{I/O}{Input/Output}
+  \acro{MVP}{Produs Minim Viabil}
+
+  \acro{DSL}{Domain Specific Language}
+\end{acronym}
+
+\chapter{Detaliile privind locul de practică}
+
+\section{Laboratorul AVR}
+
+Practica s-a petrecut la universitate, în laboratorul AVR.
+Laboratorul acesta este o sală de calculatori, destul de largă, conținând mai mult ca 15 de calculatori moderne și puternice, un printer \ac{3D}, echipamentul \ac{XR} divers, adică căști și controller-uri \ac{VR}.
+Această sală este perfectă pentru elaborarea eficientă și avansată a jocurilor video.
+
+Sala de calculători era deschisă în aproape orice zi de lucru, de la 11:00 dimineața până 20:00 seara, și am avut posibilitate s-o folosesc spre folosul meu.
+
+
+\section{Procesul de lucru în laborator}
+
+Am primit o sarcină --- să se elaboreze o aplicație pentru teză de master 
+și să se înceapă a compune textul tezei.
+La dispoziție am avut orice echipament necesar din laborator,
+și am putut să pun întrebări la conducător de practică.
+
+Deoarece proiectul a presupus crearea unei interfețe grafice pentru calculator,
+nu am folosit alt echipament decât propriu zis calculător.
+Datorită faptului că calculatorii sunt atât de bune, am putut să lucrez foarte eficient asupra sarcinii.
+
+Orarul a fost liber --- am putut să vin sau să nu vin în orice zi, principalul a fost să reușesc să prezint proiectul în termen limită.
+Când puteam, veneam la universitate la ora 11:00 și lucram până la 19:00-20:00 seara.
+În zilele de odihnă și în acele zile când nu am fost la Chișinău, lucram din casă, de pe laptopul propriu.
+
+Planificarea mai detaliată a realizării sarcinii am administrat în cea mai mare parte eu singur.
+Eu mă descurcam cu implementarea sarcinii singur,
+de aceea aici nu a fost necesar ajutorul din partea conducătorului.
+Puneam doar întrebările ce se referă la structura tezei și formatul documentului,
+precum și întrebări de natură organizatorică.
+
+
+\chapter{Sarcina de practică}
+
+Deoarece practica a presupus crearea fundației pentru teza de master,
+sarcina de practică a fost să se stabilească infrastructura necesară pentru a putea compune
+eficient textul tezei și pentru a putea programa aplicația necesară pentru teză,
+precum și să se înceapă lucrul asupra tezei.
+
+
+\section{Prezentarea temei tezei}
+
+Tema tezei sună astfel --- \textit{Explorarea formatului de fișier PNG}.
+Acesta presupune precum studierea, înțelegerea și sumarizarea formatului de fișier PNG,
+atât și elaborarea unei aplicații de interfață grafică care să poată ajuta la studierea formatului.
+Ideea principală este să poată explica formatul de fișier PNG 
+și să poată lucra cu acesta în cod.
+
+Așadar, teza poate fi descompusă în cel puțin trei sarcini:
+\begin{enumerate}
+  \item Studierea formatului de fișier PNG;
+  \item Planificarea aplicației de vizualizare la nivel înalt;
+  \item Realizarea aplicației și a tuturor componentelor necesare ca aceasta să funcționeze corect.
+\end{enumerate}
+Este clar că pasul 3 ar fi avea natura mai explorativă și iterativă.
+
+
+\section{Sarcini adăugătoare}
+
+Dinafara propriu zise teze, ar fi dorit să se aibă un fel de infrastructură pentru a putea:
+\begin{enumerate}
+  \item Face schimbări ușor la textul tezei și vedea rezultatele imediat;
+  \item Programa și face debugging la aplicație;
+  \item Să poată lucra de pe orice calculator --- deci ca setup-ul să fie cât mai portabil.
+\end{enumerate}
+
+Aceste puncte vor fi disutate și în continuare în acest raport.
+
+
+\chapter{Realizarea sarcinii de practică}
+
+\section{Fondarea infrastructurii de bază}
+
+\subsection{\ac{CI/CD} pentru textul tezei}
+
+Primul lucru care s-a realizat în timpul practicii a fost setarea \ac{CI/CD} pentru textul tezei.
+Ideea este ca atunci când se face o schimbare la textul tezei pe GitHub pe branch-ul principal,
+ca să se compileze documentul și să se genereze un PDF în mod automat.
+Documentul general poate fi partajat direct folosind un link, și este pus în acces public.
+
+S-a folosit GitHub Actions pentru a realiza acest lucru, deoarece acesta integrează direct cu 
+acțunine diferite de pe GitHub și deoarece studenții au acces liber și practic infinit
+la acest serviciu folosind GitHub Student Developer Pack\cite{github_developer_pack}.
+
+Au fost întâlnite anumite probleme:
+\begin{itemize}
+    \item 
+    Există abordări diferite pentru această problemă și nu era clar imediat care abordare ar fi
+    mai aplicabilă.
+    Aceste abordări sunt ori să se folosească o imaginea Docker cu toate pachetele preinstalate,
+    creată de altcineva, ori să se instaleze pachetele necesare înainte de a se compila documentul.
+    Deoarece nu a fost găsit o imagine Docker care să satisfacă toate nevoile,
+    și ca folosirea unei imagini creștea semnificativ timpul de execuție a acțiunii,
+    s-a ales opțiunea manuală.
+
+    \item
+    Deoarece s-a ales opțiunea manuală, a fost nevoie să se instaleze pachetele corecte.
+    Acesta a luat mai multe încercări.
+
+    \item
+    Setarea instalării automate a pachetelor on-the-fly a fost dificilă,
+    și a fost în sfârșit abandonată în favoarea instalării tuturor pachetelor manuale.
+
+    \item
+    Instalarea fontului \texttt{Times New Roman} folosirea cărui se cere numaidecât de universitate
+    din surse oficiale a fost foarte lentă, de o sută de ori mai lentă decât instalarea fontului dorit
+    dintr-un fișier, deoarece sursa oficială le instalează pe toate fonturile lui Microsoft.
+    Cu toate că Copyright-ul lui Microsoft interzice redistribuirea fonturilor lor,
+    întârzierea cauzată de lucrul de prisos cu fonturile a fost prea mare,
+    din ce cauză s-a folosit o sursă neoficială pentru fontul \texttt{Times New Roman}.
+    O altă soluție ar putea fi să se folosească un font înlocuitor, însă
+    universitate interzice folosirea unui font care nu este \texttt{Times New Roman}.
+\end{itemize}
+
+În final s-a ajuns la astfel de configurație:
+
+\inputminted{cs}{../.github/workflows/latex.yml}
+
+
+\subsection{Setarea mediului de dezvoltare}
+
+Dezvoltarea eficientă a unei aplicații presupune și folosirea
+unelor instrumente pentru a ajuta la dezvoltare.
+În cazul dat, deoarece s-a decis ca aplicația să fie realizată în limbajul de programare Zig,
+ar trebui să fie folosit un mediu de dezvoltare cu suport pentru Zig.
+Documentația oficială a limbajului Zig\cite{zig} recomandă folosirea lui VS Code, deoarece acesta
+are o extensiune care poate automat instala Zls\cite{zls}, un server de LSP pentru Zig,
+și oferă un nivel de integrare bună cu acesta pentru editor.
+
+S-a realizat și configurația de compilare și de rulare în VS Code,
+care permite să se efectueze aceste acțiuni apăsând de ex. \texttt{F5}.
+
+De exemplu, așa arată configurația de compilare.
+Acesta invocă compilatorul în proiectul curent.
+
+\inputminted{json}{../.vscode/tasks.json}
+
+Zig mai adaugă un sistem de build numit \texttt{zig build}.
+Acesta presupune realizarea configurației prin cod Zig, care descrie procesul de compilare.
+Deci, în loc de fișiere de configurare folosite de exemlu de către MSBuild la compilarea C\#,
+sau al unui \ac{DSL} destinat pentru descrierea procesului de compilare, ca la CMake,
+Zig folosește cod în același limbaj.
+
+S-a realizat configurația folosind acest sistem de build cu scopul de a adăuga dependența
+de librăria grafică Raylib\cite{raylib}, care va fi folosită în continuare pentru a realiza
+interfața grafică, și a binding-urile la funcții din această librărie pentru Zig.
+
+\inputminted{zig}{../build.zig}
+
+
+\section{Descrierea la nivel înalt a formatului de fișier PNG}
+
+În timpul practicii s-a studiat formatul de fișier PNG.
+Urmează o descriere scurtă a formatului.
+
+\subsection{Scopul formatului}
+
