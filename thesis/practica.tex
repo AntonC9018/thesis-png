@@ -228,7 +228,7 @@ sau al unui \ac{DSL} destinat pentru descrierea procesului de compilare, ca la C
 Zig folosește cod în același limbaj.
 
 S-a realizat configurația folosind acest sistem de build cu scopul de a adăuga dependența
-de librăria grafică Raylib\cite{raylib}, care va fi folosită în continuare pentru a realiza
+de librăria grafică \texttt{Raylib}\cite{raylib}, care va fi folosită în continuare pentru a realiza
 interfața grafică, și a binding-urile la funcții din această librărie pentru Zig.
 
 \inputminted{zig}{../build.zig}
@@ -241,3 +241,101 @@ Urmează o descriere scurtă a formatului.
 
 \subsection{Scopul formatului}
 
+Formatul PNG este un format portabil destinat pentru reprezentarea imaginilor fără pierderi.
+Inițial a fost creat pentru a înlocui formatul GIF, fiind un format mai flexibil și mai eficient.
+
+Design-ul formatului PNG a fost proiectat ținând cont că acesta va fi folosit pe Internet,
+de aceea mai multe capacități au fost realizate în parte
+pentru a satisface cerințele de pe Internet.
+
+\subsection{Catacteristici principale}
+
+Capacitățile principale ale formatului PNG sunt următoarele:
+\begin{itemize}
+  \item 
+  \textbf{Portabilitate}: formatul este portabil, adică poate fi folosit pe orice platformă.
+
+  \item 
+  \textbf{Compresie fără pierderi}: se folosește compresia fără pierderi,
+  ceea ce înseamnă că imaginea inițială poate fi reprodusă exact din forma sa compresată.
+
+  \item
+  Suport pentru \textbf{transparență}
+
+  \item
+  Are suport pentru \textbf{paletă de culori}.
+  Acesta înseamnă că culorile pot fi reprezentate prin indici de o mărime optimale,
+  adresându-se la culori din paletă.
+  
+  \item
+  \textbf{Capacitatea de streaming}: imaginile în formatul PNG pot fi citite în mod incremental,
+  ceea ce permite să se facă rendering la imagine de o calitate scăzută în timp ce 
+  aceasta este încărcată într-o calitate mai bună.
+
+  \item
+  \textbf{Extensibilitate}: formatul permite să se adauge noi chunk-uri,
+  având și flaguri speciale standarte pentru a indica proprietățile diferite ale unui chunk.
+\end{itemize}
+
+Datorită capacităților enumerate mai sus, formatul PNG este folosit
+pe larg pentru imagini pe Internet,
+însă este o alegere bună și în artă digitală, și în dezvoltarea jocurilor.
+
+
+\subsection{Structura formatului}
+
+Structura fișierelor PNG este bazată pe o serie de blocuri,
+cunoscute sub numele de ``chunk-uri''.
+Fiecare chunk are o structură specifică și o funcție definită,
+contribuind la crearea și interpretarea corectă a imaginii.
+
+Chunk-urile pot fi ori critice, ori auxiliare.
+La chunk-uri critice prima literă din tip este majusculă,
+iar la cele auxiliare este minusculă.
+
+\begin{itemize}
+  \item
+  \textbf{Header Chunk (IHDR)}: Acesta este primul chunk din orice fișier PNG.
+  Conține informații esențiale despre imagine, cum ar fi lățimea,
+  înălțimea, tipul de culoare, compresia, filtrarea și interlacing.
+
+  \item
+  \textbf{Palette Chunk (PLTE)}: Acest chunk este necesar pentru imagini
+  care utilizează paletă de culori.
+  Conține o tabelă de culori utilizate în imagine.
+
+  \item
+  \textbf{Image Data Chunks (IDAT)}: Aceste chunk-uri conțin datele efective ale imaginii,
+  comprimate conform algoritmului de compresie fără pierderi al formatului PNG.
+
+  \item
+  \textbf{Transparency Chunk (tRNS)}: Oferă informații despre transparența anumitor culori din imagine, 
+  permițând, de exemplu, un fundal transparent.
+
+  \item
+  \textbf{Textual Information Chunks (tEXt, zTXt, iTXt)}: Aceste chunk-uri pot conține text
+  pentru informații diverse despre imagine, cum ar fi titlul, autorul, descrierea, etc.
+
+  \item
+  \textbf{End Chunk (IEND)}: Acest chunk marchează sfârșitul fișierului PNG și nu conține date.
+\end{itemize}
+
+\subsection{Interlacing și Compresie}
+
+PNG utilizează un mecanism numit interlacing, care permite o încărcare progresivă a imaginii.
+În formatul PNG, interlacing-ul este realizat prin algoritmul Adam7,
+care împarte imaginea în mai multe trepte de încărcare,
+îmbunătățind experiența vizuală în timpul încărcării lente a imaginii.
+
+Compresia în PNG este realizată prin algoritmul de compresie DEFLATE,
+care este eficient și permite compresia fără pierderi.
+Acesta combină o metodă de comprimare cu dictionar (LZ77) și o codificare Huffman.
+
+\subsection{Utilizări și Limitări}
+
+Deși formatul PNG este versatil și oferă o calitate ridicată a imaginii, are și câteva limitări.
+Nu suportă animații native (spre deosebire de formatul GIF)
+și nu este ideal pentru fotografii datorită dimensiunii mai mari a fișierului comparativ
+cu formatele comprimate cu pierderi, cum ar fi JPEG.
+Cu toate acestea, este foarte popular pentru grafică web,
+datorită transparenței și calității imaginii.
