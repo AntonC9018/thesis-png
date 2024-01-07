@@ -1,0 +1,540 @@
+\documentclass[a4paper,12pt]{report}
+\usepackage{config}
+
+% Description
+\newcommand{\authorName}{CURMANSCHII Anton}
+\newcommand{\documentTitle}{Raport la practică de specialitate}
+\newcommand{\uniGroupName}{MIA2201}
+\newcommand{\thesisType}{master}
+\newcommand{\programulDeStudii}{master}
+\newcommand{\identificatorulCursului}{0613.5 Informatică aplicată}
+
+% Hardcoded for now
+\newcommand{\anexeCount}{20}
+\newcommand{\conferencesList}{I don't know what to write here}
+
+\begin{document}
+
+% Prevent spills over margin
+\sloppy
+
+\begin{titlepage}
+  \vspace*{\fill}
+  \begin{center}
+      \vspace*{1cm}
+
+      \large
+      \uppercase{\textbf{UNIVERSITATEA DE STAT DIN MOLDOVA\\}}
+
+      \normalsize
+      \uppercase{\textbf{FACULTATEA DE MATEMATICĂ SI INFORMATICĂ}}
+      \vspace{0.1cm}
+
+      \normalsize
+      \uppercase{\textbf{SPECIALITATEA INFORMATICA APLICATĂ}}
+      \vspace{3.0cm}
+
+      \large
+      \textbf{\uppercase\expandafter{\authorName}}
+      \vspace{1.5cm}
+
+      \Large
+      \textbf{\uppercase\expandafter{\documentTitle}}
+      \vspace{0.75cm}
+
+    \end{center}
+  \vfill
+
+  \normalsize
+
+  \begin{flushleft}
+    \begin{tabular}{ p{4cm} p{4cm} p{8cm}}
+      Conducătorul științific: & \underscores{4cm} & PERETEATCU Sergiu,\\
+                               &                   & doctor, conferențiar universitar\\
+      Autor:                   & \underscores{4cm} & \authorName,\\
+                               &                   & student din grupa IA1901\\
+    \end{tabular}
+  \end{flushleft}
+
+  \vspace{1cm}
+
+  \begin{center}
+    \textbf{Chișinău -- 2023}
+  \end{center}
+
+\end{titlepage}
+
+\clearpage
+\tableofcontents
+
+\clearpage
+\unnumberedChapter{Lista abrevierelor}
+\begin{acronym}
+  \acro{XR}{Extended Reality}
+  \acro{VR}{Virtual Reality}
+  \acro{3D}{3-Dimensional}
+
+  \acro{CI/CD}{Continuous Integration / Continuous Delivery}
+  \acro{GUI}{Graphical User Interface}
+  \acro{PNG}{Portable Network Graphics}
+  \acro{I/O}{Input/Output}
+  \acro{MVP}{Produs Minim Viabil}
+  \acro{PDF}{Portable Document Format}
+  \acro{LSP}{Language Server Protocol}
+
+  \acro{DSL}{Domain Specific Language}
+  \acro{GIF}{Graphics Interchange Format}
+  \acro{JPEG}{Joint Photographic Experts Group}
+\end{acronym}
+
+\chapter{Detaliile privind locul de practică}
+
+\section{Laboratorul AVR}
+
+Practica s-a petrecut la universitate, în laboratorul AVR.
+Laboratorul acesta este o sală de calculatori, destul de largă,
+conținând mai mult ca 15 de calculatori moderne și puternice,
+un printer \ac{3D}, echipamentul \ac{XR} divers,
+adică căști și controller-uri \ac{VR}.
+Această sală este perfectă pentru elaborarea eficientă și avansată a jocurilor video.
+
+Sala de calculători era deschisă în aproape orice zi de lucru,
+de la 11:00 dimineața până 20:00 seara, și am avut posibilitate s-o folosesc spre folosul meu.
+
+
+\section{Procesul de lucru în laborator}
+
+Am primit o sarcină --- să se elaboreze o aplicație pentru teză de master 
+și să se înceapă a compune textul tezei.
+La dispoziție am avut orice echipament necesar din laborator,
+și am putut să pun întrebări la conducător de practică.
+
+Deoarece proiectul a presupus crearea unei interfețe grafice pentru calculator,
+nu am folosit alt echipament decât propriu zis calculător.
+Datorită faptului că calculatorii sunt atât de bune, am putut să lucrez foarte eficient asupra sarcinii.
+
+Orarul a fost liber --- am putut să vin sau să nu vin în orice zi, principalul a fost să reușesc să prezint proiectul în termen limită.
+Când puteam, veneam la universitate la ora 11:00 și lucram până la 19:00-20:00 seara.
+În zilele de odihnă și în acele zile când nu am fost la Chișinău, lucram din casă, de pe laptopul propriu.
+
+Planificarea mai detaliată a realizării sarcinii am administrat în cea mai mare parte eu singur.
+Eu mă descurcam cu implementarea sarcinii singur,
+de aceea aici nu a fost necesar ajutorul din partea conducătorului.
+Puneam doar întrebările ce se referă la structura tezei și formatul documentului,
+precum și întrebări de natură organizatorică.
+
+
+\chapter{Sarcina de practică}
+
+Deoarece practica a presupus crearea fundației pentru teza de master,
+sarcina de practică a fost să se stabilească infrastructura necesară pentru a putea compune
+eficient textul tezei și pentru a putea programa aplicația necesară pentru teză,
+precum și să se înceapă lucrul asupra tezei.
+
+
+\section{Prezentarea temei tezei}
+
+Tema tezei sună astfel --- \textit{Explorarea formatului de fișier \ac{PNG}}.
+Acesta presupune precum studierea, înțelegerea și sumarizarea formatului de fișier \ac{PNG},
+atât și elaborarea unei aplicații de interfață grafică care să poată ajuta la studierea formatului.
+Ideea principală este să poată explica formatul de fișier \ac{PNG} 
+și să poată lucra cu acesta în cod.
+
+Așadar, teza poate fi descompusă în cel puțin trei sarcini:
+\begin{enumerate}
+  \item Studierea formatului de fișier \ac{PNG};
+  \item Planificarea aplicației de vizualizare la nivel înalt;
+  \item Realizarea aplicației și a tuturor componentelor necesare ca aceasta să funcționeze corect.
+\end{enumerate}
+Este clar că pasul 3 ar fi avea natura mai explorativă și iterativă.
+
+
+\section{Sarcini adăugătoare}
+
+Dinafara propriu zise teze, ar fi dorit să se aibă un fel de infrastructură pentru a putea:
+\begin{enumerate}
+  \item Face schimbări ușor la textul tezei și vedea rezultatele imediat;
+  \item Programa și face debugging la aplicație;
+  \item Să poată lucra de pe orice calculator --- deci ca setup-ul să fie cât mai portabil.
+\end{enumerate}
+
+Aceste puncte vor fi discutate și în continuare în acest raport.
+
+
+\chapter{Realizarea sarcinii de practică}
+
+\section{Fondarea infrastructurii de bază}
+
+\subsection{\ac{CI/CD} pentru textul tezei}
+
+Primul lucru care s-a realizat în timpul practicii a fost setarea \ac{CI/CD} pentru textul tezei.
+Ideea este ca atunci când se face o schimbare la textul tezei pe GitHub pe branch-ul principal,
+ca să se compileze documentul și să se genereze un \ac{PDF} în mod automat.
+Documentul general poate fi partajat direct folosind un link, și este pus în acces public.
+
+S-a folosit GitHub Actions pentru a realiza acest lucru, deoarece acesta integrează direct cu 
+acțunine diferite de pe GitHub și deoarece studenții au acces liber și practic infinit
+la acest serviciu folosind GitHub Student Developer Pack\cite{github_developer_pack}.
+
+Au fost întâlnite anumite probleme:
+\begin{itemize}
+    \item 
+    Există abordări diferite pentru această problemă și nu era clar imediat care abordare ar fi
+    mai aplicabilă.
+    Aceste abordări sunt ori să se folosească o imaginea Docker cu toate pachetele preinstalate,
+    creată de altcineva, ori să se instaleze pachetele necesare înainte de a se compila documentul.
+    Deoarece nu a fost găsit o imagine Docker care să satisfacă toate nevoile,
+    și ca folosirea unei imagini creștea semnificativ timpul de execuție a acțiunii,
+    s-a ales opțiunea manuală.
+
+    \item
+    Deoarece s-a ales opțiunea manuală, a fost nevoie să se instaleze pachetele corecte.
+    Acesta a luat mai multe încercări.
+
+    \item
+    Setarea instalării automate a pachetelor on-the-fly a fost dificilă,
+    și a fost în sfârșit abandonată în favoarea instalării tuturor pachetelor manuale.
+
+    \item
+    Instalarea fontului \texttt{Times New Roman} folosirea cărui se cere numaidecât de universitatea
+    din surse oficiale a fost foarte lentă, de o sută de ori mai lentă decât instalarea fontului dorit
+    dintr-un fișier, deoarece sursa oficială le instalează pe toate fonturile lui Microsoft.
+    Cu toate că Copyright-ul lui Microsoft interzice redistribuirea fonturilor lor,
+    întârzierea cauzată de lucrul de prisos cu fonturile a fost prea mare,
+    din ce cauză s-a folosit o sursă neoficială pentru fontul \texttt{Times New Roman}.
+    O altă soluție ar putea fi să se folosească un font înlocuitor, însă
+    universitate interzice folosirea unui font care nu este \texttt{Times New Roman}.
+\end{itemize}
+
+În final s-a ajuns la astfel de configurație:
+
+\inputminted{cs}{../.github/workflows/latex.yml}
+
+
+\subsection{Setarea mediului de dezvoltare}
+
+Dezvoltarea eficientă a unei aplicații presupune și folosirea
+unelor instrumente pentru a ajuta la dezvoltare.
+În cazul dat, deoarece s-a decis ca aplicația să fie realizată în limbajul de programare Zig,
+ar trebui să fie folosit un mediu de dezvoltare cu suport pentru Zig.
+Documentația oficială a limbajului Zig\cite{zig} recomandă folosirea lui VS Code, deoarece acesta
+are o extensiune care poate automat instala Zls\cite{zls}, un server de \ac{LSP} pentru Zig,
+și oferă un nivel de integrare bună cu acesta pentru editor.
+
+S-a realizat și configurația de compilare și de rulare în VS Code,
+care permite să se efectueze aceste acțiuni apăsând de ex. \texttt{F5}.
+
+De exemplu, așa arată configurația de compilare.
+Acesta invocă compilatorul în proiectul curent.
+
+\inputminted{json}{../.vscode/tasks.json}
+
+Zig mai adaugă un sistem de build numit \texttt{zig build}.
+Acesta presupune realizarea configurației prin cod Zig, care descrie procesul de compilare.
+Deci, în loc de fișiere de configurare folosite de exemlu de către MSBuild la compilarea C\#,
+sau al unui \ac{DSL} destinat pentru descrierea procesului de compilare, ca la CMake,
+Zig folosește cod în același limbaj.
+
+S-a realizat configurația folosind acest sistem de build cu scopul de a adăuga dependența
+de librăria grafică \texttt{Raylib}\cite{raylib}, care va fi folosită în continuare pentru a realiza
+interfața grafică, și a binding-urile la funcții din această librărie pentru Zig.
+
+\inputminted{zig}{../build.zig}
+
+
+\section{Descrierea la nivel înalt a formatului de fișier \ac{PNG}}
+
+În timpul practicii s-a studiat formatul de fișier \ac{PNG}\cite{png_spec}.
+Urmează o descriere scurtă a formatului.
+
+\subsection{Scopul formatului}
+
+Formatul \ac{PNG} este un format portabil destinat pentru reprezentarea imaginilor fără pierderi.
+Inițial a fost creat pentru a înlocui formatul \ac{GIF}, fiind un format mai flexibil și mai eficient.
+
+Design-ul formatului \ac{PNG} a fost proiectat ținând cont că acesta va fi folosit pe Internet,
+de aceea mai multe capacități au fost realizate în parte
+pentru a satisface cerințele de pe Internet.
+
+\subsection{Catacteristici principale}
+
+Capacitățile principale ale formatului \ac{PNG} sunt următoarele:
+\begin{itemize}
+  \item 
+  \textbf{Portabilitate}: formatul este portabil, adică poate fi folosit pe orice platformă.
+
+  \item 
+  \textbf{Compresie fără pierderi}: se folosește compresia fără pierderi,
+  ceea ce înseamnă că imaginea inițială poate fi reprodusă exact din forma sa compresată.
+
+  \item
+  Suport pentru \textbf{transparență}.
+
+  \item
+  Suport pentru \textbf{paletă de culori}.
+  Acesta înseamnă că culorile pot fi reprezentate prin indici de o mărime optimale,
+  adresându-se la culori din paletă.
+  
+  \item
+  \textbf{Capacitatea de streaming}: imaginile în formatul \ac{PNG} pot fi citite în mod incremental,
+  ceea ce permite să se facă rendering la imagine de o calitate scăzută în timp ce 
+  aceasta este încărcată într-o calitate mai bună.
+
+  \item
+  \textbf{Extensibilitate}: formatul permite să se adauge noi chunk-uri,
+  având și flaguri speciale standarte pentru a indica proprietățile diferite ale unui chunk.
+\end{itemize}
+
+Datorită capacităților enumerate mai sus, formatul \ac{PNG} este folosit
+pe larg pentru imagini pe Internet,
+însă este o alegere bună și în artă digitală, și în dezvoltarea jocurilor.
+
+
+\subsection{Structura formatului}
+
+Structura fișierelor \ac{PNG} este bazată pe o serie de blocuri,
+cunoscute sub numele de ``chunk-uri''.
+Fiecare chunk are o structură specifică și o funcție definită,
+contribuind la crearea și interpretarea corectă a imaginii.
+
+Chunk-urile pot fi ori critice, ori auxiliare.
+La chunk-uri critice prima literă din tip este majusculă,
+iar la cele auxiliare este minusculă.
+
+\begin{itemize}
+  \item
+  \textbf{Header Chunk (\texttt{IHDR})}: Acesta este primul chunk din orice fișier \ac{PNG}.
+  Conține informații esențiale despre imagine, cum ar fi lățimea,
+  înălțimea, tipul de culoare, compresia, filtrarea și interlacing.
+
+  \item
+  \textbf{Palette Chunk (\texttt{PLTE})}: Acest chunk este necesar pentru imagini
+  care utilizează paletă de culori.
+  Conține o tabelă de culori utilizate în imagine.
+
+  \item
+  \textbf{Image Data Chunks (\texttt{IDAT})}: Aceste chunk-uri conțin datele efective ale imaginii,
+  comprimate conform algoritmului de compresie fără pierderi al formatului \ac{PNG}.
+
+  \item
+  \textbf{Transparency Chunk (\texttt{tRNS})}: Oferă informații despre transparența anumitor culori din imagine, 
+  permițând, de exemplu, un fundal transparent.
+
+  \item
+  \textbf{Textual Information Chunks (\texttt{tEXt}, \texttt{zTXt}, \texttt{iTXt})}:
+  Aceste chunk-uri pot conține text
+  pentru informații diverse despre imagine, cum ar fi titlul, autorul, descrierea, etc.
+
+  \item
+  \textbf{End Chunk (\texttt{IEND})}:
+  Acest chunk marchează sfârșitul fișierului \ac{PNG} și nu conține date.
+\end{itemize}
+
+\subsection{Interlacing și Compresie}
+
+PNG utilizează un mecanism numit interlacing, care permite o încărcare progresivă a imaginii.
+În formatul \ac{PNG}, interlacing-ul este realizat prin algoritmul Adam7,
+care împarte imaginea în mai multe trepte de încărcare,
+îmbunătățind experiența vizuală în timpul încărcării lente a imaginii.
+
+Compresia în \ac{PNG} este realizată prin algoritmul de compresie DEFLATE,
+care este eficient și permite compresia fără pierderi.
+Acesta combină o metodă de comprimare cu dictionar (LZ77) și o codificare Huffman.
+
+\subsection{Utilizări și Limitări}
+
+Deși formatul \ac{PNG} este versatil și oferă o calitate ridicată a imaginii, are și câteva limitări.
+Nu suportă animații native (spre deosebire de formatul \ac{GIF})
+și nu este ideal pentru fotografii datorită dimensiunii mai mari a fișierului comparativ
+cu formatele comprimate cu pierderi, cum ar fi \ac{JPEG}.
+Cu toate acestea, este foarte popular pentru grafică web,
+datorită transparenței și calității imaginii.
+
+
+\section{Planificarea aplicației de vizualizare}
+
+\subsection{Modulul de citire a stream-urilor}
+
+Pentru a facilita interacțiunea cu stream-uri de date și a crea o abstracție în acest sens,
+a fost dezvoltată o mică bibliotecă.
+Experiența anterioară cu biblioteca \texttt{System.IO.Pipelines}\cite{system_io_pipelines}
+din C\# a relevat mai multe avantaje în utilizarea unei astfel de abordări:
+\begin{itemize}
+  \item
+  Implementarea corectă core să țină cont de toate cazurile-limită
+  este facilitată de gestionarea complexității de către
+  bibliotecă, cum ar fi alocarea și ștergerea buferelor,
+  sau înfășurarea datelor pe mai multe segmente consecutive.
+
+  \item
+  Flexibilitatea codului crește, permițând implementarea unui automat finit
+  și o rerulare din stări salvate anterior.
+
+  \item
+  Eficiența crescută prin soluționarea cazurilor de copiere a datelor în bufere temporare
+  de o mărime neoptimă pentru cititor.
+
+  \item
+  Centralizarea logicii de citire într-un ciclu unificat,
+  reducând duplicarea codului.
+
+  \item
+  Separarea completă a modulelor de citire și scriere,
+  permițând procesarea datelor în fire separate,
+  ceea ce elimină timpul pierdut la \ac{I/O} în timpul procesării.
+\end{itemize}
+
+Un prototip al unei biblioteci similare în Zig a fost dezvoltat,
+omitând însă separarea modulelor de citire și scriere pentru a reduce complexitatea.
+Această parte poate fi adăugată ulterior, nefiind esențială pentru un \ac{MVP}.
+
+Se se vadă Anexa \ref{appendix:pipelines_prototype} pentru codul sursă al bibliotecii.
+
+\subsection{Ideea aplicației la nivel înalt}
+
+Având la bază o abordare explorativă, s-a decis programarea aplicației
+pornind de la o imagine vagă a rezultatului dorit,
+însă cu o direcție clară în ceea ce privește obiectivul general.
+
+Având în vedere faptul că scopul principal al aplicației
+este de a facilita explorarea structurii fișierelor \ac{PNG},
+s-ar dori ca funcționalitatea să fie direct
+influențată și determinată de această structură.
+Designul interfeței grafice este conceput pentru a reflecta
+caracteristicile specifice ale fișierelor \ac{PNG}.
+
+Fișierele \ac{PNG} sunt compuse din secvențe denumite chunk-uri,
+fiecare având o funcție specifică.
+De exemplu, chunk-ul \texttt{IHDR} conține informații vitale despre imagine,
+precum lățimea, înălțimea, numărul de biți per pixel ș.a.
+Se intenționează ca interfața aplicației să pună
+în evidență aceste chunk-uri, oferind detalii despre ele utilizatorilor
+și permițând modificarea valorilor într-un mod
+care nu afectează integritatea fișierului.
+Informațiile ar fi prezentate per chunk, atunci când utilizatorul îl alege,
+iar fiecare chunk trebuie să fie evidențiat, pentru a-l putea alege și vizualiza.
+
+Pentru a sublinia aspectul de explorare a \textit{formatului} \ac{PNG},
+și nu doar manipularea imaginilor în acest format,
+se va include în aplicație un editor hexazecimal.
+Acesta va prezenta valorile fiecărui octet și
+va oferi reprezentări vizuale pentru a facilita distingerea diferitelor chunk-uri.
+O caracteristică utilă a editorului va fi funcționalitatea
+de a minimiza anumite chunk-uri, utilizând o iconiță dedicată,
+deoarece multe dintre ele conțin date de pixeli
+care nu sunt esențiale pentru înțelegerea formatului.
+
+La selectarea unui chunk, vor fi afișate informații detaliate despre acesta,
+incluzând numele, descrierea și lungimea.
+Este crucial ca fiecare chunk să fie prezentat cu o structură specifică,
+pentru a oferi o înțelegere completă a compoziției și funcționalității fișierelor \ac{PNG}.
+
+
+\subsection{Imaginea inițială a implementării la nivel înalt}
+
+În dezvoltarea software, este adesea practic să se abordeze problemele pe măsură ce apar.
+Însă procesul de gândire și modul în care se ajunge la soluții
+pot adăuga valoare dacă sunt împărtășite.
+Deși nu există garanția că ideile înregistrate vor duce
+la o soluție optimă sau chiar una funcțională,
+și anumite probleme de implementare sunt ignorate la această etapă inițială,
+această abordare reflectă natura evolutivă a dezvoltării software.
+
+Excesul de planificare și gândire înainte de începerea scrierii codului
+poate adesea conduce la un design incorect sau inferior.
+Acest lucru se datorează faptului că în timpul programării pot apărea probleme neanticipate,
+din cauza lipsei unei viziuni complete asupra întregului sistem.
+Din acest motiv, planificarea detaliată a întregului sistem înainte de începerea dezvoltării
+nu este întotdeauna cea mai înțeleaptă abordare.
+Cu toate acestea, planificarea la nivel înalt a structurii aplicației,
+ținând cont de cerințe și pe baza experienței,
+este utilă pentru a descompune problema în subprobleme gestionabile
+și pentru a începe implementarea unei soluții.
+
+Pentru a reflecta această viziune, s-a stabilit ca aplicația
+să fie împărțită în mai multe module esențiale:
+\begin{itemize}
+  \item 
+  \textbf{Modulul de acces la fișiere după poziții absolute},
+  care va gestiona cache-ul segmentelor vizualizate în prezent,
+  ștergerea segmentelor nedorite din memorie și citirea datelor din fișier la necesitate.
+  Acest modul este o abstracție cheie pentru a simplifica interacțiunea cu fișierele \ac{PNG}.
+
+  \item
+  \textbf{Arborele sintactic al fișierului \ac{PNG}},
+  care ar trebui să păstreze în memorie doar informațiile despre
+  chunk-urile vizualizate la un moment dat.
+  Acesta ar permite accesul la informații structurate despre fișier
+  și ar fi interfațat cu modulul de interacțiune cu utilizatorul
+  pentru a indica ce segmente din fișier sunt vizualizate.
+
+  \item
+  \textbf{Parser-ul}, responsabil pentru transformarea datelor
+  din fișier într-un arbore sintactic la cerere.
+  Acest modul poate consta dintr-un set de funcții specifice pentru această transformare.
+
+  \item
+  \textbf{Modulul de interfață cu utilizatorul},
+  care va folosi arborele sintactic al fișierului pentru
+  a prezenta utilizatorului informații într-o formă atractivă și interactivă.
+  Modulul va avea control asupra segmentelor din fișier care sunt vizualizate,
+  permitând utilizatorului să actualizeze aceste segmente
+  în funcție de chunk-urile afișate în interfață.
+\end{itemize}
+
+Așa cum s-a discutat, acest design inițial este un punct de plecare,
+iar implicațiile utilizării acestuia urmează să fie analizate pe parcursul dezvoltării.
+
+\subsection{Implementarea inițială a codului de bază al parser-ului}
+
+În timpul practicii s-a realizat ciclul de bază a parser-ului care poate citi
+primele octeți din fișier și le poate valida.
+
+Să se vadă Anexa \ref{appendix:parser_prototype}.
+
+\unnumberedChapter{Concluziile Finale și Recomandările}
+
+În urma realizării practicii de specialitate,
+s-a reușit să se realizeze o fundație pentru teză de master,
+incluzând setarea compilării tezei automate într-un \ac{PDF} folosind GitHub Actions,
+și setarea unui mediu de dezvoltare pentru a putea programa aplicația necesară pentru teză.
+
+S-a reușit să se studieze specificația formatului de fișier \ac{PNG}
+și să se realizeze o descriere la nivel înalt a acestuia pentru teză.
+La fel, s-au studiat fundamentele limbajului de programare Zig,
+și s-a realizat un prototip al unei biblioteci pentru a lucra cu stream-uri de date,
+care în continuare va fi folosit în aplicația pentru teză.
+
+Atmosfera în laborator a fost foarte prietenoasă,
+iar calculatorii au fost o adiție minunată pentru productivitate.
+
+\newpage
+\markpage{usefulStuffEnd}
+
+% Bibliography
+\bibliographystyle{plain}
+\bibliography{bibliography}
+\addcontentsline{toc}{chapter}{\bibname}
+
+% Appendices
+\appendix
+
+% Number with arabic numbers instead of Roman
+\renewcommand{\thechapter}{\arabic{chapter}}
+% Prepend Anexa to section names, center them
+\titleformat{\section}[block]{\normalfont\normalsize\bfseries\filcenter}{Anexa \thesection~}{0pt}{}
+
+% Since we've got just a single chapter in the appedices,
+% but which is also the name of the Appendix chapter, it should be omitted.
+% Makes little sense, but ok I guess.
+\setcounter{chapter}{1}
+
+\unnumberedChapter{Anexe}
+
+\section{pipelines.zig}\label{appendix:pipelines_prototype}
+\inputminted{zig}{../src/pipelines.zig}
+
+\clearpage\section{main.zig}\label{appendix:parser_prototype}
+\inputminted{zig}{../src/main.zig}
+
+\end{document}
