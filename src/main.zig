@@ -52,7 +52,10 @@ pub fn main() !void {
                 {
                     std.debug.print("Length too large\n", .{});
                 },
-                // else => std.debug.print("Some other error: {}\n", .{err}),
+                else => |_| 
+                {
+                    std.debug.print("Some other error: {}\n", .{err});
+                },
             }
 
             isNonRecoverableError = true;
@@ -169,10 +172,10 @@ const ChunkNode = struct
 {
     base: NodeBase,
 
-    lengthNode: ChunkLengthNode = {},
-    typeNode: ChunkTypeNode = {},
-    dataNode: ChunkDataNode = {},
-    crcNode: ChunkCyclicRedundancyCheckNode = {},
+    lengthNode: ChunkLengthNode,
+    typeNode: ChunkTypeNode,
+    dataNode: ChunkDataNode,
+    crcNode: ChunkCyclicRedundancyCheckNode,
 };
 
 const SignatureNode = struct 
@@ -218,8 +221,10 @@ fn doMaximumAmountOfParsing(
             },
             .ChunkDone =>
             {
-                nodes.addOne(context.state.*.node);
-            }
+                const newItem = try nodes.addOne();
+                newItem.* = context.state.Chunk.node;
+            },
+            else => {},
         }
     }
 }
@@ -261,7 +266,7 @@ fn parseNextNode(context: *ParserContext) !void
             else
             {
                 // Reset the state.
-                context.state.* = .{ .Chunk = std.mem.zeroes(@TypeOf(ChunkParserState)) };
+                context.state.* = .{ .Chunk = std.mem.zeroes(ChunkParserState), };
                 try parseChunkItem(context);
             }
         },
@@ -378,8 +383,8 @@ fn parseChunkItem(context: *ParserContext) !void
 
 pub fn initChunkParserState(context: *ParserContext) void 
 {
-    context.state.* = ChunkParserState
-    {
+    context.state.* = std.mem.zeroInit(ChunkParserState,
+    .{
         .node = ChunkNode
         {
             .base = NodeBase
@@ -387,7 +392,7 @@ pub fn initChunkParserState(context: *ParserContext) void
                 .startPositionInFile = context.sequence.getStartOffset(),
             },
         },
-    };
+    });
 }
 
 const pngFileSignature = "\x89PNG\r\n\x1A\n";
