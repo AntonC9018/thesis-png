@@ -21,7 +21,7 @@ pub fn main() !void {
     var parserState: ParserState = .Signature;
     var chunks = std.ArrayList(ChunkNode).init(allocator);
 
-    outerLoop: while (true)
+    while (true) outerLoop:
     {
         var readResult = try reader.read();
         var context = ParserContext
@@ -31,40 +31,38 @@ pub fn main() !void {
             .allocator = allocator,
         };
 
-        var isNonRecoverableError = false;
-        doMaximumAmountOfParsing(&context, &chunks) catch |err|
+        doMaximumAmountOfParsing(&context, &chunks)
+        catch |err|
         {
-            switch (err)
+            const isNonRecoverableError = 
+            switch (err) e: 
             {
                 error.NotEnoughBytes => 
                 {
-                    if (readResult.isEnd)
-                    {
-                        std.debug.print("File ended but expected more data\n", .{});
-                        break :outerLoop;
-                    }
+                    break :e false;
                 },
                 error.SignatureMismatch => 
                 {
                     std.debug.print("Signature mismatch\n", .{});
+                    break :e true;
                 },
                 error.LengthTooLarge => 
                 {
                     std.debug.print("Length too large\n", .{});
+                    break :e true;
                 },
                 else => |_| 
                 {
                     std.debug.print("Some other error: {}\n", .{err});
+                    break :e true;
                 },
+            };
+
+            if (isNonRecoverableError)
+            {
+                break :outerLoop;
             }
-
-            isNonRecoverableError = true;
         };
-
-        if (isNonRecoverableError)
-        {
-            break;
-        }
 
         if (readResult.isEnd)
         {
@@ -74,7 +72,7 @@ pub fn main() !void {
                 std.debug.print("Not all output consumed. Remaining length: {}\n", .{remaining});
             }
 
-            if (!isDoneState(context.state.*))
+            if (!isParserStateTerminal(context.state))
             {
                 std.debug.print("Ended in a non-terminal state.", .{});
             }
@@ -88,28 +86,38 @@ pub fn main() !void {
 
         try reader.advance(context.sequence.start());
     }
+
+    for (chunks.items) |*chunk| 
+    {
+        std.debug.print("Chunk(Length: {d}, Type: {s}, CRC: {d})\n", .{
+            chunk.lengthNode.byteLength,
+            chunk.typeNode.chunkType.bytes,
+            chunk.crcNode.crc.value,
+        });
+    }
 }
 
 const DoneStateBit = 0x80;
 
-const ParserStateKey = enum(u8) 
+// What is the next expected type?
+const ParserAction = enum(u8) 
 {
     Signature = 0,
+    StartChunk,
     Chunk,
-
-    ChunkDone = DoneStateBit,
-    SignatureDone,
-    // CompletelyDone,
 };
 
-const ParserState = union(ParserStateKey)
+const ParserState = union(ParserAction)
 {
     Signature: void,
+    StartChunk: void,
     Chunk: ChunkParserState,
-    ChunkDone: void,
-    SignatureDone: void,
-    // CompletelyDone: void,
 };
+
+pub fn isParserStateTerminal(state: *const ParserState) bool 
+{
+    return state.* == .StartChunk;
+}
 
 const ParserContext = struct
 {
@@ -201,6 +209,7 @@ const ChunkParserState = struct
 {
     key: ChunkParserStateKey = .Length,
     node: ChunkNode,
+    isDone: bool = false,
 };
 
 fn doMaximumAmountOfParsing(
@@ -209,74 +218,75 @@ fn doMaximumAmountOfParsing(
 {
     while (true)
     {
-        try parseChunkOrSignature(context);
+        const isDone = try parseChunkOrSignature(context);
+        if (!isDone)
+        {
+            continue;
+        }
 
         switch (context.state.*)
         {
-            .SignatureDone =>
+            .Signature => 
             {
-                // TODO: Signature node, and call a function with a TopLevelNode sort of tagged union.
-                std.debug.print("Signature done\n", .{});
+                std.debug.print("Signature\n", .{});
             },
-            .ChunkDone =>
+            .Chunk =>
             {
                 const newItem = try nodes.addOne();
                 newItem.* = context.state.Chunk.node;
             },
-            else => {},
+            .StartChunk => unreachable,
         }
+
+        context.state.* = .StartChunk;
     }
 }
 
-pub fn isDoneState(state: ParserStateKey) bool 
-{
-    return @intFromEnum(state) & DoneStateBit != 0;
-}
-
-fn parseChunkOrSignature(context: *ParserContext) !void
+fn parseChunkOrSignature(context: *ParserContext) !bool
 {
     while (true)
     {
-        const stateTag: ParserStateKey = context.state.*;
-        if (isDoneState(stateTag))
+        const isDone = try parseNextNode(context);
+        if (isDone)
         {
-            return;
+            return true;
         }
-
-        try parseNextNode(context);
     }
 }
 
-fn parseNextNode(context: *ParserContext) !void
+fn parseNextNode(context: *ParserContext) !bool
 {
     switch (context.state.*)
     {
         .Signature =>
         {
             try validateSignature(context.sequence);
-            context.state.* = .ChunkDone;
+            return true;
         },
-        .ChunkDone, .SignatureDone => 
+        .StartChunk =>
         {
-            if (context.sequence.len() == 0)
+            if (context.sequence.isEmpty())
             {
                 return error.NotEnoughBytes;
             }
             else
             {
-                // Reset the state.
                 initChunkParserState(context);
-                try parseChunkItem(context);
             }
         },
         .Chunk =>
         {
-            try parseChunkItem(context);
+            const isDone = try parseChunkItem(context);
+            if (isDone)
+            {
+                return true;
+            }
         },
     }
+    return false;
 }
 
-fn parseChunkItem(context: *ParserContext) !void
+fn parseChunkItem(context: *ParserContext) !bool
 {
     var state = &context.state.Chunk;
     switch (state.key)
@@ -312,15 +322,18 @@ fn parseChunkItem(context: *ParserContext) !void
             }
 
             var chunkType: ChunkType = undefined;
-            const startOffset = context.sequence.getStartOffset();
-            const chunkEndPosition = context.sequence.getPosition(4);
-            context.sequence
-                .sliceToExclusive(chunkEndPosition)
-                .copyTo(&chunkType.bytes);
+            const o = blk: {
+                const sequence_ = context.sequence;
+                const startOffset = sequence_.getStartOffset();
+                const chunkEndPosition = sequence_.getPosition(4);
+                const sequenceU32 = sequence_.sliceToExclusive(chunkEndPosition);
+                sequenceU32.copyTo(&chunkType.bytes);
+                break :blk .{ .start = startOffset, .end = chunkEndPosition, };
+            };
 
             state.node.typeNode = .{
                 .base = .{
-                    .startPositionInFile = startOffset,
+                    .startPositionInFile = o.start,
                     .length = 4,
                 },
                 .chunkType = chunkType,
@@ -328,9 +341,12 @@ fn parseChunkItem(context: *ParserContext) !void
 
             // Start the data node.
             state.node.dataNode.base = .{
-                .startPositionInFile = startOffset,
+                .startPositionInFile = o.start,
                 .length = 0,
             };
+
+            context.sequence.* = context.sequence.sliceFrom(o.end);
+            state.key = .Data;
         },
         .Data =>
         {
@@ -349,7 +365,7 @@ fn parseChunkItem(context: *ParserContext) !void
             else
             {
                 state.key = .CyclicRedundancyCheck;
-                return;
+                return false;
             }
 
             if (dataNode.base.length == totalDataBytes)
@@ -372,28 +388,28 @@ fn parseChunkItem(context: *ParserContext) !void
                 },
             };
 
-            const chunkEndPosition = context.sequence.getPosition(4);
-            context.sequence.* = context.sequence.sliceFrom(chunkEndPosition);
             state.key = .Done;
         },
         .Done => unreachable,
     }
-
-    return context.state.Chunk.key == .Done;
+    return state.key == .Done;
 }
 
 pub fn initChunkParserState(context: *ParserContext) void 
 {
-    context.state.Chunk = std.mem.zeroInit(ChunkParserState,
+    context.state.* = 
     .{
-        .node = std.mem.zeroInit(ChunkNode,
+        .Chunk = std.mem.zeroInit(ChunkParserState,
         .{
-            .base = NodeBase
-            {
-                .startPositionInFile = context.sequence.getStartOffset(),
-            },
-        }),
-    });
+            .node = std.mem.zeroInit(ChunkNode,
+            .{
+                .base = NodeBase
+                {
+                    .startPositionInFile = context.sequence.getStartOffset(),
+                },
+            }),
+        })
+    };
 }
 
 const pngFileSignature = "\x89PNG\r\n\x1A\n";

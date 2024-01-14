@@ -27,7 +27,8 @@
             "type": "cppvsdbg",
             "request": "launch",
             "program": "${workspaceFolder}/zig-out/bin/png-test",
-            "args": [],
+            "args": [
+            ],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
             "environment": [],

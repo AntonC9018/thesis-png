@@ -137,7 +137,10 @@ pub const Buffer = struct
         return self.totalBytes;
     }
 
-    pub fn appendSegment(self: *Buffer, segment: Segment, allocator: std.mem.Allocator) !void
+    pub fn appendSegment(
+        self: *Buffer,
+        segment: Segment,
+        allocator: std.mem.Allocator) !void
     {
         try self.segments.append(allocator, segment);
         self.totalBytes += segment.len;
@@ -207,6 +210,34 @@ pub const Sequence = struct
             .range = .{
                 .start = pos,
                 .end = pos,
+            },
+        };
+    }
+
+    pub fn create(buffer: *const Buffer) Sequence
+    {
+        const segments_ = buffer.segments.items;
+        if (segments_.len == 0)
+        {
+            return Self.createEmpty(buffer);
+        }
+
+        const start_ = SequencePosition
+        {
+            .offset = 0,
+            .segment = buffer.getFirstSegmentOffset(),
+        };
+        const lastSegment_ = segments_[segments_.len - 1];
+        const end_ = SequencePosition
+        {
+            .offset = lastSegment_.len,
+            .segment = @intCast(buffer.getFirstSegmentOffset() + segments_.len - 1),
+        };
+        return .{
+            .buffer = buffer,
+            .range = .{
+                .start = start_,
+                .end = end_,
             },
         };
     }
@@ -283,12 +314,8 @@ pub const Sequence = struct
             {
                 return 0;
             }
-            // Is this right?
-            if (end_.offset == self.buffer.getSegment(end_.segment).len)
-            {
-                return 1;
-            }
-            return 0;
+            std.debug.assert(start_.offset < end_.offset);
+            return 1;
         }
 
         var result = end_.segment - start_.segment;
@@ -408,7 +435,10 @@ pub const Sequence = struct
 
         var iter = SegmentIterator.create(self) 
         // We know the buffer is empty in this case.
-        orelse return;
+        orelse {
+            std.debug.assert(buffer_.len == 0);
+            return;
+        };
 
         while (true)
         {
@@ -472,7 +502,10 @@ pub const SegmentIterator = struct
     {
         self.currentPosition.segment += 1;
         self.currentPosition.offset = 0;
-        return self.currentPosition.segment < self.sequence.end().segment;
+        // I try to keep the ends in the same segment 
+        // such that there are no empty segments.
+        // So this should be correct.
+        return self.currentPosition.segment <= self.sequence.end().segment;
     }
 
     pub fn getCurrentPosition(self: *SegmentIterator) SequencePosition
@@ -657,10 +690,156 @@ const TestDataProvider = struct {
         return length;
     }
 };
+
+fn createTestBufferFromData(
+    data: []const []const u8,
+    allocator: std.mem.Allocator) !Buffer
+{
+    var segments = std.ArrayListUnmanaged(Segment){};
+    try segments.ensureTotalCapacity(allocator, data.len);
+    segments.items.len = data.len;
+
+    var length: usize = 0;
+    for (data, segments.items) |data_, *s|
+    {
+        s.* = .{
+            .array = data_,
+            .len = @intCast(data_.len),
+            .bytePosition = length,
+        };
+        length += data_.len;
+    }
+
+    return .{
+        .segments = segments,
+        .firstSegmentOffset = 0,
+        .totalBytes = length,
+    };
+}
+
+const t = std.testing;
+
+test "isEmpty"
+{
+    const allocator = std.heap.page_allocator;
+
+    var buffer = try createTestBufferFromData(&.{"123", "456"}, allocator);
+    defer buffer.segments.deinit(allocator);
+
+    const wholeSequence = Sequence.create(&buffer);
+
+    {
+        const firstSegment = wholeSequence.sliceToExclusive(
+            wholeSequence.getPosition(3));
+        var iter = SegmentIterator.create(&firstSegment).?;
+        try t.expectEqualStrings("123", iter.current());
+        try t.expect(!iter.advance());
+    }
+}
+
+test "copyTo"
+{
+    const allocator = std.heap.page_allocator;
+
+    var buffer = try createTestBufferFromData(&.{"123", "456"}, allocator);
+    defer buffer.segments.deinit(allocator);
+
+    const wholeSequence = Sequence.create(&buffer);
+
+    {
+        const sequence = wholeSequence.slice(.{
+            .start = wholeSequence.getPosition(1),
+            .end = wholeSequence.getPosition(5),
+        });
+
+        var localBuffer: [4]u8 = undefined; 
+        sequence.copyTo(&localBuffer);
+
+        try t.expectEqualStrings("2345", &localBuffer);
+    }
+    {
+        const sequence = wholeSequence.sliceToExclusive(
+            wholeSequence.getPosition(3));
+        var localBuffer: [3]u8 = undefined;
+        sequence.copyTo(&localBuffer);
+
+        try t.expectEqualStrings("123", &localBuffer);
+    }
+    {
+        const sequence = Sequence.createEmpty(&buffer);
+        var localBuffer: [0]u8 = undefined;
+        sequence.copyTo(&localBuffer);
+        try t.expectEqualStrings("", &localBuffer);
+    }
+}
+
+test "iterator test"
+{
+    const allocator = std.heap.page_allocator;
+    var reader = Reader(TestDataProvider) 
+    {
+        .allocator = allocator,
+        .dataProvider = .{ .data = "0123456789" },
+        .preferredBufferSize = 4,
+    };
+    {
+        const iter = SegmentIterator.create(&reader.currentSequence());
+        try t.expect(iter == null);
+    }
+    {
+        const readResult = try reader.read();
+        var iter = SegmentIterator.create(&readResult.sequence).?;
+        try t.expectEqualStrings("0123", iter.current());
+        try t.expect(!iter.advance());
+    }
+    try reader.advance(null);
+    {
+        const readResult = try reader.read();
+        {
+            var iter = SegmentIterator.create(&readResult.sequence).?;
+            try t.expectEqualStrings("0123", iter.current());
+            try t.expect(iter.advance());
+            try t.expectEqualStrings("4567", iter.current());
+            try t.expect(!iter.advance());
+        }
+        {
+            var sequence = readResult.sequence;
+            sequence = sequence.sliceFrom(sequence.getPosition(2));
+
+            var iter = SegmentIterator.create(&sequence).?;
+            try t.expectEqualStrings("23", iter.current());
+            try t.expect(iter.advance());
+            try t.expectEqualStrings("4567", iter.current());
+            try t.expect(!iter.advance());
+        }
+        {
+            var sequence = readResult.sequence;
+            sequence = sequence.slice(.{
+                .start = sequence.getPosition(2),
+                .end = sequence.getPosition(6),
+            });
+
+            var iter = SegmentIterator.create(&sequence).?;
+            try t.expectEqualStrings("23", iter.current());
+            try t.expect(iter.advance());
+            try t.expectEqualStrings("45", iter.current());
+            try t.expect(!iter.advance());
+        }
+        {
+            var sequence = readResult.sequence;
+            sequence = sequence.slice(.{
+                .start = sequence.getPosition(2),
+                .end = sequence.getPosition(3),
+            });
+
+            var iter = SegmentIterator.create(&sequence).?;
+            try t.expectEqualStrings("2", iter.current());
+            try t.expect(!iter.advance());
+        }
+    }
+}
     
 test "basic integration tests" {
-    const t = std.testing;
-
     const allocator = std.heap.page_allocator;
     var reader = Reader(TestDataProvider) 
     {

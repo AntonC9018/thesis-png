@@ -34,6 +34,7 @@ pub fn build(b: *std.Build) !void {
             .root_source_file = exe.root_src.?,
             .target = exe.target,
             .optimize = exe.optimize,
+            .filter = b.option([]const u8, "test-filter", "test filter"),
         });
         b.installArtifact(unit_tests);
 
