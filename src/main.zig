@@ -34,28 +34,27 @@ pub fn main() !void {
         doMaximumAmountOfParsing(&context, &chunks)
         catch |err|
         {
-            const isNonRecoverableError = 
-            switch (err) e: 
+            const isNonRecoverableError = e:
             {
-                error.NotEnoughBytes => 
+                switch (err)
                 {
-                    break :e false;
-                },
-                error.SignatureMismatch => 
-                {
-                    std.debug.print("Signature mismatch\n", .{});
-                    break :e true;
-                },
-                error.LengthTooLarge => 
-                {
-                    std.debug.print("Length too large\n", .{});
-                    break :e true;
-                },
-                else => |_| 
-                {
-                    std.debug.print("Some other error: {}\n", .{err});
-                    break :e true;
-                },
+                    error.NotEnoughBytes => false,
+                    error.SignatureMismatch => 
+                    {
+                        std.debug.print("Signature mismatch\n", .{});
+                        break :e true;
+                    },
+                    error.LengthTooLarge => 
+                    {
+                        std.debug.print("Length too large\n", .{});
+                        break :e true;
+                    },
+                    else => |_| 
+                    {
+                        std.debug.print("Some other error: {}\n", .{err});
+                        break :e true;
+                    },
+                }
             };
 
             if (isNonRecoverableError)
