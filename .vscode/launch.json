@@ -14,6 +14,15 @@
             "console": "externalTerminal"
         },
         {
+            "name": "(gdb) Launch",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/zig-out/bin/png",
+            "cwd": "${workspaceFolder}",
+            "preLaunchTask": "windows_build",
+            "MIMode": "lldb"
+        },
+        {
             "name": "(msvc) Launch Tests",
             "type": "cppvsdbg",
             "request": "launch",

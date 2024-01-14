@@ -125,6 +125,7 @@ const ChunkParserStateKey = enum
     ChunkType,
     Data,
     CyclicRedundancyCheck,
+    Done,
 };
 
 const NodeBase = struct
@@ -153,8 +154,7 @@ const ChunkTypeNode = struct
 const ChunkDataNode = struct
 {
     base: NodeBase,
-    dataNodes: []union(enum) {
-    },
+    dataNodes: []union(enum){},
 };
 
 const ChunkCyclicRedundancyCheckNode = struct
@@ -196,7 +196,6 @@ const TopLevelNode = union(enum)
         }
     }
 };
-
 
 const ChunkParserState = struct
 {
@@ -266,7 +265,7 @@ fn parseNextNode(context: *ParserContext) !void
             else
             {
                 // Reset the state.
-                context.state.* = .{ .Chunk = std.mem.zeroes(ChunkParserState), };
+                initChunkParserState(context);
                 try parseChunkItem(context);
             }
         },
@@ -375,23 +374,25 @@ fn parseChunkItem(context: *ParserContext) !void
 
             const chunkEndPosition = context.sequence.getPosition(4);
             context.sequence.* = context.sequence.sliceFrom(chunkEndPosition);
-            context.state.* = .ChunkDone;
-            return;
+            state.key = .Done;
         },
+        .Done => unreachable,
     }
+
+    return context.state.Chunk.key == .Done;
 }
 
 pub fn initChunkParserState(context: *ParserContext) void 
 {
-    context.state.* = std.mem.zeroInit(ChunkParserState,
+    context.state.Chunk = std.mem.zeroInit(ChunkParserState,
     .{
-        .node = ChunkNode
-        {
+        .node = std.mem.zeroInit(ChunkNode,
+        .{
             .base = NodeBase
             {
                 .startPositionInFile = context.sequence.getStartOffset(),
             },
-        },
+        }),
     });
 }
 
@@ -447,7 +448,7 @@ const ChunkTypeMetadataMask = struct
     }
 };
 
-const ChunkType = union 
+const ChunkType = extern union 
 {
     bytes: [4]u8,
     value: u32,
