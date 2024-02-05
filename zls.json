@@ -1,0 +1,6 @@
+{
+    "$schema": "https://raw.githubusercontent.com/zigtools/zls/master/schema.json",
+    "enable_autofix": false,
+    "enable_snippets": false,
+    "completions_with_replace": false,
+}
