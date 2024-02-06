@@ -185,7 +185,8 @@ pub const SequenceRange = struct {
             std.debug.assert(start_.offset <= end_.offset);
         }
 
-        return SequenceRange {
+        return SequenceRange
+        {
             .start = start_,
             .end = end_,
         };
@@ -301,23 +302,13 @@ pub const Sequence = struct
 
     pub fn isEmpty(self: *const Self) bool
     {
-        return self.getSegmentCount() == 0;
+        return self.len() == 0;
     }
 
-    pub fn getSegmentCount(self: *const Self) u32
+    pub fn getWholeSegmentCount(self: *const Self) u32
     {
         const start_ = self.start();
         const end_ = self.end();
-        if (start_.segment == end_.segment)
-        {
-            if (start_.offset == end_.offset)
-            {
-                return 0;
-            }
-            std.debug.assert(start_.offset < end_.offset);
-            return 1;
-        }
-
         var result = end_.segment - start_.segment;
         if (end_.offset == self.buffer.getSegment(end_.segment).len)
         {
@@ -341,6 +332,32 @@ pub const Sequence = struct
             .end = newEnd,
         });
     }
+
+    // Creates two slices:
+    // One up to the middle position, exclusive.
+    // Second from the middle position, inclusive.
+    pub fn disect(self: *const Self, middle: SequencePosition) 
+        struct
+        { 
+            left: Sequence,
+            right: Sequence,
+        }
+    {
+        const left = self.sliceToExclusive(middle);
+        const right = self.sliceFrom(middle);
+        return .{
+            .left = left,
+            .right = right
+        };
+    }
+
+    // // Removes a sequence from the start until the given position and returns it.
+    // pub fn cutOffUntil(self: *Self, until: SequencePosition) Sequence
+    // {
+    //     const result = self.disect(until);
+    //     self.* = result.rigth;
+    //     return result.left;
+    // }
 
     pub fn slice(
         self: *const Self,
@@ -462,6 +479,15 @@ pub const Sequence = struct
     pub fn getFirstSegment(self: *const Self) []const u8
     {
         return self.buffer.getSegment(self.start().segment);
+    }
+
+    pub fn debugPrint(self: *const Self) void
+    {
+        const allocator = std.heap.page_allocator;
+        const mem = allocator.alloc(u8, self.len()) catch unreachable;
+        defer allocator.free(mem);
+        self.copyTo(mem);
+        std.debug.print("Sequence: {s}\n", .{mem});
     }
 };
 
@@ -622,7 +648,7 @@ pub fn Reader(comptime ReaderType: type) type
                 });
 
                 const segments = &buffer_.segments.items;
-                const removedSegmentsCount = removedSequence.getSegmentCount();
+                const removedSegmentsCount = removedSequence.getWholeSegmentCount();
 
                 for (0 .. removedSegmentsCount) |i|
                 {
@@ -935,6 +961,7 @@ test "basic integration tests" {
         try t.expect(readResult.isEnd);
 
         const sequence = readResult.sequence;
+        try helper.check(sequence, "23456789");
         try t.expectEqualDeep(SequenceRange{
             .start = .{
                 .segment = 0,
@@ -1039,7 +1066,7 @@ pub fn readNetworkU32(self: *Sequence) error{NotEnoughBytes}!u32
 }
 
 // Assumes the length is at least 4.
-fn readNetworkU32_impl(self: *Sequence) error{NotEnoughBytes}!u32
+fn readNetworkU32_impl(self: *Sequence) u32
 {
     const reverseBytes = isLittleEndian();
     var resultBytes: [4]u8 = undefined;

@@ -1,6 +1,7 @@
 const std = @import("std");
 
-pub fn main() !void {
+pub fn main() !void
+{
     var cwd = std.fs.cwd();
 
     var testDir = try cwd.openDir("test_data", .{ .access_sub_paths = true, });
@@ -38,7 +39,7 @@ pub fn main() !void {
             {
                 switch (err)
                 {
-                    error.NotEnoughBytes => false,
+                    error.NotEnoughBytes => break :e false,
                     error.SignatureMismatch => 
                     {
                         std.debug.print("Signature mismatch\n", .{});
@@ -89,9 +90,9 @@ pub fn main() !void {
     for (chunks.items) |*chunk| 
     {
         std.debug.print("Chunk(Length: {d}, Type: {s}, CRC: {d})\n", .{
-            chunk.lengthNode.byteLength,
-            chunk.typeNode.chunkType.bytes,
-            chunk.crcNode.crc.value,
+            chunk.byteLength,
+            chunk.chunkType.bytes,
+            chunk.crc.value,
         });
     }
 }
@@ -178,11 +179,10 @@ const CyclicRedundancyCheck = struct
 const ChunkNode = struct
 {
     base: NodeBase,
-
-    lengthNode: ChunkLengthNode,
-    typeNode: ChunkTypeNode,
+    byteLength: u32,
+    chunkType: ChunkType,
     dataNode: ChunkDataNode,
-    crcNode: ChunkCyclicRedundancyCheckNode,
+    crc: CyclicRedundancyCheck,
 };
 
 const SignatureNode = struct 
@@ -217,7 +217,7 @@ fn doMaximumAmountOfParsing(
 {
     while (true)
     {
-        const isDone = try parseChunkOrSignature(context);
+        const isDone = try parseTopLevelNode(context);
         if (!isDone)
         {
             continue;
@@ -241,7 +241,7 @@ fn doMaximumAmountOfParsing(
     }
 }
 
-fn parseChunkOrSignature(context: *ParserContext) !bool
+fn parseTopLevelNode(context: *ParserContext) !bool
 {
     while (true)
     {
@@ -292,8 +292,6 @@ fn parseChunkItem(context: *ParserContext) !bool
     {
         .Length => 
         {
-            const startOffset = context.sequence.getStartOffset();
-
             const length = try p.readNetworkU32(context.sequence);
             // The spec says it must not exceed 2^31
             if (length > 0x80000000)
@@ -301,16 +299,7 @@ fn parseChunkItem(context: *ParserContext) !bool
                 return error.LengthTooLarge;
             }
 
-            // TODO: 
-            // Maybe not store these as nodes, cause that's kinda funny.
-            // We can create these on demand since we know all the offsets.
-            state.node.lengthNode = .{
-                .base = .{
-                    .startPositionInFile = startOffset,
-                    .length = 4,
-                },
-                .byteLength = length,
-            };
+            state.node.byteLength = length;
             state.key = .ChunkType;
         },
         .ChunkType =>
@@ -321,38 +310,27 @@ fn parseChunkItem(context: *ParserContext) !bool
             }
 
             var chunkType: ChunkType = undefined;
-            const o = blk: {
-                const sequence_ = context.sequence;
-                const startOffset = sequence_.getStartOffset();
-                const chunkEndPosition = sequence_.getPosition(4);
-                const sequenceU32 = sequence_.sliceToExclusive(chunkEndPosition);
-                sequenceU32.copyTo(&chunkType.bytes);
-                break :blk .{ .start = startOffset, .end = chunkEndPosition, };
-            };
 
-            state.node.typeNode = .{
-                .base = .{
-                    .startPositionInFile = o.start,
-                    .length = 4,
-                },
-                .chunkType = chunkType,
-            };
+            const sequence_ = context.sequence;
+            const chunkEndPosition = sequence_.getPosition(4);
+            const o = sequence_.disect(chunkEndPosition);
+            sequence_.* = o.right;
 
-            // Start the data node.
+            o.left.copyTo(&chunkType.bytes);
+            state.node.chunkType = chunkType;
+            state.key = .Data;
+
             state.node.dataNode.base = .{
-                .startPositionInFile = o.start,
+                .startPositionInFile = o.right.getStartOffset(),
                 .length = 0,
             };
-
-            context.sequence.* = context.sequence.sliceFrom(o.end);
-            state.key = .Data;
         },
         .Data =>
         {
             var dataNode = &state.node.dataNode;
 
             // Let's just skip for now.
-            const totalDataBytes = state.node.lengthNode.byteLength;
+            const totalDataBytes = state.node.byteLength;
             const remainingDataBytes = totalDataBytes - dataNode.base.length;
             if (remainingDataBytes > 0)
             {
@@ -375,18 +353,8 @@ fn parseChunkItem(context: *ParserContext) !bool
         .CyclicRedundancyCheck =>
         {
             // Just skip for now
-            const startOffset = context.sequence.getStartOffset();
             const value = try p.readNetworkU32(context.sequence);
-            state.node.crcNode = .{
-                .base = .{
-                    .startPositionInFile = startOffset,
-                    .length = 4,
-                },
-                .crc = .{
-                    .value = value,
-                },
-            };
-
+            state.node.crc = .{ .value = value };
             state.key = .Done;
         },
         .Done => unreachable,
@@ -418,12 +386,14 @@ test { _ = p; }
 
 fn validateSignature(slice: *p.Sequence) !void 
 {
-    p.removeFront(slice, pngFileSignature)
+    var copy = slice.*;
+    p.removeFront(&copy, pngFileSignature)
     catch |err| switch (err)
     {
         error.NoMatch => return error.SignatureMismatch,
         else => return err,
     };
+    slice.* = copy;
 }
 
 const ChunkTypeMetadataMask = struct 
