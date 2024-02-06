@@ -1032,6 +1032,18 @@ pub fn removeFront(self: *Sequence, string: []const u8) RemoveResult
     }
 }
 
+pub fn removeFirst(self: *Sequence) error{NotEnoughBytes}!u8
+{
+    if (self.isEmpty())
+    {
+        return error.NotEnoughBytes;
+    }
+    const segment = self.getFirstSegment();
+    const value = segment[0];
+    self.* = self.sliceFrom(self.getPosition(1));
+    return value;
+}
+
 pub fn isLittleEndian() bool
 {
     const one: [4]u8 = @bitCast(@as(u32, 1));

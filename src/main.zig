@@ -97,8 +97,6 @@ pub fn main() !void
     }
 }
 
-const DoneStateBit = 0x80;
-
 // What is the next expected type?
 const ParserAction = enum(u8) 
 {
@@ -162,8 +160,131 @@ const ChunkTypeNode = struct
 const ChunkDataNode = struct
 {
     base: NodeBase,
-    dataNodes: []union(enum){},
+    data: union
+    { 
+        idhr: IHDR,
+        none: void,
+    },
 };
+
+const IHDR = struct
+{
+    width: u32,
+    heigth: u32,
+    bitDepth: BitDepth,
+    colorType: ColorType,
+    compressionMethod: CompressionMethod,
+    filterMethod: FilterMethod,
+    interlaceMethod: InterlaceMethod,
+};
+
+const BitDepth = u8;
+
+const ColorType = struct
+{
+    flags: u8,
+
+    const PalleteUsed = 1 << 0;
+    const ColorUsed = 1 << 1;
+    const AlphaChannelUsed = 1 << 2;
+
+    pub fn palleteUsed(self: ColorType) bool
+    {
+        return (self.flags & PalleteUsed) != 0;
+    }
+    pub fn colorUsed(self: ColorType) bool
+    {
+        return (self.flags & ColorUsed) != 0;
+    }
+    pub fn alphaChannelUsed(self: ColorType) bool
+    {
+        return (self.flags & AlphaChannelUsed) != 0;
+    }
+};
+
+pub fn isBitDepthValid(bitDepth: BitDepth) bool
+{
+    return contains(&[_]u8{ 1, 2, 4, 8, 16 }, bitDepth);
+}
+
+pub fn isColorTypeValid(colorType: ColorType) bool
+{
+    return contains(&[_]u8{ 
+        0,
+        ColorType.ColorUsed,
+        ColorType.ColorUsed | ColorType.PalleteUsed,
+        ColorType.AlphaChannelUsed,
+        ColorType.ColorUsed | ColorType.AlphaChannelUsed,
+    }, colorType.flags);
+}
+
+pub fn isColorTypeAllowedForBitDepth(
+    bitDepth: BitDepth,
+    colorType: ColorType) bool
+{
+    const allowedValues = switch (colorType.flags)
+    {
+        // Each pixel is a grayscale sample.
+        0 => &[_]u8{ 1, 2, 4, 8, 16 },
+
+        // Each pixel is an R, G, B triple.
+        ColorType.ColorUsed => &[_]u8{ 8, 16 },
+
+        // Each pixel is a palette index; a PLTE chunk must appear.
+        ColorType.ColorUsed | ColorType.PalleteUsed => &[_]u8{ 1, 2, 4, 8 },
+
+        // Each pixel is a grayscale sample, followed by an alpha sample.
+        ColorType.AlphaChannelUsed => &[_]u8{ 8, 16 },
+
+        // Each pixel is an R, G, B triple, followed by an alpha sample.
+        ColorType.ColorUsed | ColorType.AlphaChannelUsed => &[_]u8{ 8, 16 },
+
+        else => false,
+    };
+    return contains(allowedValues, bitDepth);
+}
+
+pub fn getSampleDepth(idhr: IHDR) u8
+{
+    return switch (idhr.colorType.flags)
+    {
+        ColorType.ColorUsed | ColorType.PalleteUsed => 8,
+        else => idhr.bitDepth,
+    };
+}
+
+const CompressionMethod = u8;
+
+pub fn isCompressionMethodValid(compressionMethod: CompressionMethod) bool
+{
+    return compressionMethod == 0;
+}
+
+const FilterMethod = u8;
+
+pub fn isFilterMethodValid(filterMethod: FilterMethod) bool
+{
+    return filterMethod == 0;
+}
+
+const InterlaceMethod = enum(u8)
+{
+    None = 0,
+    Adam7 = 1,
+    _,
+};
+
+pub fn contains(arr: []const u8, value: u8) bool
+{
+    for (arr) |item|
+    {
+        if (item == value)
+        {
+            return true;
+        }
+    }
+    return false;
+}
 
 const ChunkCyclicRedundancyCheckNode = struct
 {
@@ -208,7 +329,25 @@ const ChunkParserState = struct
 {
     key: ChunkParserStateKey = .Length,
     node: ChunkNode,
-    isDone: bool = false,
+    dataNode: DataNodeParserState,
+};
+
+const DataNodeParserState = union
+{
+    idhr: IDHRParserStateKey,
+    bytesSkipped: u32,
+};
+
+const IDHRParserStateKey = enum
+{
+    Width,
+    Height,
+    BitDepth,
+    ColorType,
+    CompressionMethod,
+    FilterMethod,
+    InterlaceMethod,
+    Done,
 };
 
 fn doMaximumAmountOfParsing(
@@ -285,6 +424,16 @@ fn parseNextNode(context: *ParserContext) !bool
     return false;
 }
 
+fn readPngU32(sequence: *p.Sequence) !u32
+{
+    const value = try p.readNetworkU32(sequence);
+    if (value > 0x80000000)
+    {
+        return error.UnsignedValueTooLarge;
+    }
+    return value;
+}
+
 fn parseChunkItem(context: *ParserContext) !bool
 {
     var state = &context.state.Chunk;
@@ -322,32 +471,133 @@ fn parseChunkItem(context: *ParserContext) !bool
 
             state.node.dataNode.base = .{
                 .startPositionInFile = o.right.getStartOffset(),
-                .length = 0,
+                .length = state.node.byteLength,
             };
+
+            switch (chunkType.bytes)
+            {
+                KnownDataChunkType.IDHR =>
+                {
+                    state.dataNode = .idhr;
+                    state.node.dataNode.data = .idhr;
+                },
+                else =>
+                {
+                    state.dataNode = .bytesSkipped;
+                    state.node.dataNode.data = .none;
+                },
+            }
         },
         .Data =>
         {
             var dataNode = &state.node.dataNode;
 
-            // Let's just skip for now.
-            const totalDataBytes = state.node.byteLength;
-            const remainingDataBytes = totalDataBytes - dataNode.base.length;
-            if (remainingDataBytes > 0)
+            const done = done:
             {
-                const skipBytesCount = @min(remainingDataBytes, context.sequence.len());
-                dataNode.base.length += skipBytesCount;
-                const newStart = context.sequence.getPosition(skipBytesCount);
-                context.sequence.* = context.sequence.sliceFrom(newStart);
-            }
-            else
-            {
-                state.key = .CyclicRedundancyCheck;
-                return false;
-            }
+                switch (state.node.chunkType.bytes)
+                {
+                    KnownDataChunkType.IDHR =>
+                    {
+                        const idhrStateKey = &state.dataNode.idhr;
+                        const idhr = &dataNode.data.idhr;
+                        switch (idhrStateKey)
+                        {
+                            .Width => 
+                            {
+                                const value = try readPngU32(context.sequence);
+                                idhr.width = value;
+                                idhrStateKey.* = .Height;
+                            },
+                            .Heigth =>
+                            {
+                                const value = try readPngU32(context.sequence);
+                                idhr.height = value;
+                                idhrStateKey.* = .BitDepth;
+                            },
+                            .BitDepth =>
+                            {
+                                const value = try p.removeFirst(context.sequence);
+                                idhr.bitDepth = .{ .value = value };
+                                if (!isBitDepthValid(value))
+                                {
+                                    return error.InvalidBitDepth;
+                                }
+                                idhrStateKey.* = .ColorType;
+                            },
+                            .ColorType =>
+                            {
+                                const value = try p.removeFirst(context.sequence);
+                                idhr.colorType = .{ .flags = value };
+                                if (!isColorTypeValid(value))
+                                {
+                                    return error.InvalidColorType;
+                                }
+                                if (!isColorTypeAllowedForBitDepth(value, idhr.bitDepth.value))
+                                {
+                                    return error.ColorTypeNotAllowedForBitDepth;
+                                }
+                                idhrStateKey.* = .CompressionMethod;
+                            },
+                            .CompressionMethod =>
+                            {
+                                const value = try p.removeFirst(context.sequence);
+                                idhr.compressionMethod = value;
+                                if (!isCompressionMethodValid(value))
+                                {
+                                    return error.InvalidCompressionMethod;
+                                }
+                                idhrStateKey.* = .FilterMethod;
+                            },
+                            .FilterMethod =>
+                            {
+                                const value = try p.removeFirst(context.sequence);
+                                idhr.filterMethod = value;
+                                if (!isFilterMethodValid(value))
+                                {
+                                    return error.InvalidFilterMethod;
+                                }
+                                idhrStateKey.* = .InterlaceMethod;
+                            },
+                            .InterlaceMethod =>
+                            {
+                                const value = try p.removeFirst(context.sequence);
+                                const enumValue: InterlaceMethod = @enumFromInt(value);
+                                idhr.interlaceMethod = enumValue;
+                                switch (enumValue)
+                                {
+                                    .None, .Adam7 => {},
+                                    _ => return error.InvalidInterlaceMethod,
+                                }
+                                idhrStateKey.* = .Done;
+                                break :done true;
+                            },
+                            .Done => unreachable,
+                        }
+                        break :done false;
+                    },
+                    // Let's just skip for now.
+                    else =>
+                    {
+                        const bytesSkipped = &state.dataNode.bytesSkipped;
+                        const totalBytes = state.node.byteLength;
+                        if (bytesSkipped.* < totalBytes)
+                        {
+                            const bytesToSkip = totalBytes - bytesSkipped.*;
+                            const skipBytesCount = @min(bytesToSkip, context.sequence.len());
+                            bytesSkipped.* += skipBytesCount;
+                            const newStart = context.sequence.getPosition(skipBytesCount);
+                            context.sequence.* = context.sequence.sliceFrom(newStart);
+                        }
 
-            if (dataNode.base.length == totalDataBytes)
+                        break :done (bytesSkipped.* == totalBytes);
+                    }
+                }
+            };
+
+            if (done)
             {
                 state.key = .CyclicRedundancyCheck;
+                return true;
             }
         },
         .CyclicRedundancyCheck =>
@@ -443,4 +693,10 @@ const ChunkHeader = struct
 {
     length: u32,
     chunkType: ChunkType,
+};
+
+const KnownDataChunkType = enum(u8[4])
+{
+    IDHR = &"IDHR",
+    PLTE = &"PLTE",
 };
