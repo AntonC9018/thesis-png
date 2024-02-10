@@ -478,7 +478,9 @@ pub const Sequence = struct
 
     pub fn getFirstSegment(self: *const Self) []const u8
     {
-        return self.buffer.getSegment(self.start().segment);
+        const start_ = self.start();
+        const wholeSegment = self.buffer.getSegment(start_.segment);
+        return wholeSegment[start_.offset ..];
     }
 
     pub fn debugPrint(self: *const Self) void
@@ -705,7 +707,8 @@ pub fn Reader(comptime ReaderType: type) type
     };
 }
 
-const TestDataProvider = struct {
+const TestDataProvider = struct
+{
     data: []const u8,
 
     pub fn read(self: *TestDataProvider, buffer: []u8) !usize
@@ -864,37 +867,47 @@ test "iterator test"
         }
     }
 }
-    
-test "basic integration tests" {
+
+// only compile this code for tests
+const TestHelper = struct
+{
+    const Self = @This();
+    reader: Reader(TestDataProvider),
+
+    pub fn check(
+        self: *const Self,
+        sequence: Sequence,
+        expected: []const u8) !void
+    {
+        var allocator = self.reader.allocator;
+        const buffer = try allocator.alloc(u8, sequence.len());
+        defer allocator.free(buffer);
+        sequence.copyTo(buffer);
+
+        try t.expectEqualStrings(expected, buffer);
+    }
+};
+
+fn basicTestSetup() TestHelper
+{
     const allocator = std.heap.page_allocator;
-    var reader = Reader(TestDataProvider) 
+    const reader = Reader(TestDataProvider) 
     {
         .allocator = allocator,
         .dataProvider = .{ .data = "0123456789" },
         .preferredBufferSize = 4,
     };
 
-    const helper = struct {
-        const Self = @This();
-        allocator: std.mem.Allocator,
-
-        pub fn check(
-            self: *const Self,
-            sequence: Sequence,
-            expected: []const u8) !void
-        {
-            const buffer = try self.allocator.alloc(u8, sequence.len());
-            defer self.allocator.free(buffer);
-            sequence.copyTo(buffer);
-
-            try t.expectEqualStrings(expected, buffer);
-        }
-    }{
-        .allocator = allocator,
+    return .{ 
+        .reader = reader,
     };
+}
+    
+test "basic integration tests" {
+    var setup = basicTestSetup();
 
     {
-        const readResult = try reader.read();
+        const readResult = try setup.reader.read();
         try t.expect(!readResult.isEnd);
 
         const sequence = readResult.sequence;
@@ -911,13 +924,13 @@ test "basic integration tests" {
         try t.expectEqual(@as(usize, 4), sequence.len());
         try t.expectEqual(@as(usize, 1), sequence.buffer.segments.items.len);
 
-        try helper.check(sequence, "0123");
+        try setup.check(sequence, "0123");
         
         // None consumed.
-        try reader.advance(null);
+        try setup.reader.advance(null);
     }
     {
-        const readResult = try reader.read();
+        const readResult = try setup.reader.read();
         try t.expect(!readResult.isEnd);
 
         const sequence = readResult.sequence;
@@ -935,33 +948,33 @@ test "basic integration tests" {
         try t.expectEqual(@as(usize, 2), sequence.buffer.segments.items.len);
 
         const secondBufferStartPosition = sequence.getPosition(4);
-        try helper.check(sequence.slice(.{
+        try setup.check(sequence.slice(.{
             .start = SequencePosition.Start,
             .end = secondBufferStartPosition,
         }), "0123");
 
-        try helper.check(sequence.slice(.{
+        try setup.check(sequence.slice(.{
             .start = secondBufferStartPosition,
             .end = SequencePosition.End,
         }), "4567");
 
-        try helper.check(sequence, "01234567");
+        try setup.check(sequence, "01234567");
 
         // Let's remove the first two characters.
         const consumedPosition = sequence.getPosition(2);
-        try helper.check(sequence.slice(.{
+        try setup.check(sequence.slice(.{
             .start = consumedPosition,
             .end = SequencePosition.End,
         }), "234567");
 
-        try reader.advance(consumedPosition);
+        try setup.reader.advance(consumedPosition);
     }
     {
-        const readResult = try reader.read();
+        const readResult = try setup.reader.read();
         try t.expect(readResult.isEnd);
 
         const sequence = readResult.sequence;
-        try helper.check(sequence, "23456789");
+        try setup.check(sequence, "23456789");
         try t.expectEqualDeep(SequenceRange{
             .start = .{
                 .segment = 0,
@@ -973,13 +986,13 @@ test "basic integration tests" {
             },
         }, sequence.range);
         try t.expectEqual(@as(usize, 8), sequence.len());
-        try helper.check(sequence, "23456789");
+        try setup.check(sequence, "23456789");
 
-        try reader.advance(SequencePosition.End);
+        try setup.reader.advance(SequencePosition.End);
     }
 
     {
-        if (reader.read()) |_|
+        if (setup.reader.read()) |_|
         {
             try t.expect(false);
         }
@@ -1042,6 +1055,23 @@ pub fn removeFirst(self: *Sequence) error{NotEnoughBytes}!u8
     const value = segment[0];
     self.* = self.sliceFrom(self.getPosition(1));
     return value;
+}
+
+test "removeFirst works"
+{
+    var setup = basicTestSetup();
+
+    var r = try setup.reader.read();
+    {
+        const ch = try removeFirst(&r.sequence);
+        try t.expectEqual(ch, '0');
+        try t.expectEqual(r.sequence.getStartOffset(), 1);
+    }
+    {
+        const ch = try removeFirst(&r.sequence);
+        try t.expectEqual(ch, '1');
+        try t.expectEqual(r.sequence.getStartOffset(), 2);
+    }
 }
 
 pub fn isLittleEndian() bool
@@ -1123,3 +1153,5 @@ fn readNetworkU32_impl(self: *Sequence) u32
         }
     }
 }
+
+

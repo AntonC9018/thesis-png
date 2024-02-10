@@ -22,7 +22,7 @@ pub fn main() !void
     var parserState: ParserState = .Signature;
     var chunks = std.ArrayList(ChunkNode).init(allocator);
 
-    while (true) outerLoop:
+    outerLoop: while (true)
     {
         var readResult = try reader.read();
         var context = ParserContext
@@ -35,6 +35,9 @@ pub fn main() !void
         doMaximumAmountOfParsing(&context, &chunks)
         catch |err|
         {
+            const errorStream = std.io.getStdErr();
+            try printStepName(errorStream.writer(), context.state);
+
             const isNonRecoverableError = e:
             {
                 switch (err)
@@ -162,7 +165,7 @@ const ChunkDataNode = struct
     base: NodeBase,
     data: union
     { 
-        idhr: IHDR,
+        ihdr: IHDR,
         none: void,
     },
 };
@@ -170,7 +173,7 @@ const ChunkDataNode = struct
 const IHDR = struct
 {
     width: u32,
-    heigth: u32,
+    height: u32,
     bitDepth: BitDepth,
     colorType: ColorType,
     compressionMethod: CompressionMethod,
@@ -239,17 +242,17 @@ pub fn isColorTypeAllowedForBitDepth(
         // Each pixel is an R, G, B triple, followed by an alpha sample.
         ColorType.ColorUsed | ColorType.AlphaChannelUsed => &[_]u8{ 8, 16 },
 
-        else => false,
+        else => return false,
     };
     return contains(allowedValues, bitDepth);
 }
 
-pub fn getSampleDepth(idhr: IHDR) u8
+pub fn getSampleDepth(ihdr: IHDR) u8
 {
-    return switch (idhr.colorType.flags)
+    return switch (ihdr.colorType.flags)
     {
         ColorType.ColorUsed | ColorType.PalleteUsed => 8,
-        else => idhr.bitDepth,
+        else => ihdr.bitDepth,
     };
 }
 
@@ -334,12 +337,14 @@ const ChunkParserState = struct
 
 const DataNodeParserState = union
 {
-    idhr: IDHRParserStateKey,
+    ihdr: IHDRParserStateKey,
     bytesSkipped: u32,
+    none: void,
 };
 
-const IDHRParserStateKey = enum
+const IHDRParserStateKey = enum(u32)
 {
+    const Initial = .Width;
     Width,
     Height,
     BitDepth,
@@ -384,6 +389,14 @@ fn parseTopLevelNode(context: *ParserContext) !bool
 {
     while (true)
     {
+        if (false)
+        {
+            const outputStream = std.io.getStdOut().writer();
+            try printStepName(outputStream, context.state);
+            const offset = context.sequence.getStartOffset();
+            try outputStream.print("Offset: {x}\n", .{offset});
+        }
+
         const isDone = try parseNextNode(context);
         if (isDone)
         {
@@ -434,6 +447,20 @@ fn readPngU32(sequence: *p.Sequence) !u32
     return value;
 }
 
+fn readPngU32Dimension(sequence: *p.Sequence) !u32
+{
+    const value = readPngU32(sequence)
+    catch
+    {
+        return error.DimensionValueTooLarge;
+    };
+    if (value == 0)
+    {
+        return error.DimensionValueIsZero;
+    }
+    return value;
+}
+
 fn parseChunkItem(context: *ParserContext) !bool
 {
     var state = &context.state.Chunk;
@@ -474,17 +501,18 @@ fn parseChunkItem(context: *ParserContext) !bool
                 .length = state.node.byteLength,
             };
 
-            switch (chunkType.bytes)
+            const knownChunkType = getKnownDataChunkType(chunkType);
+            switch (knownChunkType)
             {
-                KnownDataChunkType.IDHR =>
+                .IHDR =>
                 {
-                    state.dataNode = .idhr;
-                    state.node.dataNode.data = .idhr;
+                    state.dataNode = .{ .ihdr = IHDRParserStateKey.Initial };
+                    state.node.dataNode.data = .{ .ihdr = std.mem.zeroes(IHDR) };
                 },
-                else =>
+                .Unknown =>
                 {
-                    state.dataNode = .bytesSkipped;
-                    state.node.dataNode.data = .none;
+                    state.dataNode = .{ .bytesSkipped = 0 };
+                    state.node.dataNode.data = .{ .none = {} };
                 },
             }
         },
@@ -494,81 +522,84 @@ fn parseChunkItem(context: *ParserContext) !bool
 
             const done = done:
             {
-                switch (state.node.chunkType.bytes)
+                const knownChunkType = getKnownDataChunkType(state.node.chunkType);
+                switch (knownChunkType)
                 {
-                    KnownDataChunkType.IDHR =>
+                    .IHDR =>
                     {
-                        const idhrStateKey = &state.dataNode.idhr;
-                        const idhr = &dataNode.data.idhr;
-                        switch (idhrStateKey)
+                        const ihdrStateKey = &state.dataNode.ihdr;
+                        const ihdr = &dataNode.data.ihdr;
+                        switch (ihdrStateKey.*)
                         {
                             .Width => 
                             {
-                                const value = try readPngU32(context.sequence);
-                                idhr.width = value;
-                                idhrStateKey.* = .Height;
+                                const value = try readPngU32Dimension(context.sequence);
+                                ihdr.width = value;
+                                // std.debug.print("Width: {}\n", .{ ihdr.width });
+                                ihdrStateKey.* = .Height;
                             },
-                            .Heigth =>
+                            .Height =>
                             {
-                                const value = try readPngU32(context.sequence);
-                                idhr.height = value;
-                                idhrStateKey.* = .BitDepth;
+                                const value = try readPngU32Dimension(context.sequence);
+                                ihdr.height = value;
+                                // std.debug.print("Height: {}\n", .{ ihdr.height });
+                                ihdrStateKey.* = .BitDepth;
                             },
                             .BitDepth =>
                             {
                                 const value = try p.removeFirst(context.sequence);
-                                idhr.bitDepth = .{ .value = value };
+                                ihdr.bitDepth = value;
                                 if (!isBitDepthValid(value))
                                 {
                                     return error.InvalidBitDepth;
                                 }
-                                idhrStateKey.* = .ColorType;
+                                ihdrStateKey.* = .ColorType;
                             },
                             .ColorType =>
                             {
                                 const value = try p.removeFirst(context.sequence);
-                                idhr.colorType = .{ .flags = value };
-                                if (!isColorTypeValid(value))
+                                ihdr.colorType = .{ .flags = value };
+                                if (!isColorTypeValid(ihdr.colorType))
                                 {
                                     return error.InvalidColorType;
                                 }
-                                if (!isColorTypeAllowedForBitDepth(value, idhr.bitDepth.value))
+                                if (!isColorTypeAllowedForBitDepth(ihdr.bitDepth, ihdr.colorType))
                                 {
                                     return error.ColorTypeNotAllowedForBitDepth;
                                 }
-                                idhrStateKey.* = .CompressionMethod;
+                                ihdrStateKey.* = .CompressionMethod;
                             },
                             .CompressionMethod =>
                             {
                                 const value = try p.removeFirst(context.sequence);
-                                idhr.compressionMethod = value;
+                                ihdr.compressionMethod = value;
                                 if (!isCompressionMethodValid(value))
                                 {
                                     return error.InvalidCompressionMethod;
                                 }
-                                idhrStateKey.* = .FilterMethod;
+                                ihdrStateKey.* = .FilterMethod;
                             },
                             .FilterMethod =>
                             {
                                 const value = try p.removeFirst(context.sequence);
-                                idhr.filterMethod = value;
+                                ihdr.filterMethod = value;
                                 if (!isFilterMethodValid(value))
                                 {
                                     return error.InvalidFilterMethod;
                                 }
-                                idhrStateKey.* = .InterlaceMethod;
+                                ihdrStateKey.* = .InterlaceMethod;
                             },
                             .InterlaceMethod =>
                             {
                                 const value = try p.removeFirst(context.sequence);
                                 const enumValue: InterlaceMethod = @enumFromInt(value);
-                                idhr.interlaceMethod = enumValue;
+                                ihdr.interlaceMethod = enumValue;
                                 switch (enumValue)
                                 {
                                     .None, .Adam7 => {},
                                     _ => return error.InvalidInterlaceMethod,
                                 }
-                                idhrStateKey.* = .Done;
+                                ihdrStateKey.* = .Done;
                                 break :done true;
                             },
                             .Done => unreachable,
@@ -576,28 +607,35 @@ fn parseChunkItem(context: *ParserContext) !bool
                         break :done false;
                     },
                     // Let's just skip for now.
-                    else =>
+                    .Unknown =>
                     {
                         const bytesSkipped = &state.dataNode.bytesSkipped;
-                        const totalBytes = state.node.byteLength;
+                        const totalBytes = state.node.dataNode.base.length;
+
+                        std.debug.assert(bytesSkipped.* <= totalBytes);
+
                         if (bytesSkipped.* < totalBytes)
                         {
                             const bytesToSkip = totalBytes - bytesSkipped.*;
                             const skipBytesCount = @min(bytesToSkip, context.sequence.len());
-                            bytesSkipped.* += skipBytesCount;
+                            if (skipBytesCount == 0)
+                            {
+                                return error.NotEnoughBytes;
+                            }
+                            bytesSkipped.* += @intCast(skipBytesCount);
+
                             const newStart = context.sequence.getPosition(skipBytesCount);
                             context.sequence.* = context.sequence.sliceFrom(newStart);
                         }
 
                         break :done (bytesSkipped.* == totalBytes);
-                    }
+                    },
                 }
             };
 
             if (done)
             {
                 state.key = .CyclicRedundancyCheck;
-                return true;
             }
         },
         .CyclicRedundancyCheck =>
@@ -616,16 +654,18 @@ pub fn initChunkParserState(context: *ParserContext) void
 {
     context.state.* = 
     .{
-        .Chunk = std.mem.zeroInit(ChunkParserState,
-        .{
-            .node = std.mem.zeroInit(ChunkNode,
-            .{
+        .Chunk = .{
+            .node = std.mem.zeroInit(ChunkNode, .{
                 .base = NodeBase
                 {
                     .startPositionInFile = context.sequence.getStartOffset(),
                 },
+                .dataNode = std.mem.zeroInit(ChunkDataNode, .{
+                    .data = .{ .none = {} },
+                }),
             }),
-        })
+            .dataNode = .{ .none = {} },
+        }
     };
 }
 
@@ -695,8 +735,90 @@ const ChunkHeader = struct
     chunkType: ChunkType,
 };
 
-const KnownDataChunkType = enum(u8[4])
+const KnownDataChunkTags = struct
 {
-    IDHR = &"IDHR",
-    PLTE = &"PLTE",
+    const IHDR = ChunkType { .bytes = "IHDR".* };
+    const PLTE = ChunkType { .bytes = "PLTE".* };
+};
+
+fn printStepName(writer: anytype, parserState: *const ParserState) !void
+{
+    switch (parserState.*)
+    {
+        .Signature => try writer.print("Signature", .{}),
+        .Chunk => |*chunk| 
+        {
+            try writer.print("Chunk ", .{});
+            switch (chunk.key)
+            {
+                .Length => try writer.print("Length", .{}),
+                .ChunkType => try writer.print("Type", .{}),
+                .Data =>
+                {
+                    try writer.print("Data ", .{});
+                    const knownDataChunkType = getKnownDataChunkType(chunk.node.chunkType);
+                    // TODO:
+                    // this probably needs some structure
+                    // and I should solve this with reflection.
+                    switch (knownDataChunkType)
+                    {
+                        .IHDR =>
+                        {
+                            switch (chunk.dataNode.ihdr)
+                            {
+                                .Width => try writer.print("Width", .{}),
+                                .Height => try writer.print("Height", .{}),
+                                .BitDepth => try writer.print("BitDepth", .{}),
+                                .ColorType => try writer.print("ColorType", .{}),
+                                .CompressionMethod => try writer.print("CompressionMethod", .{}),
+                                .FilterMethod => try writer.print("FilterMethod", .{}),
+                                .InterlaceMethod => try writer.print("InterlaceMethod", .{}),
+                                .Done => {},
+                            }
+                        },
+                        .Unknown => try writer.print("?", .{}),
+                    }
+                },
+                .CyclicRedundancyCheck => try writer.print("CyclicRedundancyCheck", .{}),
+                .Done => {},
+            }
+        },
+        .StartChunk => try writer.print("Chunk", .{}),
+    }
+    try writer.print("\n", .{});
+}
+
+fn getKnownDataChunkType(chunkType: ChunkType) KnownDataChunkType
+{
+    const h = struct
+    {
+        fn chunkTypeEquals(
+            chunkType_: ChunkType,
+            knownChunkType: ChunkType) bool
+        {
+            const a = chunkType_.bytes[1 .. 4];
+            const b = knownChunkType.bytes[1 .. 4];
+            return std.mem.eql(u8, a, b);
+        }
+    };
+
+    switch (chunkType.bytes[0])
+    {
+        'I' =>
+        {
+            if (h.chunkTypeEquals(chunkType, KnownDataChunkTags.IHDR))
+            {
+                return .IHDR;
+            }
+        },
+        else => {},
+    }
+    return .Unknown;
+}
+
+const KnownDataChunkType = enum(u8)
+{
+    Unknown,
+    IHDR,
+    // PLTE,
 };
