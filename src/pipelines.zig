@@ -137,7 +137,10 @@ pub const Buffer = struct
         return self.totalBytes;
     }
 
-    pub fn appendSegment(self: *Buffer, segment: Segment, allocator: std.mem.Allocator) !void
+    pub fn appendSegment(
+        self: *Buffer,
+        segment: Segment,
+        allocator: std.mem.Allocator) !void
     {
         try self.segments.append(allocator, segment);
         self.totalBytes += segment.len;
@@ -182,7 +185,8 @@ pub const SequenceRange = struct {
             std.debug.assert(start_.offset <= end_.offset);
         }
 
-        return SequenceRange {
+        return SequenceRange
+        {
             .start = start_,
             .end = end_,
         };
@@ -193,6 +197,8 @@ pub const Sequence = struct
 {
     buffer: *const Buffer,
     range: SequenceRange,
+
+    const Self = @This();
 
     pub fn createEmpty(buffer: *const Buffer) Sequence
     {
@@ -209,17 +215,45 @@ pub const Sequence = struct
         };
     }
 
-    pub fn start(self: *const Sequence) SequencePosition 
+    pub fn create(buffer: *const Buffer) Sequence
+    {
+        const segments_ = buffer.segments.items;
+        if (segments_.len == 0)
+        {
+            return Self.createEmpty(buffer);
+        }
+
+        const start_ = SequencePosition
+        {
+            .offset = 0,
+            .segment = buffer.getFirstSegmentOffset(),
+        };
+        const lastSegment_ = segments_[segments_.len - 1];
+        const end_ = SequencePosition
+        {
+            .offset = lastSegment_.len,
+            .segment = @intCast(buffer.getFirstSegmentOffset() + segments_.len - 1),
+        };
+        return .{
+            .buffer = buffer,
+            .range = .{
+                .start = start_,
+                .end = end_,
+            },
+        };
+    }
+
+    pub fn start(self: *const Self) SequencePosition 
     {
         return self.range.start;
     }
 
-    pub fn end(self: *const Sequence) SequencePosition 
+    pub fn end(self: *const Self) SequencePosition 
     {
         return self.range.end;
     }
 
-    pub fn len(self: *const Sequence) usize
+    pub fn len(self: *const Self) usize
     {
         const start_ = self.start();
         const end_ = self.end();
@@ -228,7 +262,17 @@ pub const Sequence = struct
         return endAbsolute - startAbsolute;
     }
 
-    pub fn getPosition(self: *const Sequence, offset: usize) SequencePosition
+    pub fn getStartOffset(self: *const Self) usize
+    {
+        return getOffset(self, self.start());
+    }
+
+    pub fn getOffset(self: *const Self, position: SequencePosition) usize
+    {
+        return self.buffer.getBytePosition(position);
+    }
+
+    pub fn getPosition(self: *const Self, offset: usize) SequencePosition
     {
         std.debug.assert(offset <= self.len());
 
@@ -256,24 +300,15 @@ pub const Sequence = struct
         unreachable;
     }
 
-    pub fn getSegmentCount(self: *const Sequence) u32
+    pub fn isEmpty(self: *const Self) bool
+    {
+        return self.len() == 0;
+    }
+
+    pub fn getWholeSegmentCount(self: *const Self) u32
     {
         const start_ = self.start();
         const end_ = self.end();
-        if (start_.segment == end_.segment)
-        {
-            if (start_.offset == end_.offset)
-            {
-                return 0;
-            }
-            // Is this right?
-            if (end_.offset == self.buffer.getSegment(end_.segment).len)
-            {
-                return 1;
-            }
-            return 0;
-        }
-
         var result = end_.segment - start_.segment;
         if (end_.offset == self.buffer.getSegment(end_.segment).len)
         {
@@ -282,29 +317,70 @@ pub const Sequence = struct
         return result;
     }
 
+    pub fn sliceFrom(self: *const Self, newStart: SequencePosition) Sequence
+    {
+        return self.slice(.{
+            .start = newStart,
+            .end = self.end(),
+        });
+    }
+
+    pub fn sliceToExclusive(self: *const Self, newEnd: SequencePosition) Sequence
+    {
+        return self.slice(.{
+            .start = self.start(),
+            .end = newEnd,
+        });
+    }
+
+    // Creates two slices:
+    // One up to the middle position, exclusive.
+    // Second from the middle position, inclusive.
+    pub fn disect(self: *const Self, middle: SequencePosition) 
+        struct
+        { 
+            left: Sequence,
+            right: Sequence,
+        }
+    {
+        const left = self.sliceToExclusive(middle);
+        const right = self.sliceFrom(middle);
+        return .{
+            .left = left,
+            .right = right
+        };
+    }
+
+    // // Removes a sequence from the start until the given position and returns it.
+    // pub fn cutOffUntil(self: *Self, until: SequencePosition) Sequence
+    // {
+    //     const result = self.disect(until);
+    //     self.* = result.rigth;
+    //     return result.left;
+    // }
+
     pub fn slice(
-        self: *const Sequence,
+        self: *const Self,
         range: SequenceRange) Sequence
     {
         var range_ = range;
 
-        if (bytesEqual(range_.end, SequencePosition.End))
+        const local = struct
         {
-            range_.end = self.end();
-        }
-        else if (bytesEqual(range_.end, SequencePosition.Start))
-        {
-            range_.end = self.start();
-        }
-
-        if (bytesEqual(range_.start, SequencePosition.Start))
-        {
-            range_.start = self.start();
-        }
-        else if (bytesEqual(range_.start, SequencePosition.End))
-        {
-            range_.start = self.end();
-        }
+            fn collapseEnds(s: *const Self, pos: *SequencePosition) void
+            {
+                if (bytesEqual(pos.*, SequencePosition.End))
+                {
+                    pos.* = s.end();
+                }
+                else if (bytesEqual(pos.*, SequencePosition.Start))
+                {
+                    pos.* = s.start();
+                }
+            }
+        };
+        local.collapseEnds(self, &range_.start);
+        local.collapseEnds(self, &range_.end);
 
         const willMoveEnd = range_.end.offset == 0 and range.end.segment > 0;
 
@@ -369,54 +445,21 @@ pub const Sequence = struct
         };
     }
 
-    pub fn removeFront(self: *Sequence, string: []const u8) RemoveResult
-    {
-        var string_ = string;
-        if (string_.len == 0)
-        {
-            return RemoveResult.Removed;
-        }
-
-        var iter = SegmentIterator.create(self);
-        while (true)
-        {
-            const currentPosition = iter.getCurrentPosition();
-            if (iter.next()) |segment|
-            {
-                const bytesToCheck: u32 = @intCast(@min(segment.len, string_.len));
-                for (0 .. bytesToCheck) |i|
-                {
-                    const a = segment[i];
-                    const b = string_[i];
-                    if (a != b)
-                    {
-                        self.range.start = currentPosition.add(@intCast(i));
-                        return .NoMatch;
-                    }
-                }
-                string_ = string_[bytesToCheck .. string_.len];
-                if (string_.len == 0)
-                {
-                    self.range.start = currentPosition.add(bytesToCheck);
-                    return .Removed;
-                }
-            }
-            else
-            {
-                self.range.start = self.range.end;
-                return .NotEnoughBytes;
-            }
-        }
-    }
-
-    pub fn copyTo(self: *const Sequence, buffer: []u8) void
+    pub fn copyTo(self: *const Self, buffer: []u8) void
     {
         var buffer_ = buffer;
         std.debug.assert(self.len() == buffer_.len);
 
-        var iter = SegmentIterator.create(self);
-        while (iter.next()) |segment| 
+        var iter = SegmentIterator.create(self) 
+        // We know the buffer is empty in this case.
+        orelse {
+            std.debug.assert(buffer_.len == 0);
+            return;
+        };
+
+        while (true)
         {
+            const segment = iter.current();
             const bytesToCopy = @min(segment.len, buffer_.len);
             @memcpy(buffer_[0 .. bytesToCopy], segment[0 .. bytesToCopy]);
 
@@ -425,49 +468,53 @@ pub const Sequence = struct
             {
                 return;
             }
-        }
 
-        unreachable;
+            if (!iter.advance())
+            {
+                unreachable;
+            }
+        }
+    }
+
+    pub fn getFirstSegment(self: *const Self) []const u8
+    {
+        const start_ = self.start();
+        const wholeSegment = self.buffer.getSegment(start_.segment);
+        return wholeSegment[start_.offset ..];
+    }
+
+    pub fn debugPrint(self: *const Self) void
+    {
+        const allocator = std.heap.page_allocator;
+        const mem = allocator.alloc(u8, self.len()) catch unreachable;
+        defer allocator.free(mem);
+        self.copyTo(mem);
+        std.debug.print("Sequence: {s}\n", .{mem});
     }
 };
 
-pub const RemoveResult = enum {
-    NotEnoughBytes,
-    Removed,
-    NoMatch,
-};
-
-pub const SegmentIterator = struct {
+pub const SegmentIterator = struct 
+{
     sequence: *const Sequence,
     currentPosition: SequencePosition,
 
-    pub fn create(sequence: *const Sequence) SegmentIterator
+    pub fn create(sequence: *const Sequence) ?SegmentIterator
     {
+        if (sequence.isEmpty())
+        {
+            return null;
+        }
+
         return .{
             .sequence = sequence,
             .currentPosition = sequence.start(),
         };
     }
 
-    pub fn getCurrentPosition(self: *SegmentIterator) SequencePosition
-    {
-        return self.currentPosition;
-    }
-
-    pub fn next(self: *SegmentIterator) ?[] const u8
+    pub fn current(self: *SegmentIterator) []const u8
     {
         const start_ = &self.currentPosition;
         const end_ = self.sequence.end();
-        if (start_.segment > end_.segment)
-        {
-            return null;
-        }
-
-        defer {
-            start_.segment += 1;
-            start_.offset = 0;
-        }
-
         const segment = self.sequence.buffer.getSegment(start_.segment);
         if (start_.segment == end_.segment)
         {
@@ -477,6 +524,21 @@ pub const SegmentIterator = struct {
         {
             return segment[start_.offset .. segment.len];
         }
+    }
+
+    pub fn advance(self: *SegmentIterator) bool
+    {
+        self.currentPosition.segment += 1;
+        self.currentPosition.offset = 0;
+        // I try to keep the ends in the same segment 
+        // such that there are no empty segments.
+        // So this should be correct.
+        return self.currentPosition.segment <= self.sequence.end().segment;
+    }
+
+    pub fn getCurrentPosition(self: *SegmentIterator) SequencePosition
+    {
+        return self.currentPosition;
     }
 };
 
@@ -588,7 +650,7 @@ pub fn Reader(comptime ReaderType: type) type
                 });
 
                 const segments = &buffer_.segments.items;
-                const removedSegmentsCount = removedSequence.getSegmentCount();
+                const removedSegmentsCount = removedSequence.getWholeSegmentCount();
 
                 for (0 .. removedSegmentsCount) |i|
                 {
@@ -645,7 +707,8 @@ pub fn Reader(comptime ReaderType: type) type
     };
 }
 
-const TestDataProvider = struct {
+const TestDataProvider = struct
+{
     data: []const u8,
 
     pub fn read(self: *TestDataProvider, buffer: []u8) !usize
@@ -656,10 +719,91 @@ const TestDataProvider = struct {
         return length;
     }
 };
-    
-test "basic integration tests" {
-    const t = std.testing;
 
+fn createTestBufferFromData(
+    data: []const []const u8,
+    allocator: std.mem.Allocator) !Buffer
+{
+    var segments = std.ArrayListUnmanaged(Segment){};
+    try segments.ensureTotalCapacity(allocator, data.len);
+    segments.items.len = data.len;
+
+    var length: usize = 0;
+    for (data, segments.items) |data_, *s|
+    {
+        s.* = .{
+            .array = data_,
+            .len = @intCast(data_.len),
+            .bytePosition = length,
+        };
+        length += data_.len;
+    }
+
+    return .{
+        .segments = segments,
+        .firstSegmentOffset = 0,
+        .totalBytes = length,
+    };
+}
+
+const t = std.testing;
+
+test "isEmpty"
+{
+    const allocator = std.heap.page_allocator;
+
+    var buffer = try createTestBufferFromData(&.{"123", "456"}, allocator);
+    defer buffer.segments.deinit(allocator);
+
+    const wholeSequence = Sequence.create(&buffer);
+
+    {
+        const firstSegment = wholeSequence.sliceToExclusive(
+            wholeSequence.getPosition(3));
+        var iter = SegmentIterator.create(&firstSegment).?;
+        try t.expectEqualStrings("123", iter.current());
+        try t.expect(!iter.advance());
+    }
+}
+
+test "copyTo"
+{
+    const allocator = std.heap.page_allocator;
+
+    var buffer = try createTestBufferFromData(&.{"123", "456"}, allocator);
+    defer buffer.segments.deinit(allocator);
+
+    const wholeSequence = Sequence.create(&buffer);
+
+    {
+        const sequence = wholeSequence.slice(.{
+            .start = wholeSequence.getPosition(1),
+            .end = wholeSequence.getPosition(5),
+        });
+
+        var localBuffer: [4]u8 = undefined; 
+        sequence.copyTo(&localBuffer);
+
+        try t.expectEqualStrings("2345", &localBuffer);
+    }
+    {
+        const sequence = wholeSequence.sliceToExclusive(
+            wholeSequence.getPosition(3));
+        var localBuffer: [3]u8 = undefined;
+        sequence.copyTo(&localBuffer);
+
+        try t.expectEqualStrings("123", &localBuffer);
+    }
+    {
+        const sequence = Sequence.createEmpty(&buffer);
+        var localBuffer: [0]u8 = undefined;
+        sequence.copyTo(&localBuffer);
+        try t.expectEqualStrings("", &localBuffer);
+    }
+}
+
+test "iterator test"
+{
     const allocator = std.heap.page_allocator;
     var reader = Reader(TestDataProvider) 
     {
@@ -667,28 +811,103 @@ test "basic integration tests" {
         .dataProvider = .{ .data = "0123456789" },
         .preferredBufferSize = 4,
     };
-
-    const helper = struct {
-        const Self = @This();
-        allocator: std.mem.Allocator,
-
-        pub fn check(
-            self: *const Self,
-            sequence: Sequence,
-            expected: []const u8) !void
-        {
-            const buffer = try self.allocator.alloc(u8, sequence.len());
-            defer self.allocator.free(buffer);
-            sequence.copyTo(buffer);
-
-            try t.expectEqualStrings(expected, buffer);
-        }
-    }{
-        .allocator = allocator,
-    };
-
+    {
+        const iter = SegmentIterator.create(&reader.currentSequence());
+        try t.expect(iter == null);
+    }
     {
         const readResult = try reader.read();
+        var iter = SegmentIterator.create(&readResult.sequence).?;
+        try t.expectEqualStrings("0123", iter.current());
+        try t.expect(!iter.advance());
+    }
+    try reader.advance(null);
+    {
+        const readResult = try reader.read();
+        {
+            var iter = SegmentIterator.create(&readResult.sequence).?;
+            try t.expectEqualStrings("0123", iter.current());
+            try t.expect(iter.advance());
+            try t.expectEqualStrings("4567", iter.current());
+            try t.expect(!iter.advance());
+        }
+        {
+            var sequence = readResult.sequence;
+            sequence = sequence.sliceFrom(sequence.getPosition(2));
+
+            var iter = SegmentIterator.create(&sequence).?;
+            try t.expectEqualStrings("23", iter.current());
+            try t.expect(iter.advance());
+            try t.expectEqualStrings("4567", iter.current());
+            try t.expect(!iter.advance());
+        }
+        {
+            var sequence = readResult.sequence;
+            sequence = sequence.slice(.{
+                .start = sequence.getPosition(2),
+                .end = sequence.getPosition(6),
+            });
+
+            var iter = SegmentIterator.create(&sequence).?;
+            try t.expectEqualStrings("23", iter.current());
+            try t.expect(iter.advance());
+            try t.expectEqualStrings("45", iter.current());
+            try t.expect(!iter.advance());
+        }
+        {
+            var sequence = readResult.sequence;
+            sequence = sequence.slice(.{
+                .start = sequence.getPosition(2),
+                .end = sequence.getPosition(3),
+            });
+
+            var iter = SegmentIterator.create(&sequence).?;
+            try t.expectEqualStrings("2", iter.current());
+            try t.expect(!iter.advance());
+        }
+    }
+}
+
+// only compile this code for tests
+const TestHelper = struct
+{
+    const Self = @This();
+    reader: Reader(TestDataProvider),
+
+    pub fn check(
+        self: *const Self,
+        sequence: Sequence,
+        expected: []const u8) !void
+    {
+        var allocator = self.reader.allocator;
+        const buffer = try allocator.alloc(u8, sequence.len());
+        defer allocator.free(buffer);
+        sequence.copyTo(buffer);
+
+        try t.expectEqualStrings(expected, buffer);
+    }
+};
+
+fn basicTestSetup() TestHelper
+{
+    const allocator = std.heap.page_allocator;
+    const reader = Reader(TestDataProvider) 
+    {
+        .allocator = allocator,
+        .dataProvider = .{ .data = "0123456789" },
+        .preferredBufferSize = 4,
+    };
+
+    return .{ 
+        .reader = reader,
+    };
+}
+    
+test "basic integration tests" {
+    var setup = basicTestSetup();
+
+    {
+        const readResult = try setup.reader.read();
         try t.expect(!readResult.isEnd);
 
         const sequence = readResult.sequence;
@@ -705,13 +924,13 @@ test "basic integration tests" {
         try t.expectEqual(@as(usize, 4), sequence.len());
         try t.expectEqual(@as(usize, 1), sequence.buffer.segments.items.len);
 
-        try helper.check(sequence, "0123");
+        try setup.check(sequence, "0123");
         
         // None consumed.
-        try reader.advance(null);
+        try setup.reader.advance(null);
     }
     {
-        const readResult = try reader.read();
+        const readResult = try setup.reader.read();
         try t.expect(!readResult.isEnd);
 
         const sequence = readResult.sequence;
@@ -729,32 +948,33 @@ test "basic integration tests" {
         try t.expectEqual(@as(usize, 2), sequence.buffer.segments.items.len);
 
         const secondBufferStartPosition = sequence.getPosition(4);
-        try helper.check(sequence.slice(.{
+        try setup.check(sequence.slice(.{
             .start = SequencePosition.Start,
             .end = secondBufferStartPosition,
         }), "0123");
 
-        try helper.check(sequence.slice(.{
+        try setup.check(sequence.slice(.{
             .start = secondBufferStartPosition,
             .end = SequencePosition.End,
         }), "4567");
 
-        try helper.check(sequence, "01234567");
+        try setup.check(sequence, "01234567");
 
         // Let's remove the first two characters.
         const consumedPosition = sequence.getPosition(2);
-        try helper.check(sequence.slice(.{
+        try setup.check(sequence.slice(.{
             .start = consumedPosition,
             .end = SequencePosition.End,
         }), "234567");
 
-        try reader.advance(consumedPosition);
+        try setup.reader.advance(consumedPosition);
     }
     {
-        const readResult = try reader.read();
+        const readResult = try setup.reader.read();
         try t.expect(readResult.isEnd);
 
         const sequence = readResult.sequence;
+        try setup.check(sequence, "23456789");
         try t.expectEqualDeep(SequenceRange{
             .start = .{
                 .segment = 0,
@@ -766,13 +986,13 @@ test "basic integration tests" {
             },
         }, sequence.range);
         try t.expectEqual(@as(usize, 8), sequence.len());
-        try helper.check(sequence, "23456789");
+        try setup.check(sequence, "23456789");
 
-        try reader.advance(SequencePosition.End);
+        try setup.reader.advance(SequencePosition.End);
     }
 
     {
-        if (reader.read()) |_|
+        if (setup.reader.read()) |_|
         {
             try t.expect(false);
         }
@@ -782,3 +1002,156 @@ test "basic integration tests" {
         }
     }
 }
+
+pub const RemoveResult = error{NotEnoughBytes,NoMatch}!void;
+
+pub fn removeFront(self: *Sequence, string: []const u8) RemoveResult
+{
+    var string_ = string;
+    if (string_.len == 0)
+    {
+        return;
+    }
+
+    var iter = SegmentIterator.create(self).?;
+    while (true)
+    {
+        const segment = iter.current();
+        const bytesToCheck: u32 = @intCast(@min(segment.len, string_.len));
+        for (0 .. bytesToCheck) |i|
+        {
+            const a = segment[i];
+            const b = string_[i];
+            if (a != b)
+            {
+                const newStart = iter.getCurrentPosition().add(@intCast(i));
+                self.* = self.sliceFrom(newStart);
+                return error.NoMatch;
+            }
+        }
+        string_ = string_[bytesToCheck .. string_.len];
+        if (string_.len == 0)
+        {
+            const newStart = iter.getCurrentPosition().add(bytesToCheck);
+            self.* = self.sliceFrom(newStart);
+            return;
+        }
+
+        if (!iter.advance())
+        {
+            self.* = self.sliceFrom(self.end());
+            return error.NotEnoughBytes;
+        }
+    }
+}
+
+pub fn removeFirst(self: *Sequence) error{NotEnoughBytes}!u8
+{
+    if (self.isEmpty())
+    {
+        return error.NotEnoughBytes;
+    }
+    const segment = self.getFirstSegment();
+    const value = segment[0];
+    self.* = self.sliceFrom(self.getPosition(1));
+    return value;
+}
+
+test "removeFirst works"
+{
+    var setup = basicTestSetup();
+
+    var r = try setup.reader.read();
+    {
+        const ch = try removeFirst(&r.sequence);
+        try t.expectEqual(ch, '0');
+        try t.expectEqual(r.sequence.getStartOffset(), 1);
+    }
+    {
+        const ch = try removeFirst(&r.sequence);
+        try t.expectEqual(ch, '1');
+        try t.expectEqual(r.sequence.getStartOffset(), 2);
+    }
+}
+
+pub fn isLittleEndian() bool
+{
+    const one: [4]u8 = @bitCast(@as(u32, 1));
+    return one[0] == 1;
+}
+
+pub fn readNetworkU31(self: *Sequence) error{NotEnoughBytes,NumberTooLarge}!u31
+{
+    if (self.len() < 4)
+    {
+        return error.NotEnoughBytes;
+    }
+
+    const firstByte = self.getFirstSegment()[0];
+    if (firstByte & 0x80 != 0)
+    {
+        return error.NumberTooLarge;
+    }
+
+    return @intCast(readNetworkU32_impl(self));
+}
+
+// Reverses the byte order if the host is little endian.
+pub fn readNetworkU32(self: *Sequence) error{NotEnoughBytes}!u32
+{
+    if (self.len() < 4)
+    {
+        return error.NotEnoughBytes;
+    }
+
+    return readNetworkU32_impl(self);
+}
+
+// Assumes the length is at least 4.
+fn readNetworkU32_impl(self: *Sequence) u32
+{
+    const reverseBytes = isLittleEndian();
+    var resultBytes: [4]u8 = undefined;
+    var bytesLeftToWrite: u3 = 4;
+
+    var iter = SegmentIterator.create(self).?;
+    while (true)
+    {
+        const segment = iter.current();
+
+        const bytesToCopy = @min(segment.len, bytesLeftToWrite);
+        // We shouldn't ever allow empty segments (I think?).
+        std.debug.assert(bytesToCopy > 0);
+
+        if (reverseBytes)
+        {
+            for (0 .. bytesToCopy) |i|
+            {
+                resultBytes[bytesLeftToWrite - 1 - i] = segment[i];
+            }
+        }
+        else
+        {
+            @memcpy(
+                resultBytes[4 - bytesLeftToWrite .. bytesToCopy],
+                segment[0 .. bytesToCopy]);
+        }
+
+        bytesLeftToWrite -= bytesToCopy;
+        if (bytesLeftToWrite == 0)
+        {
+            const newStart = iter.getCurrentPosition().add(bytesToCopy);
+            self.* = self.sliceFrom(newStart);
+
+            const result: u32 = @bitCast(resultBytes);
+            return result;
+        }
+
+        if (!iter.advance())
+        {
+            unreachable;
+        }
+    }
+}
+
+

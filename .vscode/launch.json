@@ -10,20 +10,30 @@
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
             "environment": [],
-            "externalConsole": false,
-            "preLaunchTask": "windows_build"
+            "preLaunchTask": "windows_build",
+            "console": "externalTerminal"
+        },
+        {
+            "name": "(gdb) Launch",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/zig-out/bin/png",
+            "cwd": "${workspaceFolder}",
+            "preLaunchTask": "windows_build",
+            "MIMode": "lldb"
         },
         {
             "name": "(msvc) Launch Tests",
             "type": "cppvsdbg",
             "request": "launch",
             "program": "${workspaceFolder}/zig-out/bin/png-test",
-            "args": [],
+            "args": [
+            ],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
             "environment": [],
-            "externalConsole": false,
-            "preLaunchTask": "windows_build"
+            "preLaunchTask": "windows_build",
+            "console": "externalTerminal"
         }
     ]
 }

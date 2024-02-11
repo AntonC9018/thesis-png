@@ -1,5 +1,5 @@
 const std = @import("std");
-const raylib = @import("raylib/build.zig");
+// const raylib = @import("raylib/build.zig");
 
 pub fn build(b: *std.Build) !void {
     const target = b.standardTargetOptions(.{});
@@ -13,7 +13,7 @@ pub fn build(b: *std.Build) !void {
     });
 
     b.installArtifact(exe);
-    raylib.addTo(b, exe, target, optimize);
+    // raylib.addTo(b, exe, target, optimize);
 
     {
         const run_cmd = b.addRunArtifact(exe);
@@ -31,9 +31,10 @@ pub fn build(b: *std.Build) !void {
     {
         const unit_tests = b.addTest(.{
             .name = "png-test",
-            .root_source_file = exe.root_src.?,
-            .target = exe.target,
-            .optimize = exe.optimize,
+            .root_source_file = exe.root_module.root_source_file.?,
+            .target = target,
+            .optimize = optimize,
+            .filter = b.option([]const u8, "test-filter", "test filter"),
         });
         b.installArtifact(unit_tests);
 

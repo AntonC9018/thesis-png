@@ -4,7 +4,12 @@
         {
             "label": "windows_build",
             "type": "shell",
-            "command": "zig build",
+            "command": "zig",
+            "args": [
+                "build",
+                "-freference-trace",
+                "-Dtest-filter=copyTo",
+            ],
             "problemMatcher": [],
             "group": {
                 "kind": "build",

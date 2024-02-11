@@ -231,6 +231,97 @@ Așa cum s-a discutat, acest design inițial este un punct de plecare,
 iar implicațiile utilizării acestuia urmează să fie analizate pe parcursul dezvoltării.
 
 
+\section{Oportunitatea de abstracție a parser-ului}
+
+Pe parcursul dezvoltării a parser-ului, indeosebi a funcțiilor de parsare a datelor din chunk-uri,
+s-a observat o oportunitate de abstractizare a acestui cod.
+Deoarece structura parser-ului este by design realizată ca o mașină de stări,
+are sens să se facă o abstracție pentru a putea construi mașina acesta de stări mai ușor
+fără a repeta logica.
+
+Inițial, parser-ul se află într-o stare destinată validării a semnaturii fișierului PNG.
+Semnatura este o secvență specială de caractere care 
+trebuie necesar să apare la începutul oricărui fișier PNG.
+După citire a semnăturii, parser-ul trece în starea începerii a citirii a unui chunk,
+iar după ce începe a citi chunk-ul, trece la starea de citire a chunk-ului.
+Acestă distincție există pentru a indica faptul că dacă fluxul de intrare
+se termină în acest moment, atunci fișierul nu este complet și 
+o eroare trebuie să fie indicată.
+
+În timpul citirii a chunk-ului, parserul poate să se afle 
+într-o stare specifică destinată fiecărui câmp al chunk-ului:
+lungimea, tipul, datele, și suma de control.
+Aceste stări sunt urmate unul de altul, adică valorile numerice
+ale acestora pot fi derivate din valoarea trecută, de exemplu 
+S_{date} = S_{lungime} + 1.
+Aceasta poate fi implementată în mod cel mai simplu can un \textt{enum}
+în orice limbaj de programare care le suportă, inclusiv Zig.
+
+Un lucru asemănător se întâmplă la parsarea datelor unui chunk care are un format fix.
+De exemplu, chunk-ul \texttt{IHDR} are un set de câmpuri fix, care sunt amplasate unul după altul.
+
+În acestă logică însă se adaugă și ideea de validare mai meticuloasă a valorilor,
+de exemplu, dimensiunile nu pot fi zero, iar \texttt{BitDepth} poate lua numai un set specific de valori
+și acesta depinde de valoarea lui \texttt{ColorType}.
+
+Încă un element este faptul că valorile ale lor, de exemplu, lungimea, tipul chunk-ului,
+lățimea și înălțimea, precum și alte valorile parsate se dorește a fi păstrate undeva,
+ca câmpuri ale unei structuri ce descrie nodul respectiv.
+
+Deci, logica de parsare a unui câmp de obicei are următoarea formă:
+\begin{enumerate}
+\item
+    Se citește numărul necesar de octeți din fluxul de intrare
+        și se convertează acesta în tipul de date dorit (de exemplu, un \texttt{int}).
+\item
+    Se realizează validarea acestei valori.
+    De exemplu, nu se admit valorile dimensiunilor egale cu zero.
+    În unele cazuri eroarea nu este groaznică, poate fi înresitrată, iar parsarea poate fi continuată.
+\item
+    Salvarea valorii într-un câmp pe o structură respectivă.
+\item
+    Trecerea la următoarea stare.
+\end{enumerate}
+
+În plus, pentru debugging ar fi utilă o funcție care afișează drumul de stări curent,
+adică, de exemplu, dacă parserul se află în starea parsării a unui chunk \texttt{IHDR}, 
+și se află la etapa parsării câmpului \texttt{ColorType},
+care este indicat printr-o altă variabilă de stare,
+s-ar dori să se afișeze \texttt{Chunk(IHDR) ColorType}, sau ceva asemănător.
+
+Ideea este ca acest proces s-ar putea fi abstractizat în loc de a fi duplicat:
+\begin{enumerate}
+\item
+    În loc de mai multe variabile care să indice starea, aceasta poate fi păstrată ca
+    o listă de numeri întregi, indicând un fel de drum pentru următoarea acțiune a parser-ului.
+    Clar că drumul acesta ar fi deja generic și și-ar pierde informațiile despre tipul
+    \texttt{enum}-ului care indică starea, ceea ce ar fi dezavantajos pentru debugging.
+\item
+    Logica de afișare a stării poate fi implementată destul de ușor, dacă există o listă de
+    șiruri de caractere pentru fiecare index din drumul stării,
+    și pentru fiecare valoare posibilă a stării la acel index,
+    însă s-ar trebui atunci și să se modifice starea
+    de pe poziție 0 de la \texttt{Chunk} la \texttt{IHDR}.
+\item
+    Ceea ce trebuie de făcut la diferite stări,
+    și câtă memorie va fi necesară pentru a păstra nodul poate fi configurat separat,
+    într-un mod mai declarativ.
+\item
+    Stările care se așteapă că vor seta anumite câmpuri
+    pot indica offset-ul câmpului pentru ca sistemul să scrie valoarea acolo automat.
+    Aceasta poate fi simplificat prin folosirea tehnicilor de metaprogramare oferite de Zig.
+\item
+    Fiecare stare ar trebui să declare o funcție de inițializare a nodului,
+    o funcție de parsare și o funcție de validare a valorii.
+    Aici s-ar putea oferi niște funcții de configurare pentru a partaja logica.
+\end{enumerate}
+
+Însă, realizarea acestui gând în starea curentă a dezvoltării n-ar fi înțeleaptă,
+deoarece această oportunitate s-a observat la momentul
+realizării a primului tip de chunk, \texttt{IHDR},
+deci este posibil că nu s-ar generaliza bine pentru toate tipurile de chunk-uri.
+Încă, s-a menționat deja anterior că această abordare reduce capacitatea de debugging.
+
 \chapterConclusionSection{implementation_chater_title}
 
 
