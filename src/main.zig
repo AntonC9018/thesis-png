@@ -30,6 +30,7 @@ pub fn main() !void
             .state = &parserState,
             .sequence = &readResult.sequence,
             .allocator = allocator,
+            .ihdr = null,
         };
 
         doMaximumAmountOfParsing(&context, &chunks)
@@ -97,6 +98,20 @@ pub fn main() !void
             chunk.chunkType.bytes,
             chunk.crc.value,
         });
+
+        const knownChunkType = getKnownDataChunkType(chunk.chunkType);
+        switch (knownChunkType)
+        {
+            .IHDR =>
+            {
+                std.debug.print("  {any}\n", .{ chunk.dataNode.data.ihdr });
+            },
+            .PLTE =>
+            {
+                std.debug.print("  {any}\n", .{ chunk.dataNode.data.plte.colors.items });
+            },
+            .Unknown => {},
+        }
     }
 }
 
@@ -125,6 +140,7 @@ const ParserContext = struct
     state: *ParserState,
     sequence: *p.Sequence,
     allocator: std.mem.Allocator,
+    ihdr: ?IHDR,
 };
 
 const ChunkParserStateKey = enum 
@@ -166,6 +182,7 @@ const ChunkDataNode = struct
     data: union
     { 
         ihdr: IHDR,
+        plte: PLTE,
         none: void,
     },
 };
@@ -179,6 +196,18 @@ const IHDR = struct
     compressionMethod: CompressionMethod,
     filterMethod: FilterMethod,
     interlaceMethod: InterlaceMethod,
+};
+
+const RGB = struct
+{
+    r: u8,
+    g: u8,
+    b: u8,
+};
+
+const PLTE = struct
+{
+    colors: std.ArrayListUnmanaged(RGB),
 };
 
 const BitDepth = u8;
@@ -339,6 +368,7 @@ const DataNodeParserState = union
 {
     ihdr: IHDRParserStateKey,
     bytesSkipped: u32,
+    plte: PLTEState, 
     none: void,
 };
 
@@ -354,6 +384,28 @@ const IHDRParserStateKey = enum(u32)
     InterlaceMethod,
     Done,
 };
+
+const PLTEState = struct
+{
+    bytesRead: u32,
+    rgb: RGBState,
+};
+
+const RGBState = enum
+{
+    None,
+    R,
+    G,
+    B,
+
+    const FirstColor = .R;
+
+    fn next(self: RGBState) RGBState
+    {
+        return @enumFromInt(@intFromEnum(self) + 1);
+    }
+};
+
 
 fn doMaximumAmountOfParsing(
     context: *ParserContext,
@@ -389,7 +441,7 @@ fn parseTopLevelNode(context: *ParserContext) !bool
 {
     while (true)
     {
-        if (false)
+        if (true)
         {
             const outputStream = std.io.getStdOut().writer();
             try printStepName(outputStream, context.state);
@@ -502,12 +554,44 @@ fn parseChunkItem(context: *ParserContext) !bool
             };
 
             const knownChunkType = getKnownDataChunkType(chunkType);
+            if (context.ihdr == null and knownChunkType != .IHDR)
+            {
+                return error.IHDRChunkNotFirst;
+            }
+
             switch (knownChunkType)
             {
                 .IHDR =>
                 {
                     state.dataNode = .{ .ihdr = IHDRParserStateKey.Initial };
                     state.node.dataNode.data = .{ .ihdr = std.mem.zeroes(IHDR) };
+                },
+                .PLTE =>
+                {
+                    state.dataNode = .{ .bytesSkipped = 0 };
+                    state.node.dataNode.data = .{ .plte = std.mem.zeroes(PLTE) };
+
+                    if (state.node.byteLength % 3 != 0)
+                    {
+                        return error.PaletteLengthNotDivisibleByThree;
+                    }
+
+                    const ihdr = context.ihdr.?;
+                    switch (ihdr.colorType.flags)
+                    {
+                        0, ColorType.AlphaChannelUsed =>
+                        {
+                            return error.PaletteCannotBeUsedWithColorType;
+                        },
+                        else => {},
+                    }
+
+                    const representableRange = @as(u32, 1) << @as(u5, @intCast(ihdr.bitDepth));
+                    const numColors = state.node.byteLength / 3;
+                    if (numColors > representableRange)
+                    {
+                        return error.PaletteUnrepresentableWithBitDepth;
+                    }
                 },
                 .Unknown =>
                 {
@@ -600,11 +684,64 @@ fn parseChunkItem(context: *ParserContext) !bool
                                     _ => return error.InvalidInterlaceMethod,
                                 }
                                 ihdrStateKey.* = .Done;
+                                context.ihdr = ihdr.*;
                                 break :done true;
                             },
                             .Done => unreachable,
                         }
                         break :done false;
+                    },
+                    .PLTE =>
+                    {
+                        const plteState = &state.dataNode.plte;
+                        const plteNode = &dataNode.data.plte;
+                        const totalBytes = state.node.dataNode.base.length;
+
+                        std.debug.assert(plteState.bytesRead <= totalBytes);
+
+                        if (plteState.bytesRead < totalBytes)
+                        {
+                            const bytesToRead = totalBytes - plteState.bytesRead;
+                            const bytesToReadNowCount = @min(bytesToRead, context.sequence.len());
+                            if (bytesToReadNowCount == 0)
+                            {
+                                return error.NotEnoughBytes;
+                            }
+
+                            const byteCountToReadUntil = plteState.bytesRead + bytesToReadNowCount;
+
+                            while (plteState.bytesRead < byteCountToReadUntil)
+                            {
+                                const color = color:
+                                {
+                                    if (plteState.rgb != .None)
+                                    {
+                                        plteState.rgb = RGBState.FirstColor;
+                                        // We're gonna have a memory leak if we don't move the list.
+                                        break :color try plteNode.colors.addOne(context.allocator);
+                                    }
+                                    const items = plteNode.colors.items;
+                                    break :color &items[items.len - 1];
+                                };
+
+                                const colorByte = colorByte:
+                                {
+                                    switch (plteState.rgb)
+                                    {
+                                        .R => break :colorByte &color.r,
+                                        .G => break :colorByte &color.g,
+                                        .B => break :colorByte &color.b,
+                                        .None => unreachable,
+                                    }
+                                };
+                                colorByte.* = p.removeFirst(context.sequence) catch unreachable;
+
+                                plteState.rgb = plteState.rgb.next();
+                                plteState.bytesRead += 1;
+                            }
+                        }
+
+                        break :done (plteState.bytesRead == totalBytes);
                     },
                     // Let's just skip for now.
                     .Unknown =>
@@ -616,15 +753,15 @@ fn parseChunkItem(context: *ParserContext) !bool
 
                         if (bytesSkipped.* < totalBytes)
                         {
-                            const bytesToSkip = totalBytes - bytesSkipped.*;
-                            const skipBytesCount = @min(bytesToSkip, context.sequence.len());
-                            if (skipBytesCount == 0)
+                            const bytesLeftToSkip = totalBytes - bytesSkipped.*;
+                            const bytesToSkipNowCount = @min(bytesLeftToSkip, context.sequence.len());
+                            if (bytesToSkipNowCount == 0)
                             {
                                 return error.NotEnoughBytes;
                             }
-                            bytesSkipped.* += @intCast(skipBytesCount);
+                            bytesSkipped.* += @intCast(bytesToSkipNowCount);
 
-                            const newStart = context.sequence.getPosition(skipBytesCount);
+                            const newStart = context.sequence.getPosition(bytesToSkipNowCount);
                             context.sequence.* = context.sequence.sliceFrom(newStart);
                         }
 
@@ -654,7 +791,7 @@ pub fn initChunkParserState(context: *ParserContext) void
 {
     context.state.* = 
     .{
-        .Chunk = .{
+        .Chunk = std.mem.zeroInit(ChunkParserState, .{
             .node = std.mem.zeroInit(ChunkNode, .{
                 .base = NodeBase
                 {
@@ -665,7 +802,7 @@ pub fn initChunkParserState(context: *ParserContext) void
                 }),
             }),
             .dataNode = .{ .none = {} },
-        }
+        }),
     };
 }
 
@@ -776,6 +913,15 @@ fn printStepName(writer: anytype, parserState: *const ParserState) !void
                                 .Done => {},
                             }
                         },
+                        .PLTE =>
+                        {
+                            const byte = chunk.dataNode.plte.bytesRead;
+                            try writer.print("PLTE byte {x} (color index {}, state {})", .{
+                                byte,
+                                byte / 3,
+                                chunk.dataNode.plte.rgb,
+                            });
+                        },
                         .Unknown => try writer.print("?", .{}),
                     }
                 },
@@ -811,6 +957,13 @@ fn getKnownDataChunkType(chunkType: ChunkType) KnownDataChunkType
                 return .IHDR;
             }
         },
+        'P' =>
+        {
+            if (h.chunkTypeEquals(chunkType, KnownDataChunkTags.PLTE))
+            {
+                return .PLTE;
+            }
+        },
         else => {},
     }
     return .Unknown;
@@ -820,5 +973,5 @@ const KnownDataChunkType = enum(u8)
 {
     Unknown,
     IHDR,
-    // PLTE,
+    PLTE,
 };
