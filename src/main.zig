@@ -24,7 +24,7 @@ pub fn main() !void
     };
     defer reader.deinit();
 
-    var parserState: parser.ParserState = .Signature;
+    var parserState = parser.createParserState();
     var chunks = std.ArrayList(parser.ChunkNode).init(allocator);
 
     outerLoop: while (true)
@@ -35,7 +35,6 @@ pub fn main() !void
             .state = &parserState,
             .sequence = &readResult.sequence,
             .allocator = allocator,
-            .ihdr = null,
         };
 
         doMaximumAmountOfParsing(&context, &chunks)
@@ -94,7 +93,7 @@ pub fn main() !void
 
     for (chunks.items) |*chunk| 
     {
-        std.debug.print("Chunk(Length: {d}, Type: {s}, CRC: {d})\n", .{
+        std.debug.print("Chunk(Length: {d}, Type: {s}, CRC: {x})\n", .{
             chunk.byteLength,
             chunk.chunkType.bytes,
             chunk.crc.value,
@@ -103,15 +102,15 @@ pub fn main() !void
         const knownChunkType = parser.getKnownDataChunkType(chunk.chunkType);
         switch (knownChunkType)
         {
-            .IHDR =>
+            .ImageHeader =>
             {
                 std.debug.print("  {any}\n", .{ chunk.dataNode.data.ihdr });
             },
-            .PLTE =>
+            .Palette =>
             {
                 std.debug.print("  {any}\n", .{ chunk.dataNode.data.plte.colors.items });
             },
-            .Unknown => {},
+            else => {},
         }
     }
 }
@@ -128,7 +127,7 @@ fn doMaximumAmountOfParsing(
             continue;
         }
 
-        switch (context.state.*)
+        switch (context.state.action)
         {
             .Signature => 
             {
@@ -137,11 +136,11 @@ fn doMaximumAmountOfParsing(
             .Chunk =>
             {
                 const newItem = try nodes.addOne();
-                newItem.* = context.state.Chunk.node;
+                newItem.* = context.state.chunk.node;
             },
             .StartChunk => unreachable,
         }
 
-        context.state.* = .StartChunk;
+        context.state.action = .StartChunk;
     }
 }

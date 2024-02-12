@@ -1,5 +1,5 @@
 const std = @import("std");
-const p = @import("pipelines.zig");
+const pipelines = @import("pipelines.zig");
 
 // What is the next expected type?
 pub const ParserAction = enum(u8) 
@@ -9,24 +9,28 @@ pub const ParserAction = enum(u8)
     Chunk,
 };
 
-pub const ParserState = union(ParserAction)
+pub const ParserState = struct
 {
-    Signature: void,
-    StartChunk: void,
-    Chunk: ChunkParserState,
+    chunk: ChunkParserState,
+    action: ParserAction = .Signature,
+
+    imageHeader: ?IHDR = null,
+    // True after the IEND chunk has been parsed.
+    isEnd: bool = false,
+    // True after the first IDAT chunk data start being parsed.
+    isData: bool = false,
 };
 
 pub fn isParserStateTerminal(state: *const ParserState) bool 
 {
-    return state.* == .StartChunk;
+    return state.action == .StartChunk;
 }
 
 pub const ParserContext = struct
 {
     state: *ParserState,
-    sequence: *p.Sequence,
+    sequence: *pipelines.Sequence,
     allocator: std.mem.Allocator,
-    ihdr: ?IHDR,
 };
 
 pub const ChunkParserStateKey = enum 
@@ -293,10 +297,10 @@ pub const RGBState = enum
 };
 
 const pngFileSignature = "\x89PNG\r\n\x1A\n";
-fn validateSignature(slice: *p.Sequence) !void 
+fn validateSignature(slice: *pipelines.Sequence) !void 
 {
     var copy = slice.*;
-    p.removeFront(&copy, pngFileSignature)
+    pipelines.removeFront(&copy, pngFileSignature)
     catch |err| switch (err)
     {
         error.NoMatch => return error.SignatureMismatch,
@@ -348,19 +352,99 @@ pub const ChunkType = extern union
     value: u32,
 };
 
+pub const KnownDataChunkType = enum(u8)
+{
+    Unknown,
+
+    ImageHeader,
+    Palette,
+    ImageData,
+    ImageEnd,
+
+    Transparency,
+    Gamma,
+    Chromaticity,
+    ColorSpace,
+    ICCProfile,
+
+    Text,
+    CompressedText,
+    InternationalText,
+
+    Background,
+    PhysicalPixelDimensions,
+    SignificantBits,
+    SuggestedPalette,
+    PaletteHistogram,
+    LastModificationTime,
+};
+
 const KnownDataChunkTags = struct
 {
-    const IHDR = ChunkType { .bytes = "IHDR".* };
-    const PLTE = ChunkType { .bytes = "PLTE".* };
+    fn createType(str: *const[4:0]u8) ChunkType
+    {
+        return ChunkType { .bytes = str.* };
+    }
+
+    // Even though I hate stuff like this,
+    // I'll keep it like this until I know what I want.
+    const ImageHeader = createType("IHDR");
+    const Palette = createType("PLTE");
+    const ImageData = createType("IDAT");
+    const ImageEnd = createType("IEND");
+
+    const Transparency = createType("tRNS");
+    const Gamma = createType("gAMA");
+    const Chromaticity = createType("cHRM");
+    const ColorSpace = createType("sRGB");
+
+    const ICCProfile = createType("iCCP");
+    const Text = createType("tEXt");
+    const CompressedText = createType("zTXt");
+    const InternationalText = createType("iTXt");
+
+    const Background = createType("bKGD");
+    const PhysicalPixelDimensions = createType("pHYs");
+    const SignificantBits = createType("sBIT");
+    const SuggestedPalette = createType("sPLT");
+    const PaletteHistogram = createType("hIST");
+    const LastModificationTime = createType("tIME");
+
+
+    pub fn byKnownType(knownType: KnownDataChunkType) ChunkType
+    {
+        return switch (knownType)
+        {
+            .ImageHeader => ImageHeader,
+            .Palette => Palette,
+            .ImageData => ImageData,
+            .ImageEnd => ImageEnd,
+            .Transparency => Transparency,
+            .Gamma => Gamma,
+            .Chromaticity => Chromaticity,
+            .ColorSpace => ColorSpace,
+            .ICCProfile => ICCProfile,
+            .Text => Text,
+            .CompressedText => CompressedText,
+            .InternationalText => InternationalText,
+            .Background => Background,
+            .PhysicalPixelDimensions => PhysicalPixelDimensions,
+            .SignificantBits => SignificantBits,
+            .SuggestedPalette => SuggestedPalette,
+            .PaletteHistogram => PaletteHistogram,
+            .LastModificationTime => LastModificationTime,
+        };
+    }
 };
 
 pub fn printStepName(writer: anytype, parserState: *const ParserState) !void
 {
-    switch (parserState.*)
+    switch (parserState.action)
     {
         .Signature => try writer.print("Signature", .{}),
-        .Chunk => |*chunk| 
+        .Chunk =>
         {
+            const chunk = &parserState.chunk;
             try writer.print("Chunk ", .{});
             switch (chunk.key)
             {
@@ -375,7 +459,7 @@ pub fn printStepName(writer: anytype, parserState: *const ParserState) !void
                     // and I should solve this with reflection.
                     switch (knownDataChunkType)
                     {
-                        .IHDR =>
+                        .ImageHeader =>
                         {
                             switch (chunk.dataNode.ihdr)
                             {
@@ -389,7 +473,7 @@ pub fn printStepName(writer: anytype, parserState: *const ParserState) !void
                                 .Done => {},
                             }
                         },
-                        .PLTE =>
+                        .Palette =>
                         {
                             const byte = chunk.dataNode.plte.bytesRead;
                             try writer.print("PLTE byte {x} (color index {}, state {})", .{
@@ -399,6 +483,7 @@ pub fn printStepName(writer: anytype, parserState: *const ParserState) !void
                             });
                         },
                         .Unknown => try writer.print("?", .{}),
+                        else => |x| try writer.print("{any}", .{ x }),
                     }
                 },
                 .CyclicRedundancyCheck => try writer.print("CyclicRedundancyCheck", .{}),
@@ -428,29 +513,113 @@ pub fn getKnownDataChunkType(chunkType: ChunkType) KnownDataChunkType
     {
         'I' =>
         {
-            if (h.chunkTypeEquals(chunkType, KnownDataChunkTags.IHDR))
+            if (h.chunkTypeEquals(chunkType, KnownDataChunkTags.ImageHeader))
             {
-                return .IHDR;
+                return .ImageHeader;
+            }
+            if (h.chunkTypeEquals(chunkType, KnownDataChunkTags.ImageData))
+            {
+                return .ImageData;
+            }
+            if (h.chunkTypeEquals(chunkType, KnownDataChunkTags.ImageEnd))
+            {
+                return .ImageEnd;
             }
         },
         'P' =>
         {
-            if (h.chunkTypeEquals(chunkType, KnownDataChunkTags.PLTE))
+            if (h.chunkTypeEquals(chunkType, KnownDataChunkTags.Palette))
             {
-                return .PLTE;
+                return .Palette;
+            }
+        },
+        't' =>
+        {
+            if (h.chunkTypeEquals(chunkType, KnownDataChunkTags.Transparency))
+            {
+                return .Transparency;
+            }
+            if (h.chunkTypeEquals(chunkType, KnownDataChunkTags.Text))
+            {
+                return .Text;
+            }
+            if (h.chunkTypeEquals(chunkType, KnownDataChunkTags.LastModificationTime))
+            {
+                return .LastModificationTime;
+            }
+        },
+        'g' =>
+        {
+            if (h.chunkTypeEquals(chunkType, KnownDataChunkTags.Gamma))
+            {
+                return .Gamma;
+            }
+        },
+        'c' =>
+        {
+            if (h.chunkTypeEquals(chunkType, KnownDataChunkTags.Chromaticity))
+            {
+                return .Chromaticity;
+            }
+        },
+        's' =>
+        {
+            if (h.chunkTypeEquals(chunkType, KnownDataChunkTags.ColorSpace))
+            {
+                return .ColorSpace;
+            }
+            if (h.chunkTypeEquals(chunkType, KnownDataChunkTags.SuggestedPalette))
+            {
+                return .SuggestedPalette;
+            }
+            if (h.chunkTypeEquals(chunkType, KnownDataChunkTags.SignificantBits))
+            {
+                return .SignificantBits;
+            }
+        },
+        'i' =>
+        {
+            if (h.chunkTypeEquals(chunkType, KnownDataChunkTags.ICCProfile))
+            {
+                return .ICCProfile;
+            }
+            if (h.chunkTypeEquals(chunkType, KnownDataChunkTags.InternationalText))
+            {
+                return .InternationalText;
+            }
+        },
+        'z' =>
+        {
+            if (h.chunkTypeEquals(chunkType, KnownDataChunkTags.CompressedText))
+            {
+                return .CompressedText;
+            }
+        },
+        'b' => 
+        {
+            if (h.chunkTypeEquals(chunkType, KnownDataChunkTags.Background))
+            {
+                return .Background;
+            }
+        },
+        'p' =>
+        {
+            if (h.chunkTypeEquals(chunkType, KnownDataChunkTags.PhysicalPixelDimensions))
+            {
+                return .PhysicalPixelDimensions;
+            }
+        },
+        'h' =>
+        {
+            if (h.chunkTypeEquals(chunkType, KnownDataChunkTags.PaletteHistogram))
+            {
+                return .PaletteHistogram;
             }
         },
         else => {},
     }
     return .Unknown;
 }
-
-pub const KnownDataChunkType = enum(u8)
-{
-    Unknown,
-    IHDR,
-    PLTE,
-};
 
 pub fn parseTopLevelNode(context: *ParserContext) !bool
 {
@@ -474,7 +643,7 @@ pub fn parseTopLevelNode(context: *ParserContext) !bool
 
 pub fn parseNextNode(context: *ParserContext) !bool
 {
-    switch (context.state.*)
+    switch (context.state.action)
     {
         .Signature =>
         {
@@ -489,7 +658,9 @@ pub fn parseNextNode(context: *ParserContext) !bool
             }
             else
             {
-                initChunkParserState(context);
+                const offset = context.sequence.getStartOffset();
+                context.state.chunk = createChunkParserState(offset);
+                context.state.action = .Chunk;
             }
         },
         .Chunk =>
@@ -504,9 +675,9 @@ pub fn parseNextNode(context: *ParserContext) !bool
     return false;
 }
 
-fn readPngU32(sequence: *p.Sequence) !u32
+fn readPngU32(sequence: *pipelines.Sequence) !u32
 {
-    const value = try p.readNetworkU32(sequence);
+    const value = try pipelines.readNetworkU32(sequence);
     if (value > 0x80000000)
     {
         return error.UnsignedValueTooLarge;
@@ -514,7 +685,7 @@ fn readPngU32(sequence: *p.Sequence) !u32
     return value;
 }
 
-fn readPngU32Dimension(sequence: *p.Sequence) !u32
+fn readPngU32Dimension(sequence: *pipelines.Sequence) !u32
 {
     const value = readPngU32(sequence)
     catch
@@ -530,20 +701,20 @@ fn readPngU32Dimension(sequence: *p.Sequence) !u32
 
 pub fn parseChunkItem(context: *ParserContext) !bool
 {
-    var state = &context.state.Chunk;
-    switch (state.key)
+    var chunk = &context.state.chunk;
+    switch (chunk.key)
     {
         .Length => 
         {
-            const length = try p.readNetworkU32(context.sequence);
+            const length = try pipelines.readNetworkU32(context.sequence);
             // The spec says it must not exceed 2^31
             if (length > 0x80000000)
             {
                 return error.LengthTooLarge;
             }
 
-            state.node.byteLength = length;
-            state.key = .ChunkType;
+            chunk.node.byteLength = length;
+            chunk.key = .ChunkType;
         },
         .ChunkType =>
         {
@@ -560,39 +731,39 @@ pub fn parseChunkItem(context: *ParserContext) !bool
             sequence_.* = o.right;
 
             o.left.copyTo(&chunkType.bytes);
-            state.node.chunkType = chunkType;
-            state.key = .Data;
+            chunk.node.chunkType = chunkType;
+            chunk.key = .Data;
 
-            state.node.dataNode.base = .{
+            chunk.node.dataNode.base = .{
                 .startPositionInFile = o.right.getStartOffset(),
-                .length = state.node.byteLength,
+                .length = chunk.node.byteLength,
             };
 
             const knownChunkType = getKnownDataChunkType(chunkType);
-            if (context.ihdr == null and knownChunkType != .IHDR)
+            if (context.state.imageHeader == null and knownChunkType != .ImageHeader)
             {
                 return error.IHDRChunkNotFirst;
             }
 
             switch (knownChunkType)
             {
-                .IHDR =>
+                .ImageHeader =>
                 {
-                    state.dataNode = .{ .ihdr = IHDRParserStateKey.Initial };
-                    state.node.dataNode.data = .{ .ihdr = std.mem.zeroes(IHDR) };
+                    chunk.dataNode = .{ .ihdr = IHDRParserStateKey.Initial };
+                    chunk.node.dataNode.data = .{ .ihdr = std.mem.zeroes(IHDR) };
                 },
-                .PLTE =>
+                .Palette =>
                 {
-                    state.dataNode = .{ .bytesSkipped = 0 };
-                    state.node.dataNode.data = .{ .plte = std.mem.zeroes(PLTE) };
+                    chunk.dataNode = .{ .plte = std.mem.zeroes(PLTEState) };
+                    chunk.node.dataNode.data = .{ .plte = std.mem.zeroes(PLTE) };
 
-                    if (state.node.byteLength % 3 != 0)
+                    if (chunk.node.byteLength % 3 != 0)
                     {
                         return error.PaletteLengthNotDivisibleByThree;
                     }
 
-                    const ihdr = context.ihdr.?;
-                    switch (ihdr.colorType.flags)
+                    const header = context.state.imageHeader.?;
+                    switch (header.colorType.flags)
                     {
                         0, ColorType.AlphaChannelUsed =>
                         {
@@ -601,8 +772,8 @@ pub fn parseChunkItem(context: *ParserContext) !bool
                         else => {},
                     }
 
-                    const representableRange = @as(u32, 1) << @as(u5, @intCast(ihdr.bitDepth));
-                    const numColors = state.node.byteLength / 3;
+                    const representableRange = @as(u32, 1) << @as(u5, @intCast(header.bitDepth));
+                    const numColors = chunk.node.byteLength / 3;
                     if (numColors > representableRange)
                     {
                         return error.PaletteUnrepresentableWithBitDepth;
@@ -610,23 +781,28 @@ pub fn parseChunkItem(context: *ParserContext) !bool
                 },
                 .Unknown =>
                 {
-                    state.dataNode = .{ .bytesSkipped = 0 };
-                    state.node.dataNode.data = .{ .none = {} };
+                    chunk.dataNode = .{ .bytesSkipped = 0 };
+                    chunk.node.dataNode.data = .{ .none = {} };
+                },
+                else =>
+                {
+                    chunk.dataNode = .{ .bytesSkipped = 0 };
+                    chunk.node.dataNode.data = .{ .none = {} };
                 },
             }
         },
         .Data =>
         {
-            var dataNode = &state.node.dataNode;
+            var dataNode = &chunk.node.dataNode;
 
             const done = done:
             {
-                const knownChunkType = getKnownDataChunkType(state.node.chunkType);
+                const knownChunkType = getKnownDataChunkType(chunk.node.chunkType);
                 switch (knownChunkType)
                 {
-                    .IHDR =>
+                    .ImageHeader =>
                     {
-                        const ihdrStateKey = &state.dataNode.ihdr;
+                        const ihdrStateKey = &chunk.dataNode.ihdr;
                         const ihdr = &dataNode.data.ihdr;
                         switch (ihdrStateKey.*)
                         {
@@ -646,7 +822,7 @@ pub fn parseChunkItem(context: *ParserContext) !bool
                             },
                             .BitDepth =>
                             {
-                                const value = try p.removeFirst(context.sequence);
+                                const value = try pipelines.removeFirst(context.sequence);
                                 ihdr.bitDepth = value;
                                 if (!isBitDepthValid(value))
                                 {
@@ -656,7 +832,7 @@ pub fn parseChunkItem(context: *ParserContext) !bool
                             },
                             .ColorType =>
                             {
-                                const value = try p.removeFirst(context.sequence);
+                                const value = try pipelines.removeFirst(context.sequence);
                                 ihdr.colorType = .{ .flags = value };
                                 if (!isColorTypeValid(ihdr.colorType))
                                 {
@@ -670,7 +846,7 @@ pub fn parseChunkItem(context: *ParserContext) !bool
                             },
                             .CompressionMethod =>
                             {
-                                const value = try p.removeFirst(context.sequence);
+                                const value = try pipelines.removeFirst(context.sequence);
                                 ihdr.compressionMethod = value;
                                 if (!isCompressionMethodValid(value))
                                 {
@@ -680,7 +856,7 @@ pub fn parseChunkItem(context: *ParserContext) !bool
                             },
                             .FilterMethod =>
                             {
-                                const value = try p.removeFirst(context.sequence);
+                                const value = try pipelines.removeFirst(context.sequence);
                                 ihdr.filterMethod = value;
                                 if (!isFilterMethodValid(value))
                                 {
@@ -690,7 +866,7 @@ pub fn parseChunkItem(context: *ParserContext) !bool
                             },
                             .InterlaceMethod =>
                             {
-                                const value = try p.removeFirst(context.sequence);
+                                const value = try pipelines.removeFirst(context.sequence);
                                 const enumValue: InterlaceMethod = @enumFromInt(value);
                                 ihdr.interlaceMethod = enumValue;
                                 switch (enumValue)
@@ -699,18 +875,18 @@ pub fn parseChunkItem(context: *ParserContext) !bool
                                     _ => return error.InvalidInterlaceMethod,
                                 }
                                 ihdrStateKey.* = .Done;
-                                context.ihdr = ihdr.*;
+                                context.state.imageHeader = ihdr.*;
                                 break :done true;
                             },
                             .Done => unreachable,
                         }
                         break :done false;
                     },
-                    .PLTE =>
+                    .Palette =>
                     {
-                        const plteState = &state.dataNode.plte;
+                        const plteState = &chunk.dataNode.plte;
                         const plteNode = &dataNode.data.plte;
-                        const totalBytes = state.node.dataNode.base.length;
+                        const totalBytes = chunk.node.dataNode.base.length;
 
                         std.debug.assert(plteState.bytesRead <= totalBytes);
 
@@ -749,7 +925,7 @@ pub fn parseChunkItem(context: *ParserContext) !bool
                                         .None => unreachable,
                                     }
                                 };
-                                colorByte.* = p.removeFirst(context.sequence) catch unreachable;
+                                colorByte.* = pipelines.removeFirst(context.sequence) catch unreachable;
 
                                 plteState.rgb = plteState.rgb.next();
                                 plteState.bytesRead += 1;
@@ -759,10 +935,11 @@ pub fn parseChunkItem(context: *ParserContext) !bool
                         break :done (plteState.bytesRead == totalBytes);
                     },
                     // Let's just skip for now.
-                    .Unknown =>
+                    // .Unknown =>
+                    else =>
                     {
-                        const bytesSkipped = &state.dataNode.bytesSkipped;
-                        const totalBytes = state.node.dataNode.base.length;
+                        const bytesSkipped = &chunk.dataNode.bytesSkipped;
+                        const totalBytes = chunk.node.dataNode.base.length;
 
                         std.debug.assert(bytesSkipped.* <= totalBytes);
 
@@ -787,36 +964,48 @@ pub fn parseChunkItem(context: *ParserContext) !bool
 
             if (done)
             {
-                state.key = .CyclicRedundancyCheck;
+                chunk.key = .CyclicRedundancyCheck;
             }
         },
         .CyclicRedundancyCheck =>
         {
             // Just skip for now
-            const value = try p.readNetworkU32(context.sequence);
-            state.node.crc = .{ .value = value };
-            state.key = .Done;
+            const value = try pipelines.readNetworkU32(context.sequence);
+            chunk.node.crc = .{ .value = value };
+            chunk.key = .Done;
         },
         .Done => unreachable,
     }
-    return state.key == .Done;
+    return chunk.key == .Done;
 }
 
-fn initChunkParserState(context: *ParserContext) void 
+pub fn createParserState() ParserState
 {
-    context.state.* = 
-    .{
-        .Chunk = std.mem.zeroInit(ChunkParserState, .{
+    return .{
+        .chunk = std.mem.zeroInit(ChunkParserState, .{
+            .dataNode = .{ .none = {} },
             .node = std.mem.zeroInit(ChunkNode, .{
-                .base = NodeBase
-                {
-                    .startPositionInFile = context.sequence.getStartOffset(),
-                },
                 .dataNode = std.mem.zeroInit(ChunkDataNode, .{
                     .data = .{ .none = {} },
                 }),
             }),
-            .dataNode = .{ .none = {} },
         }),
     };
 }
+
+fn createChunkParserState(startOffset: usize) ChunkParserState
+{
+    return std.mem.zeroInit(ChunkParserState, .{
+        .node = std.mem.zeroInit(ChunkNode, .{
+            .base = NodeBase
+            {
+                .startPositionInFile = startOffset,
+            },
+            .dataNode = std.mem.zeroInit(ChunkDataNode, .{
+                .data = .{ .none = {} },
+            }),
+        }),
+        .dataNode = .{ .none = {} },
+    });
+}
+
