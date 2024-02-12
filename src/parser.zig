@@ -352,88 +352,36 @@ pub const ChunkType = extern union
     value: u32,
 };
 
-pub const KnownDataChunkType = enum(u8)
+
+pub const KnownDataChunkType = enum(u32)
 {
-    Unknown,
+    ImageHeader = tag("IHDR"),
+    Palette = tag("PLTE"),
+    ImageData = tag("IDAT"),
+    ImageEnd = tag("IEND"),
 
-    ImageHeader,
-    Palette,
-    ImageData,
-    ImageEnd,
+    Transparency = tag("tRNS"),
+    Gamma = tag("gAMA"),
+    Chromaticity = tag("cHRM"),
+    ColorSpace = tag("sRGB"),
+    ICCProfile = tag("iCCP"),
 
-    Transparency,
-    Gamma,
-    Chromaticity,
-    ColorSpace,
-    ICCProfile,
+    Text = tag("tEXt"),
+    CompressedText = tag("zTXt"),
+    InternationalText = tag("iTXt"),
 
-    Text,
-    CompressedText,
-    InternationalText,
+    Background = tag("bKGD"),
+    PhysicalPixelDimensions = tag("pHYs"),
+    SignificantBits = tag("sBIT"),
+    SuggestedPalette = tag("sPLT"),
+    PaletteHistogram = tag("hIST"),
+    LastModificationTime = tag("tIME"),
+    _,
 
-    Background,
-    PhysicalPixelDimensions,
-    SignificantBits,
-    SuggestedPalette,
-    PaletteHistogram,
-    LastModificationTime,
-};
-
-const KnownDataChunkTags = struct
-{
-    fn createType(str: *const[4:0]u8) ChunkType
+    fn tag(str: *const[4:0]u8) u32
     {
-        return ChunkType { .bytes = str.* };
-    }
-
-    // Even though I hate stuff like this,
-    // I'll keep it like this until I know what I want.
-    const ImageHeader = createType("IHDR");
-    const Palette = createType("PLTE");
-    const ImageData = createType("IDAT");
-    const ImageEnd = createType("IEND");
-
-    const Transparency = createType("tRNS");
-    const Gamma = createType("gAMA");
-    const Chromaticity = createType("cHRM");
-    const ColorSpace = createType("sRGB");
-
-    const ICCProfile = createType("iCCP");
-    const Text = createType("tEXt");
-    const CompressedText = createType("zTXt");
-    const InternationalText = createType("iTXt");
-
-    const Background = createType("bKGD");
-    const PhysicalPixelDimensions = createType("pHYs");
-    const SignificantBits = createType("sBIT");
-    const SuggestedPalette = createType("sPLT");
-    const PaletteHistogram = createType("hIST");
-    const LastModificationTime = createType("tIME");
-
-
-    pub fn byKnownType(knownType: KnownDataChunkType) ChunkType
-    {
-        return switch (knownType)
-        {
-            .ImageHeader => ImageHeader,
-            .Palette => Palette,
-            .ImageData => ImageData,
-            .ImageEnd => ImageEnd,
-            .Transparency => Transparency,
-            .Gamma => Gamma,
-            .Chromaticity => Chromaticity,
-            .ColorSpace => ColorSpace,
-            .ICCProfile => ICCProfile,
-            .Text => Text,
-            .CompressedText => CompressedText,
-            .InternationalText => InternationalText,
-            .Background => Background,
-            .PhysicalPixelDimensions => PhysicalPixelDimensions,
-            .SignificantBits => SignificantBits,
-            .SuggestedPalette => SuggestedPalette,
-            .PaletteHistogram => PaletteHistogram,
-            .LastModificationTime => LastModificationTime,
-        };
+        const bytes: [4]u8 = str.*;
+        return @bitCast(bytes);
     }
 };
 
@@ -482,8 +430,8 @@ pub fn printStepName(writer: anytype, parserState: *const ParserState) !void
                                 chunk.dataNode.plte.rgb,
                             });
                         },
-                        .Unknown => try writer.print("?", .{}),
                         else => |x| try writer.print("{any}", .{ x }),
+                        // _ => try writer.print("?", .{}),
                     }
                 },
                 .CyclicRedundancyCheck => try writer.print("CyclicRedundancyCheck", .{}),
@@ -497,128 +445,7 @@ pub fn printStepName(writer: anytype, parserState: *const ParserState) !void
 
 pub fn getKnownDataChunkType(chunkType: ChunkType) KnownDataChunkType
 {
-    const h = struct
-    {
-        fn chunkTypeEquals(
-            chunkType_: ChunkType,
-            knownChunkType: ChunkType) bool
-        {
-            const a = chunkType_.bytes[1 .. 4];
-            const b = knownChunkType.bytes[1 .. 4];
-            return std.mem.eql(u8, a, b);
-        }
-    };
-
-    switch (chunkType.bytes[0])
-    {
-        'I' =>
-        {
-            if (h.chunkTypeEquals(chunkType, KnownDataChunkTags.ImageHeader))
-            {
-                return .ImageHeader;
-            }
-            if (h.chunkTypeEquals(chunkType, KnownDataChunkTags.ImageData))
-            {
-                return .ImageData;
-            }
-            if (h.chunkTypeEquals(chunkType, KnownDataChunkTags.ImageEnd))
-            {
-                return .ImageEnd;
-            }
-        },
-        'P' =>
-        {
-            if (h.chunkTypeEquals(chunkType, KnownDataChunkTags.Palette))
-            {
-                return .Palette;
-            }
-        },
-        't' =>
-        {
-            if (h.chunkTypeEquals(chunkType, KnownDataChunkTags.Transparency))
-            {
-                return .Transparency;
-            }
-            if (h.chunkTypeEquals(chunkType, KnownDataChunkTags.Text))
-            {
-                return .Text;
-            }
-            if (h.chunkTypeEquals(chunkType, KnownDataChunkTags.LastModificationTime))
-            {
-                return .LastModificationTime;
-            }
-        },
-        'g' =>
-        {
-            if (h.chunkTypeEquals(chunkType, KnownDataChunkTags.Gamma))
-            {
-                return .Gamma;
-            }
-        },
-        'c' =>
-        {
-            if (h.chunkTypeEquals(chunkType, KnownDataChunkTags.Chromaticity))
-            {
-                return .Chromaticity;
-            }
-        },
-        's' =>
-        {
-            if (h.chunkTypeEquals(chunkType, KnownDataChunkTags.ColorSpace))
-            {
-                return .ColorSpace;
-            }
-            if (h.chunkTypeEquals(chunkType, KnownDataChunkTags.SuggestedPalette))
-            {
-                return .SuggestedPalette;
-            }
-            if (h.chunkTypeEquals(chunkType, KnownDataChunkTags.SignificantBits))
-            {
-                return .SignificantBits;
-            }
-        },
-        'i' =>
-        {
-            if (h.chunkTypeEquals(chunkType, KnownDataChunkTags.ICCProfile))
-            {
-                return .ICCProfile;
-            }
-            if (h.chunkTypeEquals(chunkType, KnownDataChunkTags.InternationalText))
-            {
-                return .InternationalText;
-            }
-        },
-        'z' =>
-        {
-            if (h.chunkTypeEquals(chunkType, KnownDataChunkTags.CompressedText))
-            {
-                return .CompressedText;
-            }
-        },
-        'b' => 
-        {
-            if (h.chunkTypeEquals(chunkType, KnownDataChunkTags.Background))
-            {
-                return .Background;
-            }
-        },
-        'p' =>
-        {
-            if (h.chunkTypeEquals(chunkType, KnownDataChunkTags.PhysicalPixelDimensions))
-            {
-                return .PhysicalPixelDimensions;
-            }
-        },
-        'h' =>
-        {
-            if (h.chunkTypeEquals(chunkType, KnownDataChunkTags.PaletteHistogram))
-            {
-                return .PaletteHistogram;
-            }
-        },
-        else => {},
-    }
-    return .Unknown;
+    return @enumFromInt(chunkType.value);
 }
 
 pub fn parseTopLevelNode(context: *ParserContext) !bool
@@ -779,12 +606,7 @@ pub fn parseChunkItem(context: *ParserContext) !bool
                         return error.PaletteUnrepresentableWithBitDepth;
                     }
                 },
-                .Unknown =>
-                {
-                    chunk.dataNode = .{ .bytesSkipped = 0 };
-                    chunk.node.dataNode.data = .{ .none = {} };
-                },
-                else =>
+                _ =>
                 {
                     chunk.dataNode = .{ .bytesSkipped = 0 };
                     chunk.node.dataNode.data = .{ .none = {} };
@@ -935,8 +757,7 @@ pub fn parseChunkItem(context: *ParserContext) !bool
                         break :done (plteState.bytesRead == totalBytes);
                     },
                     // Let's just skip for now.
-                    // .Unknown =>
-                    else =>
+                    _ =>
                     {
                         const bytesSkipped = &chunk.dataNode.bytesSkipped;
                         const totalBytes = chunk.node.dataNode.base.length;
