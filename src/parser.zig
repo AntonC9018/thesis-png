@@ -19,6 +19,7 @@ pub const ParserState = struct
     isEnd: bool = false,
     // True after the first IDAT chunk data start being parsed.
     isData: bool = false,
+    paletteLength: ?u32 = null,
 };
 
 pub fn isParserStateTerminal(state: *const ParserState) bool 
@@ -73,6 +74,7 @@ pub const ChunkDataNode = struct
     { 
         ihdr: IHDR,
         plte: PLTE,
+        transparency: TransparencyData,
         none: void,
     },
 };
@@ -88,16 +90,56 @@ pub const IHDR = struct
     interlaceMethod: InterlaceMethod,
 };
 
-pub const RGB = struct
-{
-    r: u8,
-    g: u8,
-    b: u8,
-};
+pub const RGB = GenericRGB(u8);
 
 pub const PLTE = struct
 {
     colors: std.ArrayListUnmanaged(RGB),
+};
+
+pub const TransparencyKind = enum
+{
+    IndexedColor,
+    Grayscale,
+    TrueColor,
+};
+
+pub fn GenericRGB(comptime t: type) type
+{
+    return struct
+    {
+        r: t,
+        g: t,
+        b: t,
+
+        const Self = @This();
+
+        pub fn at(self: anytype, index: u8)
+            switch (@TypeOf(self))
+            {
+                *Self => *t,
+                *const Self => *const t,
+                else => unreachable,
+            }
+        {
+            return switch (index)
+            {
+                0 => &self.r,
+                1 => &self.g,
+                2 => &self.b,
+                else => unreachable,
+            };
+        }
+    };
+}
+
+const RGB16 = GenericRGB(u16);
+
+pub const TransparencyData = union(enum)
+{
+    paletteEntryAlphaValues: std.ArrayListUnmanaged(u8),
+    gray: u16,
+    rgb: RGB16,
 };
 
 pub const BitDepth = u8;
@@ -260,6 +302,13 @@ pub const DataNodeParserState = union
     bytesSkipped: u32,
     plte: PLTEState, 
     none: void,
+    transparency: TransparencyState,
+};
+
+pub const TransparencyState = union
+{
+    bytesRead: u32,
+    rgbIndex: u2,
 };
 
 pub const IHDRParserStateKey = enum(u32)
@@ -504,7 +553,7 @@ pub fn parseNextNode(context: *ParserContext) !bool
 
 fn readPngU32(sequence: *pipelines.Sequence) !u32
 {
-    const value = try pipelines.readNetworkU32(sequence);
+    const value = try pipelines.readNetworkUnsigned(sequence, u32);
     if (value > 0x80000000)
     {
         return error.UnsignedValueTooLarge;
@@ -533,12 +582,11 @@ pub fn parseChunkItem(context: *ParserContext) !bool
     {
         .Length => 
         {
-            const length = try pipelines.readNetworkU32(context.sequence);
-            // The spec says it must not exceed 2^31
-            if (length > 0x80000000)
+            const length = readPngU32(context.sequence)
+            catch
             {
-                return error.LengthTooLarge;
-            }
+                return error.LengthValueTooLarge;
+            };
 
             chunk.node.byteLength = length;
             chunk.key = .ChunkType;
@@ -566,222 +614,13 @@ pub fn parseChunkItem(context: *ParserContext) !bool
                 .length = chunk.node.byteLength,
             };
 
-            const knownChunkType = getKnownDataChunkType(chunkType);
-            if (context.state.imageHeader == null and knownChunkType != .ImageHeader)
-            {
-                return error.IHDRChunkNotFirst;
-            }
-
-            switch (knownChunkType)
-            {
-                .ImageHeader =>
-                {
-                    chunk.dataNode = .{ .ihdr = IHDRParserStateKey.Initial };
-                    chunk.node.dataNode.data = .{ .ihdr = std.mem.zeroes(IHDR) };
-                },
-                .Palette =>
-                {
-                    chunk.dataNode = .{ .plte = std.mem.zeroes(PLTEState) };
-                    chunk.node.dataNode.data = .{ .plte = std.mem.zeroes(PLTE) };
-
-                    if (chunk.node.byteLength % 3 != 0)
-                    {
-                        return error.PaletteLengthNotDivisibleByThree;
-                    }
-
-                    const header = context.state.imageHeader.?;
-                    switch (header.colorType.flags)
-                    {
-                        0, ColorType.AlphaChannelUsed =>
-                        {
-                            return error.PaletteCannotBeUsedWithColorType;
-                        },
-                        else => {},
-                    }
-
-                    const representableRange = @as(u32, 1) << @as(u5, @intCast(header.bitDepth));
-                    const numColors = chunk.node.byteLength / 3;
-                    if (numColors > representableRange)
-                    {
-                        return error.PaletteUnrepresentableWithBitDepth;
-                    }
-                },
-                _ =>
-                {
-                    chunk.dataNode = .{ .bytesSkipped = 0 };
-                    chunk.node.dataNode.data = .{ .none = {} };
-                },
-            }
+            try initChunkDataNode(context, chunkType);
         },
         .Data =>
         {
             var dataNode = &chunk.node.dataNode;
 
             const done = done:
-            {
-                const knownChunkType = getKnownDataChunkType(chunk.node.chunkType);
-                switch (knownChunkType)
-                {
-                    .ImageHeader =>
-                    {
-                        const ihdrStateKey = &chunk.dataNode.ihdr;
-                        const ihdr = &dataNode.data.ihdr;
-                        switch (ihdrStateKey.*)
-                        {
-                            .Width => 
-                            {
-                                const value = try readPngU32Dimension(context.sequence);
-                                ihdr.width = value;
-                                // std.debug.print("Width: {}\n", .{ ihdr.width });
-                                ihdrStateKey.* = .Height;
-                            },
-                            .Height =>
-                            {
-                                const value = try readPngU32Dimension(context.sequence);
-                                ihdr.height = value;
-                                // std.debug.print("Height: {}\n", .{ ihdr.height });
-                                ihdrStateKey.* = .BitDepth;
-                            },
-                            .BitDepth =>
-                            {
-                                const value = try pipelines.removeFirst(context.sequence);
-                                ihdr.bitDepth = value;
-                                if (!isBitDepthValid(value))
-                                {
-                                    return error.InvalidBitDepth;
-                                }
-                                ihdrStateKey.* = .ColorType;
-                            },
-                            .ColorType =>
-                            {
-                                const value = try pipelines.removeFirst(context.sequence);
-                                ihdr.colorType = .{ .flags = value };
-                                if (!isColorTypeValid(ihdr.colorType))
-                                {
-                                    return error.InvalidColorType;
-                                }
-                                if (!isColorTypeAllowedForBitDepth(ihdr.bitDepth, ihdr.colorType))
-                                {
-                                    return error.ColorTypeNotAllowedForBitDepth;
-                                }
-                                ihdrStateKey.* = .CompressionMethod;
-                            },
-                            .CompressionMethod =>
-                            {
-                                const value = try pipelines.removeFirst(context.sequence);
-                                ihdr.compressionMethod = value;
-                                if (!isCompressionMethodValid(value))
-                                {
-                                    return error.InvalidCompressionMethod;
-                                }
-                                ihdrStateKey.* = .FilterMethod;
-                            },
-                            .FilterMethod =>
-                            {
-                                const value = try pipelines.removeFirst(context.sequence);
-                                ihdr.filterMethod = value;
-                                if (!isFilterMethodValid(value))
-                                {
-                                    return error.InvalidFilterMethod;
-                                }
-                                ihdrStateKey.* = .InterlaceMethod;
-                            },
-                            .InterlaceMethod =>
-                            {
-                                const value = try pipelines.removeFirst(context.sequence);
-                                const enumValue: InterlaceMethod = @enumFromInt(value);
-                                ihdr.interlaceMethod = enumValue;
-                                switch (enumValue)
-                                {
-                                    .None, .Adam7 => {},
-                                    _ => return error.InvalidInterlaceMethod,
-                                }
-                                ihdrStateKey.* = .Done;
-                                context.state.imageHeader = ihdr.*;
-                                break :done true;
-                            },
-                            .Done => unreachable,
-                        }
-                        break :done false;
-                    },
-                    .Palette =>
-                    {
-                        const plteState = &chunk.dataNode.plte;
-                        const plteNode = &dataNode.data.plte;
-                        const totalBytes = chunk.node.dataNode.base.length;
-
-                        std.debug.assert(plteState.bytesRead <= totalBytes);
-
-                        if (plteState.bytesRead < totalBytes)
-                        {
-                            const bytesToRead = totalBytes - plteState.bytesRead;
-                            const bytesToReadNowCount = @min(bytesToRead, context.sequence.len());
-                            if (bytesToReadNowCount == 0)
-                            {
-                                return error.NotEnoughBytes;
-                            }
-
-                            const byteCountToReadUntil = plteState.bytesRead + bytesToReadNowCount;
-
-                            while (plteState.bytesRead < byteCountToReadUntil)
-                            {
-                                const color = color:
-                                {
-                                    if (plteState.rgb != .None)
-                                    {
-                                        plteState.rgb = RGBState.FirstColor;
-                                        // We're gonna have a memory leak if we don't move the list.
-                                        break :color try plteNode.colors.addOne(context.allocator);
-                                    }
-                                    const items = plteNode.colors.items;
-                                    break :color &items[items.len - 1];
-                                };
-
-                                const colorByte = colorByte:
-                                {
-                                    switch (plteState.rgb)
-                                    {
-                                        .R => break :colorByte &color.r,
-                                        .G => break :colorByte &color.g,
-                                        .B => break :colorByte &color.b,
-                                        .None => unreachable,
-                                    }
-                                };
-                                colorByte.* = pipelines.removeFirst(context.sequence) catch unreachable;
-
-                                plteState.rgb = plteState.rgb.next();
-                                plteState.bytesRead += 1;
-                            }
-                        }
-
-                        break :done (plteState.bytesRead == totalBytes);
-                    },
-                    // Let's just skip for now.
-                    _ =>
-                    {
-                        const bytesSkipped = &chunk.dataNode.bytesSkipped;
-                        const totalBytes = chunk.node.dataNode.base.length;
-
-                        std.debug.assert(bytesSkipped.* <= totalBytes);
-
-                        if (bytesSkipped.* < totalBytes)
-                        {
-                            const bytesLeftToSkip = totalBytes - bytesSkipped.*;
-                            const bytesToSkipNowCount = @min(bytesLeftToSkip, context.sequence.len());
-                            if (bytesToSkipNowCount == 0)
-                            {
-                                return error.NotEnoughBytes;
-                            }
-                            bytesSkipped.* += @intCast(bytesToSkipNowCount);
-
-                            const newStart = context.sequence.getPosition(bytesToSkipNowCount);
-                            context.sequence.* = context.sequence.sliceFrom(newStart);
-                        }
-
-                        break :done (bytesSkipped.* == totalBytes);
-                    },
-                }
-            };
 
             if (done)
             {
@@ -798,6 +637,448 @@ pub fn parseChunkItem(context: *ParserContext) !bool
         .Done => unreachable,
     }
     return chunk.key == .Done;
+}
+
+
+fn initChunkDataNode(context: *ParserContext, chunkType: ChunkType) !void
+{
+    const knownChunkType = getKnownDataChunkType(chunkType);
+    if (context.state.imageHeader == null
+        and knownChunkType != .ImageHeader)
+    {
+        return error.IHDRChunkNotFirst;
+    }
+
+    if (context.state.isData 
+        and knownChunkType != .ImageEnd
+        and knownChunkType != .ImageData)
+    {
+        return error.OnlyEndOrDataAllowedAfterIDAT;
+    }
+
+    const chunk = &context.state.chunk;
+    const h = struct
+    {
+        fn skipChunkBytes(chunk_: *ChunkParserState) void
+        {
+            chunk_.dataNode = .{ .bytesSkipped = 0 };
+            chunk_.node.dataNode.data = .{ .none = {} };
+        }
+
+        fn setTransparencyData(chunk_: *ChunkParserState, data: TransparencyData) void
+        {
+            chunk_.node.dataNode.data = .{
+                .transparency = data,
+            };
+        }
+    };
+
+    switch (knownChunkType)
+    {
+        .ImageHeader =>
+        {
+            chunk.dataNode = .{ .ihdr = IHDRParserStateKey.Initial };
+            chunk.node.dataNode.data = .{ .ihdr = std.mem.zeroes(IHDR) };
+        },
+        .Palette =>
+        {
+            chunk.dataNode = .{ .plte = std.mem.zeroes(PLTEState) };
+            chunk.node.dataNode.data = .{ .plte = std.mem.zeroes(PLTE) };
+
+            if (chunk.node.byteLength % 3 != 0)
+            {
+                return error.PaletteLengthNotDivisibleByThree;
+            }
+
+            const header = context.state.imageHeader.?;
+            switch (header.colorType.flags)
+            {
+                0, ColorType.AlphaChannelUsed =>
+                {
+                    return error.PaletteCannotBeUsedWithColorType;
+                },
+                else => {},
+            }
+
+            const representableRange = @as(u32, 1) << @as(u5, @intCast(header.bitDepth));
+            const numColors = chunk.node.byteLength / 3;
+            if (numColors > representableRange)
+            {
+                return error.PaletteUnrepresentableWithBitDepth;
+            }
+        },
+        .ImageEnd =>
+        {
+            const length = chunk.node.byteLength;
+            if (length > 0)
+            {
+                return error.NonZeroLengthForIEND;
+            }
+
+            context.state.isEnd = true;
+            h.skipChunkBytes(chunk);
+        },
+        .ImageData =>
+        {
+            context.state.isData = true;
+            h.skipChunkBytes(chunk);
+        },
+        .Transparency =>
+        {
+            const length = chunk.node.byteLength;
+            switch (context.state.imageHeader.?.colorType.flags)
+            {
+                ColorType.ColorUsed | ColorType.PalleteUsed =>
+                {
+                    if (context.state.paletteLength == null)
+                    {
+                        return error.TransparencyWithoutPalette;
+                    }
+
+                    const maxLength = context.state.paletteLength.?;
+                    if (length > maxLength)
+                    {
+                        return error.TransparencyLengthExceedsPalette;
+                    }
+
+                    h.setTransparencyData(chunk, .{ .paletteEntryAlphaValues = .{} });
+
+                    chunk.dataNode = .{ 
+                        .transparency = .{ 
+                            .bytesRead = 0,
+                        }
+                    };
+                },
+                // Grayscale
+                0 =>
+                {
+                    if (length != 2)
+                    {
+                        error.GrayscaleTransparencyLengthMustBe2;
+                    }
+                    h.setTransparencyData(chunk, .{ .gray = 0 });
+
+                    chunk.dataNode = .{ .none = {} };
+                },
+                // True color
+                ColorType.ColorUsed =>
+                {
+                    if (length != 3 * 2)
+                    {
+                        error.TrueColorTransparencyLengthMustBe6;
+                    }
+                    h.setTransparencyData(chunk, .{ .rgb = std.mem.zeroes(RGB16) });
+
+                    chunk.dataNode = .{ 
+                        .transparency = .{ 
+                            .rgb = .R,
+                        }
+                    };
+                },
+                else =>
+                {
+                    error.BadColorTypeForTransparencyChunk;
+                },
+            }
+
+        },
+        _ => h.skipChunkBytes(chunk),
+    }
+}
+
+fn skipBytes(context: *ParserContext, chunk: *ChunkParserState) !bool
+{
+    const bytesSkipped = &chunk.dataNode.bytesSkipped;
+    const totalBytes = chunk.node.dataNode.base.length;
+
+    std.debug.assert(bytesSkipped.* <= totalBytes);
+
+    if (bytesSkipped.* < totalBytes)
+    {
+        const bytesLeftToSkip = totalBytes - bytesSkipped.*;
+        const bytesToSkipNowCount = @min(bytesLeftToSkip, context.sequence.len());
+        if (bytesToSkipNowCount == 0)
+        {
+            return error.NotEnoughBytes;
+        }
+        bytesSkipped.* += @intCast(bytesToSkipNowCount);
+
+        const newStart = context.sequence.getPosition(bytesToSkipNowCount);
+        context.sequence.* = context.sequence.sliceFrom(newStart);
+    }
+
+    return (bytesSkipped.* == totalBytes);
+}
+
+fn removeAndProcessAsManyBytesAsAvailable(
+    context: *ParserContext,
+    bytesRead: *u32,
+    // Must have a function each that takes in the byte.
+    // Can have an optional function init that takes the count.
+    functor: anytype) !bool
+{
+    const totalBytes = context.state.chunk.node.dataNode.base.length;
+    std.debug.assert(bytesRead.* <= totalBytes);
+
+    if (bytesRead.* == totalBytes)
+    {
+        return true;
+    }
+
+    const sequenceLength = context.sequence.len();
+    if (sequenceLength == 0)
+    {
+        return error.NotEnoughBytes;
+    }
+
+    const maxBytesToRead = totalBytes - bytesRead.*;
+    const bytesThatWillBeRead = @min(maxBytesToRead, sequenceLength);
+    const readPosition = context.sequence.getPosition(bytesThatWillBeRead);
+    const s = context.sequence.disect(readPosition);
+
+    if (@hasDecl(@TypeOf(functor), "initCount"))
+    {
+        try functor.initCount(bytesThatWillBeRead);
+    }
+
+    bytesRead.* += bytesTheWillBeRead;
+    context.sequence.* = s.right;
+
+    if (@hasDecl(@TypeOf(functor), "sequence"))
+    {
+        functor.sequence(s.left);
+    }
+
+    if (@hasDecl(@TypeOf(functor), "each"))
+    {
+        const iter = pipelines.SegmentIterator.create(s.left).?;
+        while (true)
+        {
+            const slice = iter.current();
+            for (slice) |byte|
+            {
+                try functor.each(byte);
+            }
+            if (!iter.advance())
+            {
+                break;
+            }
+        }
+    }
+
+    return (bytesRead.* == totalBytes);
+}
+
+const PlteBytesProcessor = struct
+{
+    context: *ParserContext,
+    plteState: *PLTEState,
+    plteNode: *PLTE,
+
+    const Self = @This();
+
+    pub fn each(self: *Self, byte: u8) !void
+    {
+        const color = color:
+        {
+            if (self.plteState.rgb != .None)
+            {
+                self.plteState.rgb = RGBState.FirstColor;
+                // We're gonna have a memory leak if we don't move the list.
+                break :color try self.plteNode.colors.addOne(self.context.allocator);
+            }
+            const items = self.plteNode.colors.items;
+            break :color &items[items.len - 1];
+        };
+
+        const colorByte = colorByte:
+        {
+            switch (self.plteState.rgb)
+            {
+                .R => break :colorByte &color.r,
+                .G => break :colorByte &color.g,
+                .B => break :colorByte &color.b,
+                .None => unreachable,
+            }
+        };
+        colorByte.* = byte; 
+
+        self.plteState.rgb = self.plteState.rgb.next();
+    }
+};
+
+const TransparencyBytesProcessor = struct
+{
+    alphaValues: *std.ArrayListUnmanaged(u8),
+    allocator: std.mem.Allocator,
+
+    const Self = @This();
+
+    pub fn sequence(self: *Self, seq: pipelines.Sequence) !void
+    {
+        const len = seq.len();
+        const newItems = try self.alphaValues.addManyAsSlice(len);
+        seq.copyTo(newItems);
+    }
+};
+
+fn parseChunkData(context: *ParserContext) !bool
+{
+    const chunk = &context.state.chunk;
+    const knownChunkType = getKnownDataChunkType(chunk.node.chunkType);
+
+    switch (knownChunkType)
+    {
+        .ImageHeader =>
+        {
+            const ihdrStateKey = &chunk.dataNode.ihdr;
+            const ihdr = &dataNode.data.ihdr;
+            switch (ihdrStateKey.*)
+            {
+                .Width => 
+                {
+                    const value = try readPngU32Dimension(context.sequence);
+                    ihdr.width = value;
+                    // std.debug.print("Width: {}\n", .{ ihdr.width });
+                    ihdrStateKey.* = .Height;
+                },
+                .Height =>
+                {
+                    const value = try readPngU32Dimension(context.sequence);
+                    ihdr.height = value;
+                    // std.debug.print("Height: {}\n", .{ ihdr.height });
+                    ihdrStateKey.* = .BitDepth;
+                },
+                .BitDepth =>
+                {
+                    const value = try pipelines.removeFirst(context.sequence);
+                    ihdr.bitDepth = value;
+                    if (!isBitDepthValid(value))
+                    {
+                        return error.InvalidBitDepth;
+                    }
+                    ihdrStateKey.* = .ColorType;
+                },
+                .ColorType =>
+                {
+                    const value = try pipelines.removeFirst(context.sequence);
+                    ihdr.colorType = .{ .flags = value };
+                    if (!isColorTypeValid(ihdr.colorType))
+                    {
+                        return error.InvalidColorType;
+                    }
+                    if (!isColorTypeAllowedForBitDepth(ihdr.bitDepth, ihdr.colorType))
+                    {
+                        return error.ColorTypeNotAllowedForBitDepth;
+                    }
+                    ihdrStateKey.* = .CompressionMethod;
+                },
+                .CompressionMethod =>
+                {
+                    const value = try pipelines.removeFirst(context.sequence);
+                    ihdr.compressionMethod = value;
+                    if (!isCompressionMethodValid(value))
+                    {
+                        return error.InvalidCompressionMethod;
+                    }
+                    ihdrStateKey.* = .FilterMethod;
+                },
+                .FilterMethod =>
+                {
+                    const value = try pipelines.removeFirst(context.sequence);
+                    ihdr.filterMethod = value;
+                    if (!isFilterMethodValid(value))
+                    {
+                        return error.InvalidFilterMethod;
+                    }
+                    ihdrStateKey.* = .InterlaceMethod;
+                },
+                .InterlaceMethod =>
+                {
+                    const value = try pipelines.removeFirst(context.sequence);
+                    const enumValue: InterlaceMethod = @enumFromInt(value);
+                    ihdr.interlaceMethod = enumValue;
+                    switch (enumValue)
+                    {
+                        .None, .Adam7 => {},
+                        _ => return error.InvalidInterlaceMethod,
+                    }
+                    ihdrStateKey.* = .Done;
+                    context.state.imageHeader = ihdr.*;
+                    return true;
+                },
+                .Done => unreachable,
+            }
+            return false;
+        },
+        .Palette =>
+        {
+            const functor = PlteBytesProcessor
+            {
+                .context = context,
+                .plteState = &chunk.dataNode.plte,
+                .plteNode = &dataNode.data.plte,
+            };
+
+            const done = try removeAndProcessAsManyBytesAsAvailable(
+                context,
+                &functor.plteState.bytesRead,
+                functor);
+
+            if (done)
+            {
+                // This can be computed prior though.
+                context.state.paletteLength = plteNode.colors.items.length;
+            }
+
+            return done;
+        },
+        .ImageEnd =>
+        {
+            std.debug.assert(chunk.node.byteLength == 0);
+            return true;
+        },
+        .ImageData => skipBytes(context, chunk),
+        .Transparency =>
+        {
+            switch (chunk.node.dataNode.data.transparency)
+            {
+                .paletteEntryAlphaValues => |*alphaValues|
+                {
+                    const bytesRead = &chunk.dataNode.transparency.bytesRead;
+                    const functor = TransparencyBytesProcessor
+                    {
+                        .alphaValues = alphaValues,
+                        .allocator = context.allocator,
+                    };
+
+                    return try removeAndProcessAsManyBytesAsAvailable(context, bytesRead, functor);
+                },
+                .gray => |*gray|
+                {
+                    *gray = try pipelines.readNetworkUnsigned(context.sequence, u16);
+                    return true;
+                },
+                .rgb => |*rgb|
+                {
+                    const rgbIndex = &chunk.dataNode.transparency.rgbIndex;
+                    while (true)
+                    {
+                        const value = try pipelines.readNetworkUnsigned(context.sequence, u16);
+                        rgb.at(rgbIndex.*).* = value;
+
+                        if (rgbIndex.* == 2)
+                        {
+                            return true;
+                        }
+                        rgbIndex.* += 1;
+                    }
+                },
+            }
+        },
+        // Let's just skip for now.
+        _ => skipBytes(context, chunk),
+    }
 }
 
 pub fn createParserState() ParserState

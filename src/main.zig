@@ -141,6 +141,11 @@ fn doMaximumAmountOfParsing(
             .StartChunk => unreachable,
         }
 
+        if (context.state.isEnd)
+        {
+            return;
+        }
+
         context.state.action = .StartChunk;
     }
 }
