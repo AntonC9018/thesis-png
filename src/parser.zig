@@ -76,6 +76,7 @@ pub const ChunkDataNode = struct
         plte: PLTE,
         transparency: TransparencyData,
         none: void,
+        gamma: Gamma,
     },
 };
 
@@ -141,6 +142,8 @@ pub const TransparencyData = union(enum)
     gray: u16,
     rgb: RGB16,
 };
+
+pub const Gamma = u32;
 
 pub const BitDepth = u8;
 
@@ -618,10 +621,7 @@ pub fn parseChunkItem(context: *ParserContext) !bool
         },
         .Data =>
         {
-            var dataNode = &chunk.node.dataNode;
-
-            const done = done:
-
+            const done = parseChunkData(context);
             if (done)
             {
                 chunk.key = .CyclicRedundancyCheck;
@@ -782,6 +782,11 @@ fn initChunkDataNode(context: *ParserContext, chunkType: ChunkType) !void
             }
 
         },
+        .Gamma =>
+        {
+            chunk.dataNode = .{ .none = {} };
+            chunk.node.dataNode.data = .{ .gamma = 0 };
+        },
         _ => h.skipChunkBytes(chunk),
     }
 }
@@ -841,7 +846,7 @@ fn removeAndProcessAsManyBytesAsAvailable(
         try functor.initCount(bytesThatWillBeRead);
     }
 
-    bytesRead.* += bytesTheWillBeRead;
+    bytesRead.* += bytesThatWillBeRead;
     context.sequence.* = s.right;
 
     if (@hasDecl(@TypeOf(functor), "sequence"))
@@ -926,28 +931,29 @@ fn parseChunkData(context: *ParserContext) !bool
 {
     const chunk = &context.state.chunk;
     const knownChunkType = getKnownDataChunkType(chunk.node.chunkType);
+    const dataNode = &chunk.node.dataNode;
 
     switch (knownChunkType)
     {
         .ImageHeader =>
         {
-            const ihdrStateKey = &chunk.dataNode.ihdr;
+            const ihdrState = &chunk.dataNode.ihdr;
             const ihdr = &dataNode.data.ihdr;
-            switch (ihdrStateKey.*)
+            switch (ihdrState.*)
             {
                 .Width => 
                 {
                     const value = try readPngU32Dimension(context.sequence);
                     ihdr.width = value;
                     // std.debug.print("Width: {}\n", .{ ihdr.width });
-                    ihdrStateKey.* = .Height;
+                    ihdrState.* = .Height;
                 },
                 .Height =>
                 {
                     const value = try readPngU32Dimension(context.sequence);
                     ihdr.height = value;
                     // std.debug.print("Height: {}\n", .{ ihdr.height });
-                    ihdrStateKey.* = .BitDepth;
+                    ihdrState.* = .BitDepth;
                 },
                 .BitDepth =>
                 {
@@ -957,7 +963,7 @@ fn parseChunkData(context: *ParserContext) !bool
                     {
                         return error.InvalidBitDepth;
                     }
-                    ihdrStateKey.* = .ColorType;
+                    ihdrState.* = .ColorType;
                 },
                 .ColorType =>
                 {
@@ -971,7 +977,7 @@ fn parseChunkData(context: *ParserContext) !bool
                     {
                         return error.ColorTypeNotAllowedForBitDepth;
                     }
-                    ihdrStateKey.* = .CompressionMethod;
+                    ihdrState.* = .CompressionMethod;
                 },
                 .CompressionMethod =>
                 {
@@ -981,7 +987,7 @@ fn parseChunkData(context: *ParserContext) !bool
                     {
                         return error.InvalidCompressionMethod;
                     }
-                    ihdrStateKey.* = .FilterMethod;
+                    ihdrState.* = .FilterMethod;
                 },
                 .FilterMethod =>
                 {
@@ -991,7 +997,7 @@ fn parseChunkData(context: *ParserContext) !bool
                     {
                         return error.InvalidFilterMethod;
                     }
-                    ihdrStateKey.* = .InterlaceMethod;
+                    ihdrState.* = .InterlaceMethod;
                 },
                 .InterlaceMethod =>
                 {
@@ -1003,7 +1009,7 @@ fn parseChunkData(context: *ParserContext) !bool
                         .None, .Adam7 => {},
                         _ => return error.InvalidInterlaceMethod,
                     }
-                    ihdrStateKey.* = .Done;
+                    ihdrState.* = .Done;
                     context.state.imageHeader = ihdr.*;
                     return true;
                 },
@@ -1013,11 +1019,12 @@ fn parseChunkData(context: *ParserContext) !bool
         },
         .Palette =>
         {
+            const plteNode = &dataNode.data.plte;
             const functor = PlteBytesProcessor
             {
                 .context = context,
                 .plteState = &chunk.dataNode.plte,
-                .plteNode = &dataNode.data.plte,
+                .plteNode = &plteNode,
             };
 
             const done = try removeAndProcessAsManyBytesAsAvailable(
@@ -1056,25 +1063,27 @@ fn parseChunkData(context: *ParserContext) !bool
                 },
                 .gray => |*gray|
                 {
-                    *gray = try pipelines.readNetworkUnsigned(context.sequence, u16);
+                    gray.* = try pipelines.readNetworkUnsigned(context.sequence, u16);
                     return true;
                 },
                 .rgb => |*rgb|
                 {
                     const rgbIndex = &chunk.dataNode.transparency.rgbIndex;
-                    while (true)
+                    while (rgbIndex.* < 2)
                     {
                         const value = try pipelines.readNetworkUnsigned(context.sequence, u16);
                         rgb.at(rgbIndex.*).* = value;
-
-                        if (rgbIndex.* == 2)
-                        {
-                            return true;
-                        }
                         rgbIndex.* += 1;
                     }
+                    return true;
                 },
             }
+        },
+        .Gamma =>
+        {
+            // The spec doesn't say anything about this value being limited.
+            dataNode.data.gamma = try pipelines.readNetworkUnsigned(context.sequence, u32);
+            return true;
         },
         // Let's just skip for now.
         _ => skipBytes(context, chunk),
