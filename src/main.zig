@@ -53,7 +53,7 @@ pub fn main() !void
                         std.debug.print("Signature mismatch\n", .{});
                         break :e true;
                     },
-                    error.LengthTooLarge => 
+                    error.LengthValueTooLarge => 
                     {
                         std.debug.print("Length too large\n", .{});
                         break :e true;
@@ -110,7 +110,11 @@ pub fn main() !void
             {
                 std.debug.print("  {any}\n", .{ chunk.dataNode.data.plte.colors.items });
             },
-            _ => {},
+            .Gamma =>
+            {
+                std.debug.print("  {any}\n", .{ chunk.dataNode.data.gamma });
+            },
+            else => {},
         }
     }
 }

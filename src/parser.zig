@@ -726,7 +726,7 @@ pub fn parseChunkItem(context: *ParserContext) !bool
         .CyclicRedundancyCheck =>
         {
             // Just skip for now
-            const value = try pipelines.readNetworkU32(context.sequence);
+            const value = try pipelines.readNetworkUnsigned(context.sequence, u32);
             chunk.node.crc = .{ .value = value };
             chunk.key = .Done;
         },
@@ -1145,7 +1145,10 @@ fn parseChunkData(context: *ParserContext) !bool
             std.debug.assert(chunk.node.byteLength == 0);
             return true;
         },
-        .ImageData => try skipBytes(context, chunk),
+        .ImageData =>
+        {
+            return try skipBytes(context, chunk);
+        },
         .Transparency =>
         {
             switch (chunk.node.dataNode.data.transparency)
@@ -1214,7 +1217,7 @@ fn parseChunkData(context: *ParserContext) !bool
             return true;
         },
         // Let's just skip for now.
-        else => try skipBytes(context, chunk),
+        else => return try skipBytes(context, chunk),
     }
 }
 
