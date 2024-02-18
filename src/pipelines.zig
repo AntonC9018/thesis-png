@@ -1112,7 +1112,7 @@ pub fn readNetworkUnsigned(self: *Sequence, comptime resultType: type) error{Not
         return error.NotEnoughBytes;
     }
 
-    const bytes = try readNetworkUnsigned_impl(self, size);
+    const bytes = readNetworkUnsigned_impl(self, size);
     const result: resultType = @bitCast(bytes);
     return result;
 }

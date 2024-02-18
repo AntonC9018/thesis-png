@@ -213,7 +213,8 @@ pub const RenderingIntent = enum(u8)
 
     pub fn isValid(self: RenderingIntent) bool
     {
-        return @intFromEnum(self) <= @intFromEnum(.AbsoluteColorimetric);
+        const max = @intFromEnum(RenderingIntent.AbsoluteColorimetric);
+        return @intFromEnum(self) <= max;
     }
 };
 
@@ -716,7 +717,7 @@ pub fn parseChunkItem(context: *ParserContext) !bool
         },
         .Data =>
         {
-            const done = parseChunkData(context);
+            const done = try parseChunkData(context);
             if (done)
             {
                 chunk.key = .CyclicRedundancyCheck;
@@ -849,7 +850,7 @@ fn initChunkDataNode(context: *ParserContext, chunkType: ChunkType) !void
                 {
                     if (length != 2)
                     {
-                        error.GrayscaleTransparencyLengthMustBe2;
+                        return error.GrayscaleTransparencyLengthMustBe2;
                     }
                     h.setTransparencyData(chunk, .{ .gray = 0 });
 
@@ -860,19 +861,15 @@ fn initChunkDataNode(context: *ParserContext, chunkType: ChunkType) !void
                 {
                     if (length != 3 * 2)
                     {
-                        error.TrueColorTransparencyLengthMustBe6;
+                        return error.TrueColorTransparencyLengthMustBe6;
                     }
                     h.setTransparencyData(chunk, .{ .rgb = std.mem.zeroes(RGB16) });
 
-                    chunk.dataNode = .{ 
-                        .transparency = .{ 
-                            .rgb = .R,
-                        }
-                    };
+                    chunk.dataNode = .{ .transparency = .{ .rgbIndex = 0 } };
                 },
                 else =>
                 {
-                    error.BadColorTypeForTransparencyChunk;
+                    return error.BadColorTypeForTransparencyChunk;
                 },
             }
 
@@ -884,15 +881,15 @@ fn initChunkDataNode(context: *ParserContext, chunkType: ChunkType) !void
         },
         .PrimaryChrom =>
         {
-            chunk.dataNode = .{ .primaryChrom = .{ .index = 0 } };
+            chunk.dataNode = .{ .primaryChrom = .{ .value = 0 } };
             chunk.node.dataNode.data = .{ .primaryChroms = std.mem.zeroes(PrimaryChroms) };
         },
         .ColorSpace =>
         {
             chunk.dataNode = .{ .none = {} };
-            chunk.node.dataNode.data = .{ .renderingIntent = 0 };
+            chunk.node.dataNode.data = .{ .renderingIntent = std.mem.zeroes(RenderingIntent) };
         },
-        _ => h.skipChunkBytes(chunk),
+        else => h.skipChunkBytes(chunk),
     }
 }
 
@@ -942,7 +939,7 @@ fn removeAndProcessAsManyBytesAsAvailable(
     }
 
     const maxBytesToRead = totalBytes - bytesRead.*;
-    const bytesThatWillBeRead = @min(maxBytesToRead, sequenceLength);
+    const bytesThatWillBeRead: u32 = @intCast(@min(maxBytesToRead, sequenceLength));
     const readPosition = context.sequence.getPosition(bytesThatWillBeRead);
     const s = context.sequence.disect(readPosition);
 
@@ -956,12 +953,12 @@ fn removeAndProcessAsManyBytesAsAvailable(
 
     if (@hasDecl(@TypeOf(functor), "sequence"))
     {
-        functor.sequence(s.left);
+        try functor.sequence(s.left);
     }
 
     if (@hasDecl(@TypeOf(functor), "each"))
     {
-        const iter = pipelines.SegmentIterator.create(s.left).?;
+        var iter = pipelines.SegmentIterator.create(&s.left).?;
         while (true)
         {
             const slice = iter.current();
@@ -985,9 +982,7 @@ const PlteBytesProcessor = struct
     plteState: *PLTEState,
     plteNode: *PLTE,
 
-    const Self = @This();
-
-    pub fn each(self: *Self, byte: u8) !void
+    pub fn each(self: *const PlteBytesProcessor, byte: u8) !void
     {
         const color = color:
         {
@@ -1022,12 +1017,10 @@ const TransparencyBytesProcessor = struct
     alphaValues: *std.ArrayListUnmanaged(u8),
     allocator: std.mem.Allocator,
 
-    const Self = @This();
-
-    pub fn sequence(self: *Self, seq: pipelines.Sequence) !void
+    pub fn sequence(self: *const TransparencyBytesProcessor, seq: pipelines.Sequence) !void
     {
         const len = seq.len();
-        const newItems = try self.alphaValues.addManyAsSlice(len);
+        const newItems = try self.alphaValues.addManyAsSlice(self.allocator, len);
         seq.copyTo(newItems);
     }
 };
@@ -1125,22 +1118,24 @@ fn parseChunkData(context: *ParserContext) !bool
         .Palette =>
         {
             const plteNode = &dataNode.data.plte;
+            const plteState = &chunk.dataNode.plte;
+
             const functor = PlteBytesProcessor
             {
                 .context = context,
-                .plteState = &chunk.dataNode.plte,
-                .plteNode = &plteNode,
+                .plteState = plteState,
+                .plteNode = plteNode,
             };
 
             const done = try removeAndProcessAsManyBytesAsAvailable(
                 context,
-                &functor.plteState.bytesRead,
+                &plteState.bytesRead,
                 functor);
 
             if (done)
             {
                 // This can be computed prior though.
-                context.state.paletteLength = plteNode.colors.items.length;
+                context.state.paletteLength = @intCast(plteNode.colors.items.len);
             }
 
             return done;
@@ -1150,7 +1145,7 @@ fn parseChunkData(context: *ParserContext) !bool
             std.debug.assert(chunk.node.byteLength == 0);
             return true;
         },
-        .ImageData => skipBytes(context, chunk),
+        .ImageData => try skipBytes(context, chunk),
         .Transparency =>
         {
             switch (chunk.node.dataNode.data.transparency)
@@ -1200,7 +1195,7 @@ fn parseChunkData(context: *ParserContext) !bool
 
                 const vector = chromState.vector();
                 const index = chromState.coord();
-                const targetPointer = primaryChroms.values[vector].values[index];
+                const targetPointer = &primaryChroms.values[vector].values[index];
                 targetPointer.* = value;
 
                 chromState.advance();
@@ -1219,7 +1214,7 @@ fn parseChunkData(context: *ParserContext) !bool
             return true;
         },
         // Let's just skip for now.
-        _ => skipBytes(context, chunk),
+        else => try skipBytes(context, chunk),
     }
 }
 
