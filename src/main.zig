@@ -26,6 +26,10 @@ pub fn main() !void
 
     var parserState = parser.createParserState();
     var chunks = std.ArrayList(parser.ChunkNode).init(allocator);
+    const settings = parser.ParserSettings
+    {
+        .logChunkStart = true,
+    };
 
     outerLoop: while (true)
     {
@@ -35,6 +39,7 @@ pub fn main() !void
             .state = &parserState,
             .sequence = &readResult.sequence,
             .allocator = allocator,
+            .settings = &settings,
         };
 
         doMaximumAmountOfParsing(&context, &chunks)

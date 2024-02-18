@@ -483,6 +483,16 @@ pub const Sequence = struct
         return wholeSegment[start_.offset ..];
     }
 
+    pub fn peekFirstByte(self: *const Self) ?u8
+    {
+        if (self.isEmpty())
+        {
+            return null;
+        }
+        const firstSegment = self.getFirstSegment();
+        return firstSegment[0];
+    }
+
     pub fn debugPrint(self: *const Self) void
     {
         const allocator = std.heap.page_allocator;

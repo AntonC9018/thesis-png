@@ -27,11 +27,17 @@ pub fn isParserStateTerminal(state: *const ParserState) bool
     return state.action == .StartChunk;
 }
 
+pub const ParserSettings = struct
+{
+    logChunkStart: bool,
+};
+
 pub const ParserContext = struct
 {
     state: *ParserState,
     sequence: *pipelines.Sequence,
     allocator: std.mem.Allocator,
+    settings: *ParserSettings,
 };
 
 pub const ChunkParserStateKey = enum 
@@ -600,7 +606,7 @@ pub fn parseTopLevelNode(context: *ParserContext) !bool
 {
     while (true)
     {
-        if (true)
+        if (context.settings.logChunkStart)
         {
             const outputStream = std.io.getStdOut().writer();
             try printStepName(outputStream, context.state);
