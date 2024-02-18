@@ -78,6 +78,7 @@ pub const ChunkDataNode = struct
         none: void,
         gamma: Gamma,
         primaryChroms: PrimaryChroms,
+        renderingIntent: RenderingIntent,
     },
 };
 
@@ -199,6 +200,20 @@ pub const PrimaryChroms = struct
     pub fn blue(self: anytype) _resultType(@TypeOf(self))
     {
         return &self.values[3];
+    }
+};
+
+pub const RenderingIntent = enum(u8)
+{
+    Perceptual = 0,
+    RelativeColorimetric = 1,
+    Saturation = 2,
+    AbsoluteColorimetric = 3,
+    _,
+
+    pub fn isValid(self: RenderingIntent) bool
+    {
+        return @intFromEnum(self) <= @intFromEnum(.AbsoluteColorimetric);
     }
 };
 
@@ -872,6 +887,11 @@ fn initChunkDataNode(context: *ParserContext, chunkType: ChunkType) !void
             chunk.dataNode = .{ .primaryChrom = .{ .index = 0 } };
             chunk.node.dataNode.data = .{ .primaryChroms = std.mem.zeroes(PrimaryChroms) };
         },
+        .ColorSpace =>
+        {
+            chunk.dataNode = .{ .none = {} };
+            chunk.node.dataNode.data = .{ .renderingIntent = 0 };
+        },
         _ => h.skipChunkBytes(chunk),
     }
 }
@@ -1184,6 +1204,17 @@ fn parseChunkData(context: *ParserContext) !bool
                 targetPointer.* = value;
 
                 chromState.advance();
+            }
+            return true;
+        },
+        .ColorSpace =>
+        {
+            const value = try pipelines.removeFirst(context.sequence);
+            const e: RenderingIntent = @enumFromInt(value);
+            dataNode.data.renderingIntent = e;
+            if (!e.isValid())
+            {
+                return error.InvalidRenderingIntent;
             }
             return true;
         },
