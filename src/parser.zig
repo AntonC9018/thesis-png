@@ -77,6 +77,7 @@ pub const ChunkDataNode = struct
         transparency: TransparencyData,
         none: void,
         gamma: Gamma,
+        primaryChroms: PrimaryChroms,
     },
 };
 
@@ -144,6 +145,62 @@ pub const TransparencyData = union(enum)
 };
 
 pub const Gamma = u32;
+
+pub const ChromVector = struct
+{
+    values: [2]u32,
+
+    fn _resultType(comptime ownType: type) type
+    {
+        return switch (ownType)
+        {
+            *ChromVector => *u32,
+            *const ChromVector => *const u32,
+            else => unreachable,
+        };
+    }
+
+    pub fn x(self: anytype) _resultType(@TypeOf(self))
+    {
+        return &self.values[0];
+    }
+    pub fn y(self: anytype) _resultType(@TypeOf(self))
+    {
+        return &self.values[1];
+    }
+};
+
+pub const PrimaryChroms = struct
+{
+    values: [4]ChromVector,
+
+    fn _resultType(comptime ownType: type) type
+    {
+        return switch (ownType)
+        {
+            *PrimaryChroms => *ChromVector,
+            *const PrimaryChroms => *const ChromVector,
+            else => unreachable,
+        };
+    }
+
+    pub fn whitePoint(self: anytype) _resultType(@TypeOf(self))
+    {
+        return &self.values[0];
+    }
+    pub fn red(self: anytype) _resultType(@TypeOf(self))
+    {
+        return &self.values[1];
+    }
+    pub fn green(self: anytype) _resultType(@TypeOf(self))
+    {
+        return &self.values[2];
+    }
+    pub fn blue(self: anytype) _resultType(@TypeOf(self))
+    {
+        return &self.values[3];
+    }
+};
 
 pub const BitDepth = u8;
 
@@ -306,12 +363,35 @@ pub const DataNodeParserState = union
     plte: PLTEState, 
     none: void,
     transparency: TransparencyState,
+    primaryChrom: PrimaryChromState,
 };
 
 pub const TransparencyState = union
 {
     bytesRead: u32,
     rgbIndex: u2,
+};
+
+pub const PrimaryChromState = struct
+{
+    value: u8,
+
+    pub fn vector(self: PrimaryChromState) u8
+    {
+        return self.value / 2;
+    }
+    pub fn coord(self: PrimaryChromState) u8
+    {
+        return self.value % 2;
+    }
+    pub fn notDone(self: PrimaryChromState) bool
+    {
+        return self.value < 8;
+    }
+    pub fn advance(self: *PrimaryChromState) void
+    {
+        self.value += 1;
+    }
 };
 
 pub const IHDRParserStateKey = enum(u32)
@@ -414,7 +494,7 @@ pub const KnownDataChunkType = enum(u32)
 
     Transparency = tag("tRNS"),
     Gamma = tag("gAMA"),
-    Chromaticity = tag("cHRM"),
+    PrimaryChrom = tag("cHRM"),
     ColorSpace = tag("sRGB"),
     ICCProfile = tag("iCCP"),
 
@@ -787,6 +867,11 @@ fn initChunkDataNode(context: *ParserContext, chunkType: ChunkType) !void
             chunk.dataNode = .{ .none = {} };
             chunk.node.dataNode.data = .{ .gamma = 0 };
         },
+        .PrimaryChrom =>
+        {
+            chunk.dataNode = .{ .primaryChrom = .{ .index = 0 } };
+            chunk.node.dataNode.data = .{ .primaryChroms = std.mem.zeroes(PrimaryChroms) };
+        },
         _ => h.skipChunkBytes(chunk),
     }
 }
@@ -1083,6 +1168,23 @@ fn parseChunkData(context: *ParserContext) !bool
         {
             // The spec doesn't say anything about this value being limited.
             dataNode.data.gamma = try pipelines.readNetworkUnsigned(context.sequence, u32);
+            return true;
+        },
+        .PrimaryChrom =>
+        {
+            const chromState = &chunk.dataNode.primaryChrom;
+            const primaryChroms = &dataNode.data.primaryChroms;
+            while (chromState.notDone())
+            {
+                const value = try pipelines.readNetworkUnsigned(context.sequence, u32);
+
+                const vector = chromState.vector();
+                const index = chromState.coord();
+                const targetPointer = primaryChroms.values[vector].values[index];
+                targetPointer.* = value;
+
+                chromState.advance();
+            }
             return true;
         },
         // Let's just skip for now.
