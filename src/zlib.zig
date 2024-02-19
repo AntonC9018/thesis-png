@@ -637,7 +637,7 @@ test "huffman tree correct"
         var iter = tree.iterator();
         while (iter.next()) |entry|
         {
-            const code: u5 = @intCast(entry.key_ptr.*);
+            const code: u4 = @intCast(entry.key_ptr.*);
             const letter = entry.value_ptr.* + 'A';
             std.debug.print("letter: {c}; code: {b}\n", .{ letter, code });
         }
