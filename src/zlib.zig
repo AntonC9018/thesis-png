@@ -115,6 +115,7 @@ const SymbolState = union(enum)
     {
         code8: u8,
     },
+    Code9Value: u9,
     Length: struct
     {
         codeRemapped: u8,
@@ -348,6 +349,11 @@ fn readSymbol(context: *DeflateContext) !bool
                         .codeRemapped = codeRemapped,
                     }
                 };
+                if (codeRemapped >= (286 - lengthCodeStart))
+                {
+                    return error.LengthCodeTooLarge;
+                }
+
                 return false;
             }
 
@@ -369,6 +375,7 @@ fn readSymbol(context: *DeflateContext) !bool
                 return true;
             }
 
+            symbol.* = .{ .Code9Value = code9 };
             return error.DisallowedDeflateCodeValue;
         },
         .Length => |l|
@@ -386,17 +393,17 @@ fn readSymbol(context: *DeflateContext) !bool
         .DistanceCode => |d|
         {
             const distanceCode = try readNBits(context, 5);
-            if (distanceCode >= 30)
-            {
-                return error.InvalidDistanceCode;
-            }
-
             symbol.* = .{
                 .Distance = .{
                     .length = d.length,
                     .distanceCode = distanceCode,
                 },
             };
+
+            if (distanceCode >= 30)
+            {
+                return error.InvalidDistanceCode;
+            }
         },
         .Distance => |d|
         {
