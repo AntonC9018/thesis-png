@@ -89,6 +89,7 @@ const DeflateContext = struct
 {
     sequence: *pipelines.Sequence,
     state: *DeflateState,
+    allocator: std.mem.Allocator,
 };
 
 const DeflateState = struct
@@ -486,3 +487,100 @@ pub fn deflate(context: *DeflateContext) !void
         },
     }
 }
+
+const HuffmanTree = std.HashMapUnmanaged(
+    u16,
+    u8,
+    struct
+    {
+        fn hash(key: u16) u16
+        {
+            return key;
+        }
+        fn eql(a: u8, b: u8) bool
+        {
+            return a == b;
+        }
+    },
+    80);
+
+fn maxValue(array: anytype) @TypeOf(array[0])
+{
+    var result = array[0];
+    for (array[1 ..]) |value|
+    {
+        if (value > result)
+        {
+            result = value;
+        }
+    }
+    return result;
+}
+
+fn generateHuffmanTree(
+    context: *DeflateContext,
+    bitLensBySymbol: []const u8) HuffmanTree
+{
+    const maxBits = maxValue(bitLensBySymbol);
+    if (maxBits > 15)
+    {
+        return error.NotImplementedForMoreThan15Bits;
+    }
+
+    const smallestCodeByCodeLength = context.allocator.alloc(u16, maxBits);
+    defer context.allocator.free(smallestCodeByCodeLength);
+
+    const numberOfCodesByCodeLength = context.allocator.alloc(u16, maxBits);
+    defer context.allocator.free(numberOfCodesByCodeLength);
+    @memset(numberOfCodesByCodeLength, 0);
+    for (bitLensBySymbol) |bitLength|
+    {
+        numberOfCodesByCodeLength[bitLength - 1] += 1;
+    }
+
+    {
+        smallestCodeByCodeLength[0] = 0;
+        for (1 .. maxBits) |bitIndex|
+        {
+            const count = numberOfCodesByCodeLength[bitIndex - 1];
+            const previousCode = smallestCodeByCodeLength[bitIndex - 1];
+            const code = (previousCode + count) << 1;
+
+            // I think this needs an overflow check?
+            const allowedMask = 0xFFFF >> (16 - bitIndex - 1);
+            if ((code & allowedMask) != code)
+            {
+                return error.InvalidHuffmanTree;
+            }
+
+            smallestCodeByCodeLength[bitIndex] = code;
+        }
+    }
+
+    var codes = HuffmanTree{};
+    {
+        const codesCount = c:
+        {
+            var count = 0;
+            for (numberOfCodesByCodeLength) |countByCodeLength|
+            {
+                count += countByCodeLength;
+            }
+            break :c count;
+        };
+        codes.ensureTotalCapacity(context.allocator, codesCount);
+    }
+
+    for (0 .., numberOfCodesByCodeLength) |i, bitLen|
+    {
+        if (bitLen != 0)
+        {
+            const smallestCode = &smallestCodeByCodeLength[bitLen - 1];
+            codes.put(smallestCode.*, i);
+            smallestCode.* += 1;
+        }
+    }
+
+    return codes;
+}
+
