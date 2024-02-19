@@ -93,15 +93,47 @@ const DeflateContext = struct
 
 const DeflateState = struct
 {
-    key: DeflateStateKey,
+    action: DeflateStateAction,
     bitOffset: u4,
+
     isFinal: bool,
     blockType: BlockType,
     len: u16,
+
     dataBytesRead: u16,
+    symbol: SymbolState,
 };
 
-const DeflateStateKey = enum
+const SymbolState = union(enum)
+{
+    Code7: void,
+    Code8: struct
+    {
+        code7: u7,
+    },
+    Code9: struct
+    {
+        code8: u8,
+    },
+    Length: struct
+    {
+        codeRemapped: u8,
+    },
+    DistanceCode: struct
+    {
+        length: u8,
+    },
+    Distance: struct
+    {
+        length: u8,
+        distanceCode: u5,
+    },
+    Done: Symbol,
+
+    const Initial: SymbolState = .{ .Code7 = {} };
+};
+
+const DeflateStateAction = enum
 {
     IsFinal,
     BlockType,
@@ -109,9 +141,11 @@ const DeflateStateKey = enum
     NoCompressionLen,
     NoCompressionNLen,
     UncompressedBytes,
+
+    DecompressionLoop,
 };
 
-pub fn readNBits(context: *DeflateContext, resultType: anytype) !resultType
+pub fn readNBits(context: *DeflateContext, resultType: type) !resultType
 {
     const bitsCount = comptime b:
     {
@@ -178,65 +212,222 @@ const BackReference = struct
     }
 };
 
-const LengthCode = struct
-{
-};
-
 const Symbol = union(enum)
 {
-    endBlock: bool,
+    endBlock: void,
     literalValue: u8,
     backReference: BackReference,
-    lengthCode: LengthCode,
 };
 
-fn readSymbol(context: *DeflateContext) !Symbol
+const lengthCodeStart = 257;
+
+fn getLengthBitCount(code: u8) u8
 {
-    // TODO: This is broken, it needs to store all intermediate values on the state!
-    const code = try readNBits(context, 7);
-    if (code == 0)
+    const s = lengthCodeStart;
+    return switch (code)
     {
-        // ?
-        return .{ .endBock = true };
+        (257 - s) ... (264 - s), (285 - s) => 0,
+        else => (code - (265 - s)) / 4 + 1,
+    };
+}
+
+const baseLengthLookup = l:
+{
+    const count = 285 - lengthCodeStart;
+    var result: [count + 1]u8 = undefined;
+    for (0 .. 8) |i|
+    {
+        result[i] = i;
     }
+
+    for (8 .. count) |i|
+    {
+        const bitCount = getLengthBitCount(i);
+        const representableNumberCount = 1 << bitCount;
+        result[i] = result[i - 1] + representableNumberCount;
+    }
+
+    result[count] = 0;
+
+    break :l result;
+};
+
+fn getBaseLength(code: u8) u8
+{
+    return baseLengthLookup[code];
+}
+
+fn getDistanceBitCount(distanceCode: u5) u8
+{
+    return switch (distanceCode)
+    {
+        0 ... 1 => 0,
+        else => distanceCode / 2 - 1,
+    };
+}
+
+const baseDistanceLookup = l:
+{
+    const count = 30;
+    var result: [count]u16 = undefined;
+    for (0 .. 2) |i|
+    {
+        result[i] = i;
+    }
+    for (2 .. count) |i|
+    {
+        const bitCount = getDistanceBitCount(i);
+        const representableNumberCount = 1 << bitCount;
+        result[i] = result[i - 1] + representableNumberCount;
+    }
+    break :l result;
+};
+
+fn getBaseDistance(distanceCode: u5) u16
+{
+    return baseDistanceLookup[distanceCode];
+}
+
+fn readSymbol(context: *DeflateContext) !bool
+{
+    const symbol = &context.state.symbol;
 
     const lengthCodeUpperLimit = 0b001_0111;
-    if (code <= lengthCodeUpperLimit)
+
+    const literalLowerLimit = 0b0011_0000;
+    const literalUpperLimit = 0b1011_1111;
+
+    const lengthLowerLimit2 = 0b1100_0000;
+    const lengthUpperLimit2 = 0b1101_1111;
+
+    const literalLowerLimit2 = 0b1_1001_0000;
+
+    switch (symbol.*)
     {
-        const length = code + lengthCodeUpperLimit;
-        const distanceBitCount = d: {
-            switch (length)
+        .Code7 =>
+        {
+            const code7 = try readNBits(context, 7);
+            if (code7 == 0)
             {
-                0 ... 3 => break :d 0,
-                else => break :d (length - 2) / 2,
+                return .{ .endBlock = {} };
             }
-        };
-        const baseDistance = d: {
-            switch (length)
+
+            if (code7 <= lengthCodeUpperLimit)
             {
-                0 ... 3 => break :d length,
-                4 ... 5 =>
-                {
+                symbol.* = .{
+                    .Length = .{ 
+                        .codeRemapped = code7 - 1,
+                    },
+                };
+                return false;
+            }
+
+            symbol.* = .{
+                .Code8 = .{ 
+                    .code7 = code7,
                 },
+            };
+        },
+        .Code8 => |c|
+        {
+            const bit8 = try readNBits(context, 1);
+            const code8: u8 = (@as(u8, bit8) << 7) | @as(u8, c.code7);
+
+            if (code8 >= literalLowerLimit and code8 <= literalUpperLimit)
+            {
+                const value = code8 - literalLowerLimit;
+                symbol.* = .{ .literalValue = value };
+                return true;
             }
-        };
 
+            if (code8 >= lengthLowerLimit2 and code8 <= lengthUpperLimit2)
+            {
+                const codeRemapped = code8 - lengthLowerLimit2 + lengthCodeUpperLimit;
+                symbol.* = .{ 
+                    .Length = .{ 
+                        .codeRemapped = codeRemapped,
+                    }
+                };
+                return false;
+            }
 
+            symbol.* = .{
+                .Code9 = .{ 
+                    .code8 = code8,
+                },
+            };
+        },
+        .Code9 => |c|
+        {
+            const bit9 = try readNBits(context, 1);
+            const code9: u9 = (@as(u9, bit9) << 8) | @as(u9, c.code8);
+            if (code9 >= literalLowerLimit2)
+            {
+                const literalOffset2 = literalUpperLimit - literalLowerLimit;
+                const value = code9 - literalLowerLimit2 + literalOffset2;
+                symbol.* = .{ .literalValue = value };
+                return true;
+            }
+
+            return error.DisallowedDeflateCodeValue;
+        },
+        .Length => |l|
+        {
+            const lengthBitCount = getLengthBitCount(l.codeRemapped);
+            const extraBits = try readNBits(context, lengthBitCount);
+            const baseLength = getBaseLength(l.codeRemapped);
+            const length = baseLength + extraBits;
+            symbol.* = .{ 
+                .Distance = .{
+                    .length = length,
+                },
+            };
+        },
+        .DistanceCode => |d|
+        {
+            const distanceCode = try readNBits(context, 5);
+            if (distanceCode >= 30)
+            {
+                return error.InvalidDistanceCode;
+            }
+
+            symbol.* = .{
+                .Distance = .{
+                    .length = d.length,
+                    .distanceCode = distanceCode,
+                },
+            };
+        },
+        .Distance => |d|
+        {
+            const distanceBitCount = getDistanceBitCount(d.distanceCode);
+            const extraBits = try readNBits(context, distanceBitCount);
+            const baseDistance = getBaseDistance(d.distanceCode);
+            const distance = baseDistance + extraBits;
+            symbol.* = .{
+                .Done = .{
+                    .unadjustedDistance = distance,
+                    .unadjustedLength = d.length,
+                },
+            };
+            return true;
+        },
+        .Done => unreachable,
     }
 
-
+    return false;
 }
 
 pub fn deflate(context: *DeflateContext) !void
 {
     const state = context.state;
-    switch (state.key)
+    switch (state.action)
     {
         .IsFinal =>
         {
             const isFinal = try readNBits(context, 1);
             state.isFinal = isFinal;
-            state.key = DeflateStateKey.BlockType;
+            state.action = DeflateStateAction.BlockType;
         },
         .BlockType =>
         {
@@ -252,14 +443,22 @@ pub fn deflate(context: *DeflateContext) !void
                         _ = pipelines.removeFirst(context.sequence) catch unreachable;
                         state.bitOffset = 0;
                     }
-                    state.key = DeflateStateKey.NoCompressionLen;
-                }
+                    state.action = DeflateStateAction.NoCompressionLen;
+                },
+                .FixedHuffman =>
+                {
+                    // state.action = DeflateStateAction.FixedHuffman;
+                },
+                .Reserved =>
+                {
+                    return error.ReservedBlockTypeUsed;
+                },
             }
         },
         .NoCompressionLen =>
         {
             const len = try pipelines.readNetworkUnsigned(context.sequence, u16);
-            state.key = DeflateStateKey.NoCompressionNLen;
+            state.action = DeflateStateAction.NoCompressionNLen;
             state.len = len;
         },
         .NoCompressionNLen =>
@@ -269,7 +468,7 @@ pub fn deflate(context: *DeflateContext) !void
             {
                 return error.NLenNotOnesComplement;
             }
-            state.key = .UncompressedBytes;
+            state.action = .UncompressedBytes;
             state.dataBytesRead = 0;
         },
         .UncompressedBytes =>
