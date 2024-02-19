@@ -37,7 +37,7 @@ pub const ParserContext = struct
     state: *ParserState,
     sequence: *pipelines.Sequence,
     allocator: std.mem.Allocator,
-    settings: *ParserSettings,
+    settings: *const ParserSettings,
 };
 
 pub const ChunkParserStateKey = enum 

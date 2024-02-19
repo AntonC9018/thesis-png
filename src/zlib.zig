@@ -493,11 +493,12 @@ const HuffmanTree = std.HashMapUnmanaged(
     u8,
     struct
     {
-        fn hash(key: u16) u16
+        const Self = @This();
+        pub fn hash(_: Self, key: u16) u64
         {
             return key;
         }
-        fn eql(a: u8, b: u8) bool
+        pub fn eql(_: Self, a: u16, b: u16) bool
         {
             return a == b;
         }
@@ -517,66 +518,86 @@ fn maxValue(array: anytype) @TypeOf(array[0])
     return result;
 }
 
-fn generateHuffmanTree(
-    context: *DeflateContext,
-    bitLensBySymbol: []const u8) HuffmanTree
+const HuffmanTreeCreationContext = struct
+{
+    _codeStartingValuesByLen: [15]u16 = undefined,
+    _numberOfCodesByCodeLen: [15]u16 = undefined,
+    bitLensBySymbol: []const u8,
+    len: u4,
+
+
+    pub fn codeStartingValuesByLen(self: *HuffmanTreeCreationContext) []u16
+    {
+        return self._codeStartingValuesByLen[0 .. self.len];
+    }
+    pub fn numberOfCodesByCodeLen(self: *HuffmanTreeCreationContext) []u16
+    {
+        return self._numberOfCodesByCodeLen[0 .. self.len];
+    }
+};
+
+fn generateHuffmanTreeCreationContext(bitLensBySymbol: []const u8)
+    !HuffmanTreeCreationContext
 {
     const maxBits = maxValue(bitLensBySymbol);
     if (maxBits > 15)
     {
-        return error.NotImplementedForMoreThan15Bits;
+        return error.MaxBitsLargerThan15;
     }
 
-    const smallestCodeByCodeLength = context.allocator.alloc(u16, maxBits);
-    defer context.allocator.free(smallestCodeByCodeLength);
-
-    const numberOfCodesByCodeLength = context.allocator.alloc(u16, maxBits);
-    defer context.allocator.free(numberOfCodesByCodeLength);
-    @memset(numberOfCodesByCodeLength, 0);
+    var r = HuffmanTreeCreationContext
+    {
+        .len = @intCast(maxBits),
+        .bitLensBySymbol = bitLensBySymbol,
+    };
+    @memset(r.numberOfCodesByCodeLen(), 0);
     for (bitLensBySymbol) |bitLength|
     {
-        numberOfCodesByCodeLength[bitLength - 1] += 1;
+        r.numberOfCodesByCodeLen()[bitLength - 1] += 1;
     }
 
+    for (1 .. maxBits) |bitIndex|
     {
-        smallestCodeByCodeLength[0] = 0;
-        for (1 .. maxBits) |bitIndex|
+        const count = r.numberOfCodesByCodeLen()[bitIndex - 1];
+        const previousCode = r.codeStartingValuesByLen()[bitIndex - 1];
+        const code = (previousCode + count) << 1;
+
+        // I think this needs an overflow check?
+        const allowedMask = @as(u16, 0xFFFF) >> @intCast(16 - bitIndex - 1);
+        if ((code & allowedMask) != code)
         {
-            const count = numberOfCodesByCodeLength[bitIndex - 1];
-            const previousCode = smallestCodeByCodeLength[bitIndex - 1];
-            const code = (previousCode + count) << 1;
-
-            // I think this needs an overflow check?
-            const allowedMask = 0xFFFF >> (16 - bitIndex - 1);
-            if ((code & allowedMask) != code)
-            {
-                return error.InvalidHuffmanTree;
-            }
-
-            smallestCodeByCodeLength[bitIndex] = code;
+            return error.InvalidHuffmanTree;
         }
-    }
 
+        r.codeStartingValuesByLen()[bitIndex] = code;
+    }
+    return r;
+}
+
+fn createHuffmanTree(
+    t: *HuffmanTreeCreationContext,
+    allocator: std.mem.Allocator) !HuffmanTree
+{
     var codes = HuffmanTree{};
     {
         const codesCount = c:
         {
-            var count = 0;
-            for (numberOfCodesByCodeLength) |countByCodeLength|
+            var count: u32 = 0;
+            for (t.numberOfCodesByCodeLen()) |countByCodeLength|
             {
                 count += countByCodeLength;
             }
             break :c count;
         };
-        codes.ensureTotalCapacity(context.allocator, codesCount);
+        try codes.ensureTotalCapacity(allocator, codesCount);
     }
 
-    for (0 .., numberOfCodesByCodeLength) |i, bitLen|
+    for (0 .., t.bitLensBySymbol) |i, bitLen|
     {
         if (bitLen != 0)
         {
-            const smallestCode = &smallestCodeByCodeLength[bitLen - 1];
-            codes.put(smallestCode.*, i);
+            const smallestCode = &t.codeStartingValuesByLen()[bitLen - 1];
+            try codes.put(allocator, smallestCode.*, @intCast(i));
             smallestCode.* += 1;
         }
     }
@@ -584,3 +605,47 @@ fn generateHuffmanTree(
     return codes;
 }
 
+test "huffman tree correct"
+{
+    const bitLens: []const u8 = &[_]u8{ 3, 3, 3, 3, 3, 2, 4, 4 };
+    var codeStarts = try generateHuffmanTreeCreationContext(bitLens);
+
+    const t = std.testing;
+    try t.expectEqual(codeStarts.len, 4);
+    try t.expectEqualSlices(u16, &[_]u16{ 0, 0, 2, 14 }, codeStarts.codeStartingValuesByLen());
+
+    const allocator = std.heap.page_allocator;
+    var tree = try createHuffmanTree(&codeStarts, allocator);
+    defer tree.deinit(allocator);
+
+    try t.expectEqual(8, tree.count());
+
+    const alphabet = "ABCDEFGH";
+    const expected = [_]u16 { 
+        0b10,
+        0b11,
+        0b100,
+        0b101,
+        0b110,
+        0b0,
+        0b1110,
+        0b1111,
+    };
+
+    if (false)
+    {
+        var iter = tree.iterator();
+        while (iter.next()) |entry|
+        {
+            const code: u5 = @intCast(entry.key_ptr.*);
+            const letter = entry.value_ptr.* + 'A';
+            std.debug.print("letter: {c}; code: {b}\n", .{ letter, code });
+        }
+    }
+
+    for (alphabet, expected) |letter, expectedCode|
+    {
+        const letterIndex = letter - 'A';
+        try t.expectEqual(letterIndex, tree.get(expectedCode).?);
+    }
+}
