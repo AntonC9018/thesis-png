@@ -483,6 +483,16 @@ pub const Sequence = struct
         return wholeSegment[start_.offset ..];
     }
 
+    pub fn peekFirstByte(self: *const Self) ?u8
+    {
+        if (self.isEmpty())
+        {
+            return null;
+        }
+        const firstSegment = self.getFirstSegment();
+        return firstSegment[0];
+    }
+
     pub fn debugPrint(self: *const Self) void
     {
         const allocator = std.heap.page_allocator;
@@ -1093,28 +1103,37 @@ pub fn readNetworkU31(self: *Sequence) error{NotEnoughBytes,NumberTooLarge}!u31
         return error.NumberTooLarge;
     }
 
-    return @intCast(readNetworkU32_impl(self));
+    return @intCast(readNetworkUnsigned_impl(self));
 }
 
 // Reverses the byte order if the host is little endian.
-pub fn readNetworkU32(self: *Sequence) error{NotEnoughBytes}!u32
+pub fn readNetworkUnsigned(self: *Sequence, comptime resultType: type) error{NotEnoughBytes}!resultType
 {
-    if (self.len() < 4)
+    switch (resultType)
+    {
+        u8 => return try removeFirst(self),
+        u16, u32, u64 => {},
+        else => unreachable,
+    }
+
+    const size = @sizeOf(resultType);
+    if (self.len() < size)
     {
         return error.NotEnoughBytes;
     }
 
-    return readNetworkU32_impl(self);
+    const bytes = readNetworkUnsigned_impl(self, size);
+    const result: resultType = @bitCast(bytes);
+    return result;
 }
 
-// Assumes the length is at least 4.
-fn readNetworkU32_impl(self: *Sequence) u32
+fn readNetworkUnsigned_impl(sequence: *Sequence, comptime size: u8) [size]u8
 {
     const reverseBytes = isLittleEndian();
-    var resultBytes: [4]u8 = undefined;
-    var bytesLeftToWrite: u3 = 4;
+    var resultBytes: [size]u8 = undefined;
+    var bytesLeftToWrite: u3 = size;
 
-    var iter = SegmentIterator.create(self).?;
+    var iter = SegmentIterator.create(sequence).?;
     while (true)
     {
         const segment = iter.current();
@@ -1133,7 +1152,7 @@ fn readNetworkU32_impl(self: *Sequence) u32
         else
         {
             @memcpy(
-                resultBytes[4 - bytesLeftToWrite .. bytesToCopy],
+                resultBytes[size - bytesLeftToWrite .. bytesToCopy],
                 segment[0 .. bytesToCopy]);
         }
 
@@ -1141,10 +1160,8 @@ fn readNetworkU32_impl(self: *Sequence) u32
         if (bytesLeftToWrite == 0)
         {
             const newStart = iter.getCurrentPosition().add(bytesToCopy);
-            self.* = self.sliceFrom(newStart);
-
-            const result: u32 = @bitCast(resultBytes);
-            return result;
+            sequence.* = sequence.sliceFrom(newStart);
+            return resultBytes;
         }
 
         if (!iter.advance())

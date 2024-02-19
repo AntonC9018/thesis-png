@@ -105,7 +105,7 @@ Interfața grafică va fi implementată folosind Raylib\cite{raylib}, tot în Zi
 Pentru a facilita interacțiunea cu stream-uri de date și a crea o abstracție în acest sens,
 a fost dezvoltată o mică bibliotecă.
 Experiența anterioară cu biblioteca \texttt{System.IO.Pipelines}\cite{system_io_pipelines}
-din C# a relevat mai multe avantaje în utilizarea unei astfel de abordări:
+din C\# a relevat mai multe avantaje în utilizarea unei astfel de abordări:
 \begin{itemize}
   \item
   Implementarea corectă core să țină cont de toate cazurile-limită
@@ -253,8 +253,8 @@ o eroare trebuie să fie indicată.
 lungimea, tipul, datele, și suma de control.
 Aceste stări sunt urmate unul de altul, adică valorile numerice
 ale acestora pot fi derivate din valoarea trecută, de exemplu 
-S_{date} = S_{lungime} + 1.
-Aceasta poate fi implementată în mod cel mai simplu can un \textt{enum}
+$ S_{date} = S_{lungime} + 1. $
+Aceasta poate fi implementată în mod cel mai simplu can un \texttt{enum}
 în orice limbaj de programare care le suportă, inclusiv Zig.
 
 Un lucru asemănător se întâmplă la parsarea datelor unui chunk care are un format fix.
