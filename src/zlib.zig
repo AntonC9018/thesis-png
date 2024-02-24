@@ -478,7 +478,7 @@ const HuffmanTree = struct
 {
     prefixes: [MAX_PREFIX_COUNT]u16,
     decodedCharactersLookup: [MAX_PREFIX_COUNT][]u8,
-    maxBitIndex: u5,
+    maxBitCount: u5,
 
     pub fn deinit(self: *HuffmanTree, allocator: std.mem.Allocator) void
     {
@@ -501,7 +501,7 @@ const HuffmanTree = struct
                 decodedCharacter: u8,
             }
         {
-            if (self.bitIndex > self.tree.maxBitIndex)
+            if (self.bitIndex > self.tree.maxBitCount)
             {
                 return null;
             }
@@ -511,16 +511,24 @@ const HuffmanTree = struct
             const prefix = self.tree.prefixes[self.bitIndex];
             const decodedCharacter = lookup[self.characterIndex];
             const bitCount = self.bitIndex + 1;
+            const code = prefix + self.characterIndex;
 
             self.characterIndex += 1;
             if (self.characterIndex == lookup.len)
             {
-                self.bitIndex = self.tree.getNextBitIndex(self.bitIndex) orelse self.tree.maxBitIndex + 1;
+                if (self.tree.getNextBitCount(self.bitIndex + 1)) |ni|
+                {
+                    self.bitIndex = ni - 1;
+                }
+                else
+                {
+                    self.bitIndex = self.tree.maxBitCount + 1;
+                }
                 self.characterIndex = 0;
             }
 
             return .{
-                .code = prefix + self.characterIndex,
+                .code = code,
                 .bitCount = bitCount,
                 .decodedCharacter = decodedCharacter,
             };
@@ -529,7 +537,7 @@ const HuffmanTree = struct
 
     pub fn iterator(self: *const HuffmanTree) Iterator
     {
-        const bitIndex = self.getNextBitIndex(0) orelse self.maxBitIndex + 1;
+        const bitIndex = self.getNextBitCount(0) orelse self.maxBitCount + 1;
         return .{
             .tree = self,
             .bitIndex = bitIndex,
@@ -537,19 +545,25 @@ const HuffmanTree = struct
         };
     }
 
-    fn getNextBitIndex(self: *const HuffmanTree, bitIndex: u5) ?u5
+    const Lengths = struct
     {
-        const maxBitIndex = self.maxBitIndex;
-        if (bitIndex == maxBitIndex)
+        prefixLen: u4,
+        bitCount: u5,
+    };
+
+    fn getNextBitCount(self: *const HuffmanTree, bitCount: u5) ?u5
+    {
+        const maxBitCount_ = self.maxBitCount;
+        if (bitCount == maxBitCount_)
         {
             return null;
         }
 
-        for ((bitIndex + 1) .. (maxBitIndex + 1)) |nextBitIndex|
+        for ((bitCount + 1) .. (maxBitCount_ + 1)) |nextBitCount|
         {
-            if (self.decodedCharactersLookup[nextBitIndex].len != 0)
+            if (self.decodedCharactersLookup[nextBitCount - 1].len != 0)
             {
-                return @intCast(nextBitIndex);
+                return @intCast(nextBitCount);
             }
         }
         return null;
@@ -563,29 +577,26 @@ const HuffmanTree = struct
         }
     {
         const bitIndex: u4 = @intCast(bitCount - 1);
-        std.debug.assert(self.prefixes[bitIndex] != 0);
 
         const prefix = self.prefixes[bitIndex];
 
-        // Prefix doesn't match
-        if ((code & prefix) != prefix)
+        const index = code -% prefix;
+        const lookup = self.decodedCharactersLookup[bitIndex];
+
+        if (code >= prefix and index < lookup.len)
         {
-            const nextBitIndex = self.getNextBitIndex(bitIndex) orelse return error.InvalidCode;
-            return .{ .nextBitCount = nextBitIndex + 1 };
+            return .{ 
+                .decodedCharacter = lookup[index],
+            };
         }
-        // Prefix matches
         else
         {
-            // Extract the index in the symbol list with that prefix from the code.
-            const indexMask = (~@as(u16, 0) >> @intCast(@as(u5, 16) - bitIndex));
-            const characterIndex = (~prefix & code) & indexMask;
-            const lookup = self.decodedCharactersLookup[bitIndex];
-            if (characterIndex >= lookup.len)
-            {
-                return error.InvalidCode;
-            }
+            const nextBitCount = self.getNextBitCount(bitCount)
+                orelse return error.InvalidCode;
 
-            return .{ .decodedCharacter = lookup[characterIndex] };
+            return .{
+                .nextBitCount = nextBitCount
+            };
         }
     }
 };
@@ -608,10 +619,10 @@ const MAX_PREFIX_COUNT = MAX_CODE_LENGTH - 1;
 
 const HuffmanTreeCreationContext = struct
 {
-    _codeStartingValuesByLen: [MAX_PREFIX_COUNT]u16 = undefined,
-    _numberOfCodesByCodeLen: [MAX_PREFIX_COUNT]u16 = undefined,
-    bitLensBySymbol: []const u8,
-    len: u4,
+    _codeStartingValuesByLen: [MAX_PREFIX_COUNT]u16,
+    _numberOfCodesByCodeLen: [MAX_PREFIX_COUNT]u16,
+    bitLensBySymbol: []const u5,
+    len: u5,
 
     fn maybeConst(self: type, num: type) type
     {
@@ -631,13 +642,9 @@ const HuffmanTreeCreationContext = struct
     {
         return self._numberOfCodesByCodeLen[0 .. self.len];
     }
-    pub fn prefixLengths(self: anytype) maybeConst(@TypeOf(self), u8)
-    {
-        return self._prefixLengths[0 .. self.len];
-    }
 };
 
-fn generateHuffmanTreeCreationContext(bitLensBySymbol: []const u8)
+fn generateHuffmanTreeCreationContext(bitLensBySymbol: []const u5)
     !HuffmanTreeCreationContext
 {
     const maxBits = maxValue(bitLensBySymbol);
@@ -646,22 +653,20 @@ fn generateHuffmanTreeCreationContext(bitLensBySymbol: []const u8)
         return error.MaxBitsTooLarge;
     }
 
-    var r = HuffmanTreeCreationContext
-    {
-        .len = @intCast(maxBits),
+    var r = std.mem.zeroInit(HuffmanTreeCreationContext, .{
+        .len = maxBits,
         .bitLensBySymbol = bitLensBySymbol,
-    };
-    @memset(r.numberOfCodesByCodeLen(), 0);
+    });
     for (bitLensBySymbol) |bitLength|
     {
         r.numberOfCodesByCodeLen()[bitLength - 1] += 1;
     }
 
-    for (1 .. maxBits) |bitIndex|
+    var code: u16 = 0;
+    for (0 .. maxBits) |bitIndex|
     {
-        const count = r.numberOfCodesByCodeLen()[bitIndex - 1];
-        const previousCode = r.codeStartingValuesByLen()[bitIndex - 1];
-        const code = (previousCode + count) << 1;
+        const count = r.numberOfCodesByCodeLen()[bitIndex];
+        r.codeStartingValuesByLen()[bitIndex] = code;
 
         // I think this needs an overflow check?
         const allowedMask = ~@as(u16, 0) >> @intCast(16 - bitIndex - 1);
@@ -670,7 +675,7 @@ fn generateHuffmanTreeCreationContext(bitLensBySymbol: []const u8)
             return error.InvalidHuffmanTree;
         }
 
-        r.codeStartingValuesByLen()[bitIndex] = code;
+        code = (code + count) << 1;
     }
     return r;
 }
@@ -680,16 +685,16 @@ fn createHuffmanTree(
     allocator: std.mem.Allocator) !HuffmanTree
 {
     var codes = std.mem.zeroInit(HuffmanTree, .{
-        .maxBitIndex = t.len - 1,
+        .maxBitCount = t.len,
+        .prefixes = t._codeStartingValuesByLen,
     });
 
-    for (0 .., t.codeStartingValuesByLen(), t.numberOfCodesByCodeLen()) 
-        |bitIndex, prefix, count|
+    for (codes.decodedCharactersLookup[0 .. t.len], t.numberOfCodesByCodeLen()) 
+        |*lookup, count|
     {
         if (count != 0)
         {
-            codes.prefixes[bitIndex] = prefix;
-            codes.decodedCharactersLookup[bitIndex] = try allocator.alloc(u8, count);
+            lookup.* = try allocator.alloc(u8, count);
         }
     }
 
@@ -710,7 +715,7 @@ fn createHuffmanTree(
 
 test "huffman tree correct"
 {
-    const bitLens: []const u8 = &[_]u8{ 3, 3, 3, 3, 3, 2, 4, 4 };
+    const bitLens = &[_]u5{ 3, 3, 3, 3, 3, 2, 4, 4 };
     var codeStarts = try generateHuffmanTreeCreationContext(bitLens);
 
     const t = std.testing;
@@ -724,24 +729,19 @@ test "huffman tree correct"
     // try t.expectEqual(8, tree.count());
 
     const alphabet = "ABCDEFGH";
-    const Encoded = struct
+    const expected = [_]u4
     {
-        bitCount: u5,
-        value: u4,
-    };
-    const expected = [_]Encoded
-    {
-        .{ .bitCount = 3, .value = 0b010, },
-        .{ .bitCount = 3, .value = 0b011, },
-        .{ .bitCount = 3, .value = 0b100, },
-        .{ .bitCount = 3, .value = 0b101, },
-        .{ .bitCount = 3, .value = 0b110, },
-        .{ .bitCount = 2, .value = 0b00, },
-        .{ .bitCount = 4, .value = 0b1110, },
-        .{ .bitCount = 4, .value = 0b1111, },
+        0b010,
+        0b011,
+        0b100,
+        0b101,
+        0b110,
+        0b00,
+        0b1110,
+        0b1111,
     };
 
-    if (true)
+    if (false)
     {
         std.debug.print("tree:\n", .{});
         var iter = tree.iterator();
@@ -757,10 +757,11 @@ test "huffman tree correct"
         }
     }
 
-    for (alphabet, expected) |letter, e|
+    for (alphabet, expected) |letter, expectedCode|
     {
         const letterIndex = letter - 'A';
-        const decoded = try tree.tryDecode(e.value, e.bitCount);
+        const bitLen = bitLens[letterIndex];
+        const decoded = try tree.tryDecode(expectedCode, bitLen);
         try t.expectEqual(letterIndex, decoded.decodedCharacter);
     }
 }
