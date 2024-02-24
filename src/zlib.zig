@@ -480,6 +480,16 @@ const HuffmanTree = struct
     decodedCharactersLookup: [MAX_PREFIX_COUNT][]u8,
     maxBitCount: u5,
 
+    pub fn count(self: *HuffmanTree) usize
+    {
+        var c: usize = 0;
+        for (self.decodedCharactersLookup) |arr|
+        {
+            c += arr.len;
+        }
+        return c;
+    }
+
     pub fn deinit(self: *HuffmanTree, allocator: std.mem.Allocator) void
     {
         for (self.decodedCharactersLookup) |arr|
@@ -726,7 +736,7 @@ test "huffman tree correct"
     var tree = try createHuffmanTree(&codeStarts, allocator);
     defer tree.deinit(allocator);
 
-    // try t.expectEqual(8, tree.count());
+    try t.expectEqual(8, tree.count());
 
     const alphabet = "ABCDEFGH";
     const expected = [_]u4
