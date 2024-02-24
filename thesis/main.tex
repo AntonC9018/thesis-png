@@ -28,7 +28,7 @@
   \acro{PNG}{Portable Network Graphics}
   \acro{I/O}{Input/Output}
   \acro{MVP}{Produs Minim Viabil}
-
+  \acro{ICC}{International Color Consortium}
 \end{acronym}
 
 
@@ -41,7 +41,7 @@
 Teza constă din: Introducere, \total{num_chapters} capitole, Concluzii generale și recomandări, Bibliografie \bibliographyEntryCount{} titluri.
 Textul de bază cuprinde \usefulPageCount{} de pagini și \anexeCount{} de anexe.
 
-\textbf{Cuvinte-cheie:} PNG
+\textbf{Cuvinte-cheie:} \ac{PNG}
 
 \textbf{Actualitatea.}
 PNG este un format de imagini folosit pe scară largă pe Internet,
@@ -96,8 +96,8 @@ Al treilea capitol, \nameref{implementation_chapter_title}, urmează implementar
 
 \chapter{Implementarea Sistemului}\label{implementation_chapter_title}
 
-În continuare, se va prezenta implementarea unui decoder PNG care va fi folosit pentru
-a vizualiza formatul PNG printr-o aplicație \ac{GUI}.
+În continuare, se va prezenta implementarea unui decoder \ac{PNG} care va fi folosit pentru
+a vizualiza formatul \ac{PNG} printr-o aplicație \ac{GUI}.
 Decoderul va fi implementat în limbajul de programare Zig\cite{zig}
 după specificația \ac{PNG}, versiunea 1.2\cite{png_spec}.
 Interfața grafică va fi implementată folosind Raylib\cite{raylib}, tot în Zig.
@@ -142,13 +142,13 @@ pornind de la o imagine vagă a rezultatului dorit,
 însă cu o direcție clară în ceea ce privește obiectivul general.
 
 Având în vedere faptul că scopul principal al aplicației
-este de a facilita explorarea structurii fișierelor PNG,
+este de a facilita explorarea structurii fișierelor \ac{PNG},
 s-ar dori ca funcționalitatea să fie direct
 influențată și determinată de această structură.
 Designul interfeței grafice este conceput pentru a reflecta
-caracteristicile specifice ale fișierelor PNG.
+caracteristicile specifice ale fișierelor \ac{PNG}.
 
-Fișierele PNG sunt compuse din secvențe denumite chunk-uri,
+Fișierele \ac{PNG} sunt compuse din secvențe denumite chunk-uri,
 fiecare având o funcție specifică.
 De exemplu, chunk-ul \texttt{IHDR} conține informații vitale despre imagine,
 precum lățimea, înălțimea, numărul de biți per pixel ș.a.
@@ -159,7 +159,7 @@ care nu afectează integritatea fișierului.
 Informațiile ar fi prezentate per chunk, atunci când utilizatorul îl alege,
 iar fiecare chunk trebuie să fie evidențiat, pentru a-l putea alege și vizualiza.
 
-Pentru a sublinia aspectul de explorare a \textit{formatului} PNG,
+Pentru a sublinia aspectul de explorare a \textit{formatului} \ac{PNG},
 și nu doar manipularea imaginilor în acest format,
 se va include în aplicație un editor hexazecimal.
 Acesta va prezenta valorile fiecărui octet și
@@ -172,7 +172,7 @@ care nu sunt esențiale pentru înțelegerea formatului.
 La selectarea unui chunk, vor fi afișate informații detaliate despre acesta,
 incluzând numele, descrierea și lungimea.
 Este crucial ca fiecare chunk să fie prezentat cu o structură specifică,
-pentru a oferi o înțelegere completă a compoziției și funcționalității fișierelor PNG.
+pentru a oferi o înțelegere completă a compoziției și funcționalității fișierelor \ac{PNG}.
 
 
 \section{Imaginea inițială a implementării la nivel înalt}
@@ -203,10 +203,10 @@ să fie împărțită în mai multe module esențiale:
   \textbf{Modulul de acces la fișiere după poziții absolute},
   care va gestiona cache-ul segmentelor vizualizate în prezent,
   ștergerea segmentelor nedorite din memorie și citirea datelor din fișier la necesitate.
-  Acest modul este o abstracție cheie pentru a simplifica interacțiunea cu fișierele PNG.
+  Acest modul este o abstracție cheie pentru a simplifica interacțiunea cu fișierele \ac{PNG}.
 
   \item
-  \textbf{Arborele sintactic al fișierului PNG},
+  \textbf{Arborele sintactic al fișierului \ac{PNG}},
   care ar trebui să păstreze în memorie doar informațiile despre
   chunk-urile vizualizate la un moment dat.
   Acesta ar permite accesul la informații structurate despre fișier
@@ -239,9 +239,9 @@ Deoarece structura parser-ului este by design realizată ca o mașină de stări
 are sens să se facă o abstracție pentru a putea construi mașina acesta de stări mai ușor
 fără a repeta logica.
 
-Inițial, parser-ul se află într-o stare destinată validării a semnaturii fișierului PNG.
+Inițial, parser-ul se află într-o stare destinată validării a semnaturii fișierului \ac{PNG}.
 Semnatura este o secvență specială de caractere care 
-trebuie necesar să apare la începutul oricărui fișier PNG.
+trebuie necesar să apare la începutul oricărui fișier \ac{PNG}.
 După citire a semnăturii, parser-ul trece în starea începerii a citirii a unui chunk,
 iar după ce începe a citi chunk-ul, trece la starea de citire a chunk-ului.
 Acestă distincție există pentru a indica faptul că dacă fluxul de intrare
@@ -321,6 +321,35 @@ deoarece această oportunitate s-a observat la momentul
 realizării a primului tip de chunk, \texttt{IHDR},
 deci este posibil că nu s-ar generaliza bine pentru toate tipurile de chunk-uri.
 Încă, s-a menționat deja anterior că această abordare reduce capacitatea de debugging.
+
+\section{Zlib și Deflate}
+
+Formatul \ac{PNG} folosește comprimarea datelor prin algoritmul Zlib.
+Comprimarea se folosește pentru chunk-urile \texttt{zTXt} (text comprimat),
+\texttt{iCCP} (profil \ac{ICC}), \texttt{IDAT} (datele pixelilor),
+și posibil altele.
+Pentru a înțelege problema mai bine, ar fi benefic să se înțeleagă cum funcționează algoritmul Zlib.
+În plus, deoarece algorimul este parte din standardul \ac{PNG},
+și structura acestuia poate fi decodificată și analizată,
+ar fi benefic să se realizeze un fel de parser special pentru Zlib pentru a putea vizualiza nodurile Zlib
+în mod bogat în interfață.
+Din această cauză, s-a decis să se realizeze implementarea unui decoder Zlib de la zero.
+
+Structura parserului folosită până acum poate fi aplicată și pentru formatul Zlib.
+Singura diferență este că formatul Zlib este bazat pe biți, dar nu pe octeți.
+Însă deoarece poziția pe biți absolut nu ține de gestionarea buferilor,
+componenta \texttt{pipelines} care realizează stream-ul de date nu va trebui să fie modificată.
+Starea parserului Zlib poate să țină cont de poziția pe biți ca o variabilă privată, deoarece
+acest concept nu se revarsă la procesarea \ac{PNG}.
+Însă, poziția pe biți ar trebuie să fie utilă pentru vizualizare a formatului.
+Acesta nu este o problemă, deoarece interfața are acces la starea privată a parser-ului.
+
+Mai complicat conceptual este sistemul de decompresie,
+deoarece acesta trebuie să păstreze octeții decodificate pentru a se referi la ei
+în procesul de decompresie, până la 32 KB de date.
+
+
+
 
 \chapterConclusionSection{implementation_chater_title}
 
