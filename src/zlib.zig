@@ -564,11 +564,6 @@ const HuffmanTree = struct
     fn getNextBitCount(self: *const HuffmanTree, bitCount: u5) ?u5
     {
         const maxBitCount_ = self.maxBitCount;
-        if (bitCount == maxBitCount_)
-        {
-            return null;
-        }
-
         for ((bitCount + 1) .. (maxBitCount_ + 1)) |nextBitCount|
         {
             if (self.decodedCharactersLookup[nextBitCount - 1].len != 0)
