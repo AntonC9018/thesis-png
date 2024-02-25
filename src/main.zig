@@ -1,9 +1,10 @@
 const std = @import("std");
 
 const pipelines = @import("pipelines.zig");
-test { 
+test
+{ 
     _ = pipelines;
-    _ = @import("zlib.zig");
+    _ = @import("zlib/zlib.zig");
 }
 
 const parser = @import("parser.zig");
