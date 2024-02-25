@@ -3,20 +3,30 @@ pub const DeflateContext = @import("zlib.zig").DeflateContext;
 pub const std = @import("std");
 pub const huffman = @import("huffmanTree.zig");
 
+pub const PeekApplyHelper = struct
+{
+    nextBitOffset: u4,
+    nextSequenceStart: pipelines.SequencePosition,
+
+    pub fn apply(self: PeekApplyHelper, context: *DeflateContext) void
+    {
+        context.state.bitOffset = self.nextBitOffset;
+        context.sequence.* = context.sequence.sliceFrom(self.nextSequenceStart);
+    }
+};
+
 pub fn PeekNBitsResult(resultType: type) type
 {
     return struct
     {
         bits: resultType,
-        nextBitOffset: u4,
-        nextSequenceStart: pipelines.SequencePosition,
+        applyHelper: PeekApplyHelper,
 
         const Self = @This();
 
-        pub fn apply(self: Self, context1: *DeflateContext) void
+        pub fn apply(self: Self, context: *DeflateContext) void
         {
-            context1.state.bitOffset = self.nextBitOffset;
-            context1.sequence.* = context1.sequence.sliceFrom(self.nextSequenceStart);
+            self.applyHelper.apply(context);
         }
     };
 }
@@ -97,8 +107,10 @@ pub fn peekNBits(context: PeekNBitsContext) !PeekNBitsResult(u32)
 
     return .{
         .bits = result,
-        .nextBitOffset = bitOffset,
-        .nextSequenceStart = iterator.sequence.start(),
+        .applyHelper = .{
+            .nextBitOffset = bitOffset,
+            .nextSequenceStart = iterator.sequence.start(),
+        },
     };
 }
 
@@ -137,7 +149,27 @@ pub fn readNBits(context: *DeflateContext, bitsCount: u6) !u32
     return @intCast(r.bits);
 }
 
+pub const DecodedCharacterResult = struct
+{
+    character: huffman.DecodedCharacter,
+    applyHelper: PeekApplyHelper,
+    huffman_: *HuffmanParsingState,
+
+    pub fn apply(self: *DecodedCharacterResult, context: *DeflateContext) void
+    {
+        self.applyHelper.apply(context);
+        self.huffman_.currentBitCount = 0;
+    }
+};
+
 pub fn readAndDecodeCharacter(context: *DeflateContext, huffman_: *HuffmanParsingState) !u16
+{
+    const r = try peekAndDecodeCharacter(context, huffman_);
+    r.apply(context, huffman_);
+    return r.character;
+}
+
+pub fn peekAndDecodeCharacter(context: *const DeflateContext, huffman_: *HuffmanParsingState) !DecodedCharacterResult
 {
     if (huffman_.currentBitCount == 0)
     {
@@ -156,7 +188,6 @@ pub fn readAndDecodeCharacter(context: *DeflateContext, huffman_: *HuffmanParsin
         {
             .DecodedCharacter => |ch|
             {
-                code.apply(context);
                 return ch;
             },
             .NextBitCount => |bitCount|
@@ -198,7 +229,14 @@ pub const OutputBuffer = struct
     position: usize,
     len: usize,
 
-    pub fn writeBytes(self: *OutputBuffer, buffer: []const u8) void
+    pub fn writeByte(self: *OutputBuffer, byte: u8) !void
+    {
+        _ = self;
+        _ = byte;
+        unreachable;
+    }
+
+    pub fn writeBytes(self: *OutputBuffer, buffer: []const u8) !void
     {
         _ = self;
         _ = buffer;
@@ -210,6 +248,16 @@ pub const OutputBuffer = struct
         std.debug.assert(byteOffset < 32 * 1024);
 
         _ = self;
+        unreachable;
+    }
+
+    pub fn copyFromSelf(self: *OutputBuffer, length: usize, distance: usize) !void
+    {
+        for (0 .. length) |_|
+        {
+            const byte = self.referBack(distance);
+            try self.writeByte(byte);
+        }
         unreachable;
     }
 };

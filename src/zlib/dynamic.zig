@@ -86,11 +86,21 @@ const CodeDecodingState = struct
     }
 };
 
+const DecompressionAction = enum
+{
+    LiteralOrLen,
+    Distance,
+    Done,
+};
+
 const DecompressionState = struct
 {
     distanceTree: huffman.Tree,
     literalOrLenCodesTree: huffman.Tree,
     currentBitCount: u5,
+
+    action: DecompressionAction,
+    len: u5,
 };
 
 pub fn decodeCodes(
@@ -302,10 +312,48 @@ pub fn initializeDecompressionState(
     decodingState.deinit(allocator);
 
     state.* = .{
-        .decompression = .{
+        .decompression = std.mem.zeroInit(DecompressionState, .{
             .literalOrLenCodesTree = literalTree,
             .distanceCodesTree = distanceTree,
-            .currentBitCount = 0,
-        },
+        }),
     };
+}
+
+pub fn decompress(
+    context: *helper.DeflateContext,
+    state: *DecompressionState) !bool
+{
+    switch (state.action)
+    {
+        .LiteralOrLen =>
+        {
+            const value = try helper.peekAndDecodeCharacter(context, &state.literalOrLenCodesTree);
+            switch (value.character)
+            {
+                0 ... 255 =>
+                {
+                    try context.output.writeByte(value);
+                },
+                256 =>
+                {
+                    state.action = .Done;
+                },
+                257 ... 285 =>
+                {
+                    state.action = .Distance;
+                    state.len = value;
+                },
+            }
+            value.apply(context);
+        },
+        .Distance =>
+        {
+            const distance = try helper.peekAndDecodeCharacter(context, &state.distanceCodesTree);
+            try context.output.copyFromSelf(distance.character, state.len);
+            state.action = .LiteralOrLen;
+            distance.apply(context);
+        },
+        .Done => unreachable,
+    }
+    return state.action == .Done;
 }

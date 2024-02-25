@@ -104,7 +104,7 @@ const DeflateStateAction = enum
     DecompressionLoop,
 };
 
-pub fn deflate(context: *DeflateContext) !void
+pub fn deflate(context: *DeflateContext) !bool
 {
     const state = context.state;
     switch (state.action)
@@ -189,7 +189,7 @@ pub fn deflate(context: *DeflateContext) !void
                 .Reserved => unreachable,
             }
         },
-        .DecompressionLoop =>
+        .DecompressionLoop => decompression:
         {
             switch (state.blockState)
             {
@@ -198,32 +198,38 @@ pub fn deflate(context: *DeflateContext) !void
                     if (s.decompression.bytesLeftToCopy == 0)
                     {
                         state.action = .Done;
-                        return;
+                        break :decompression;
                     }
 
-                    var iter = pipelines.SegmentIterator.create(context.sequence)
+                    const sequence = context.sequence;
+                    var iter = pipelines.SegmentIterator.create(sequence)
                         orelse return error.NotEnoughBytes;
                     while (true)
                     {
                         const segment = iter.current();
                         const len = segment.len;
                         const bytesWillRead = @min(s.decompression.bytesLeftToCopy, len);
+
+                        const slice = segment[0 .. bytesWillRead];
+                        context.output.writeBytes(slice)
+                            catch |err|
+                            {
+                                sequence.* = sequence.sliceFrom(iter.currentPosition);
+                                return err;
+                            };
+
                         s.decompression.bytesLeftToCopy -= bytesWillRead;
-
-                        const slice = segment.ptr[0 .. bytesWillRead];
-                        context.output.write(slice);
-
                         if (s.decompression.bytesLeftToCopy == 0)
                         {
                             const currentPos = iter.currentPosition.add(bytesWillRead);
-                            context.sequence = context.sequence.sliceFrom(currentPos);
+                            sequence.* = sequence.sliceFrom(currentPos);
                             break;
                         }
 
                         const advanced = iter.advance();
                         if (!advanced)
                         {
-                            context.sequence = context.sequence.sliceFrom(iter.currentPosition);
+                            sequence.* = sequence.sliceFrom(iter.currentPosition);
                             return error.NotEnoughBytes;
                         }
                     }
@@ -235,10 +241,14 @@ pub fn deflate(context: *DeflateContext) !void
                 },
                 .DynamicHuffman => |*s|
                 {
-                    const done = try dynamic.decompressDynamicHuffmanBlock(context, &s.dynamicHuffman);
-                    if (done)
+                    while (true)
                     {
-                        state.action = .IsFinal;
+                        const done = try dynamic.decompress(context, s.decompression);
+                        if (done)
+                        {
+                            state.action = .Done;
+                            break;
+                        }
                     }
                 },
                 .Reserved => unreachable,
@@ -246,6 +256,7 @@ pub fn deflate(context: *DeflateContext) !void
         },
         .Done => unreachable,
     }
+    return state.action == .Done;
 }
 
 fn copyConst(from: type, to: type) type
