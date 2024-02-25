@@ -198,7 +198,6 @@ pub fn deflate(context: *DeflateContext) !void
                 },
                 .FixedHuffman =>
                 {
-                    
                 },
                 .DynamicHuffman => |*s|
                 {
@@ -227,26 +226,6 @@ fn copyConst(from: type, to: type) type
         info.is_const = @typeInfo(from).Pointer.is_const;
         break :t info;
     });
-}
-
-fn readArrayElement(
-    context: *DeflateContext,
-    array: anytype, 
-    currentNumberOfElements: *usize,
-    bitsCount: u5) !bool
-{
-    if (currentNumberOfElements.* < array.len)
-    {
-        const value = try helper.readNBits(context, bitsCount);
-        array[currentNumberOfElements.*] = value;
-        currentNumberOfElements.* += 1;
-    }
-    if (currentNumberOfElements.* == array.len)
-    {
-        currentNumberOfElements.* = 0;
-        return true;
-    }
-    return false;
 }
 
 test

@@ -21,10 +21,16 @@ pub fn PeekNBitsResult(resultType: type) type
     };
 }
 
-pub fn peekNBits(context: *DeflateContext, bitsCount: u6) u32
-    !PeekNBitsResult(u32)
+pub const PeekNBitsContext = struct
 {
-    const ResultType = u16;
+    sequence: *const pipelines.Sequence,
+    bitsCount: u6,
+    comptime reverse: bool = false,
+};
+
+pub fn peekNBits(context: PeekNBitsContext) !PeekNBitsResult(u32)
+{
+    const ResultType = u32;
     const len = context.sequence.len();
     if (len == 0)
     {
@@ -32,7 +38,7 @@ pub fn peekNBits(context: *DeflateContext, bitsCount: u6) u32
     }
 
     const availableBits = len * 8 - context.state.bitOffset;
-    if (availableBits < bitsCount)
+    if (availableBits < context.bitsCount)
     {
         return error.NotEnoughBytes;
     }
@@ -42,20 +48,34 @@ pub fn peekNBits(context: *DeflateContext, bitsCount: u6) u32
     var result: ResultType = 0;
 
     var iterator = pipelines.SegmentIterator.create(context.sequence).?;
-    while (bitsRead < bitsCount)
+    while (bitsRead < context.bitsCount)
     {
         const byte = iterator.current();
         const availableByteBitCount = 8 - bitOffset;
         const byteBits = byte >> bitOffset;
 
-        const bitCountLeftToRead = bitsCount - bitsRead;
+        const bitCountLeftToRead = context.bitsCount - bitsRead;
         const bitCountWillRead = @min(bitCountLeftToRead, availableByteBitCount);
         bitOffset = (bitOffset + bitCountWillRead) % 8;
 
         const willReadMask = 0xFF >> (8 - bitCountWillRead);
         const readBits_ = byteBits & willReadMask;
         const readBitsAsResultType: ResultType = @intCast(readBits_);
-        result |= readBitsAsResultType << bitsRead;
+
+        if (context.reverse)
+        {
+            const c = context.bitsCount - bitsRead - 1;
+            for (0 .. bitCountWillRead) |i|
+            {
+                const bit = (readBitsAsResultType >> i) & 1;
+                result |= bit << (c + i);
+            }
+        }
+        else
+        {
+            result |= readBitsAsResultType << bitsRead;
+        }
+
         bitsRead += bitCountWillRead;
 
         if (bitCountWillRead >= availableByteBitCount)
@@ -70,6 +90,7 @@ pub fn peekNBits(context: *DeflateContext, bitsCount: u6) u32
         .nextBitOffset = bitOffset,
         .nextSequenceStart = iterator.sequence.start(),
     };
+
 }
 
 pub fn peekBits(context: *DeflateContext, ResultType: type)
@@ -84,7 +105,10 @@ pub fn peekBits(context: *DeflateContext, ResultType: type)
 
     std.debug.assert(bitsCount <= 32 and bitsCount > 0);
 
-    return @intCast(peekNBits(context, bitsCount));
+    return @intCast(peekNBits(.{
+        .sequence = context.sequence,
+        .bitsCount = bitsCount
+    }));
 }
 
 pub fn readBits(context: *DeflateContext, ResultType: type) !ResultType
@@ -94,9 +118,12 @@ pub fn readBits(context: *DeflateContext, ResultType: type) !ResultType
     return r.bits;
 }
 
-pub fn readNBits(context: *DeflateContext, bitCount: u6) !u32
+pub fn readNBits(context: *DeflateContext, bitsCount: u6) !u32
 {
-    const r = try peekNBits(context, bitCount);
+    const r = try peekNBits(.{
+        .sequence = context.sequence,
+        .bitsCount = bitsCount,
+    });
     r.apply(context);
     return @intCast(r.bits);
 }
@@ -110,8 +137,12 @@ pub fn readAndDecodeCharacter(context: *DeflateContext, huffman_: *HuffmanParsin
 
     while (true)
     {
-        const code = try peekNBits(context, huffman_.currentBitCount);
-        const decoded = try huffman_.tree.tryDecode(@intCast(code.bits), huffman_.currentBitCount);
+        const code = try peekNBits(.{
+            .sequence = context.sequence,
+            .bitsCount = huffman_.currentBitCount,
+            .reverse = true,
+        });
+        const decoded = try huffman_.tree.tryDecode(code.bits, huffman_.currentBitCount);
         switch (decoded)
         {
             .DecodedCharacter => |ch|
@@ -153,3 +184,16 @@ fn readArrayElement(
     return false;
 }
 
+const OutputBuffer = struct
+{
+    position: usize,
+    len: usize,
+
+    pub fn referBack(self: *const OutputBuffer, byteOffset: usize) u8
+    {
+        std.debug.assert(byteOffset < 32 * 1024);
+
+        _ = self;
+        unreachable;
+    }
+};
