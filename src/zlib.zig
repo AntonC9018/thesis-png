@@ -75,24 +75,25 @@ const DeflateState = struct
     bitOffset: u4,
 
     isFinal: bool,
-    blockType: BlockType,
     len: u16,
 
     dataBytesRead: u16,
     symbol: SymbolState,
+
+    blockState: union(BlockType)
+    {
+        NoCompression: void,
+        FixedHuffman: void,
+        DynamicHuffman: DynamicHuffmanState,
+        Reserved: void,
+    },
 };
 
 const SymbolState = union(enum)
 {
     Code7: void,
-    Code8: struct
-    {
-        code7: u7,
-    },
-    Code9: struct
-    {
-        code8: u8,
-    },
+    Code8: void,
+    Code9: void,
     Code9Value: u9,
     Length: struct
     {
@@ -124,16 +125,91 @@ const DeflateStateAction = enum
     DecompressionLoop,
 };
 
-pub fn readNBits(context: *DeflateContext, resultType: type) !resultType
+const DynamicHuffmanAction = enum
 {
-    const bitsCount = comptime b:
-    {
-        const typeInfo = @typeInfo(resultType);
-        const bitsCount: u4 = @intCast(typeInfo.Int.bits);
-        std.debug.assert(bitsCount <= 8);
-        break :b bitsCount;
-    };
+    LiteralOrLenCodeCount,
+    DistanceCodeCount,
+    CodeLenCount,
+    CodeLens,
+    LiteralOrLenCodeLens,
+    DistanceCodeLens,
+};
 
+const HuffmanParsingState = struct
+{
+    tree: HuffmanTree,
+    currentBitCount: u5,
+};
+
+const CodeFrequencyAction = enum
+{
+    LiteralLen,
+    RepeatCount,
+    Done,
+};
+
+const CodeFrequencyState = struct
+{
+    action: CodeFrequencyAction,
+    huffman: HuffmanParsingState,
+    decodedLen: u5,
+    repeatCount: u7,
+
+    pub fn repeatBitCount(self: *const CodeFrequencyState) u5
+    {
+        return switch (self.decodedLen)
+        {
+            16 => 2,
+            17 => 3,
+            18 => 7,
+            else => unreachable,
+        };
+    }
+};
+
+const DynamicHuffmanState = struct
+{
+    action: DynamicHuffmanAction,
+    literalOrLenCodeCount: u5,
+    distanceCodeCount: u5,
+    codeLenCodeCount: u4,
+
+    // Reset as it's being read.
+    readListItemCount: usize,
+    codeFrequencyState: CodeFrequencyState,
+
+    codeLens: [19]u3,
+    literalOrLengthCodeLens: []u8,
+    distances: []u8,
+
+    pub fn getLenCodeCount(self: *const DynamicHuffmanState) usize
+    {
+        return self.literalOrLenCodeCount + 4;
+    }
+};
+
+fn PeekNBitsResult(resultType: type) type
+{
+    return struct
+    {
+        bits: resultType,
+        nextBitOffset: u4,
+        nextSequenceStart: pipelines.SequencePosition,
+
+        const Self = @This();
+
+        pub fn apply(self: Self, context1: *DeflateContext) void
+        {
+            context1.state.bitOffset = self.nextBitOffset;
+            context1.sequence.* = context1.sequence.sliceFrom(self.nextSequenceStart);
+        }
+    };
+}
+
+pub fn peekNBits(context: *DeflateContext, bitsCount: u6) u32
+    !PeekNBitsResult(u32)
+{
+    const ResultType = u16;
     const len = context.sequence.len();
     if (len == 0)
     {
@@ -146,34 +222,68 @@ pub fn readNBits(context: *DeflateContext, resultType: type) !resultType
         return error.NotEnoughBytes;
     }
 
-    const bitOffset = &context.state.bitOffset;
-    const firstByteBitsLeft = 8 - bitOffset.*;
+    var bitOffset = context.state.bitOffset;
+    var bitsRead = 0;
+    var result: ResultType = 0;
 
-    const s = context.sequence;
-    const firstByte = s.peekFirstByte().?;
-    const mask = 0xFF >> (8 - bitsCount);
-    const firstByteBits = (firstByte >> bitOffset.*) & mask;
-
-    if (firstByteBitsLeft > bitsCount)
+    var iterator = pipelines.SegmentIterator.create(context.sequence).?;
+    while (bitsRead < bitsCount)
     {
-        bitOffset.* += bitsCount;
-        return firstByteBits;
+        const byte = iterator.current();
+        const availableByteBitCount = 8 - bitOffset;
+        const byteBits = byte >> bitOffset;
+
+        const bitCountLeftToRead = bitsCount - bitsRead;
+        const bitCountWillRead = @min(bitCountLeftToRead, availableByteBitCount);
+        bitOffset = (bitOffset + bitCountWillRead) % 8;
+
+        const willReadMask = 0xFF >> (8 - bitCountWillRead);
+        const readBits = byteBits & willReadMask;
+        const readBitsAsResultType: ResultType = @intCast(readBits);
+        result |= readBitsAsResultType << bitsRead;
+        bitsRead += bitCountWillRead;
+
+        if (bitCountWillRead >= availableByteBitCount)
+        {
+            const advanced = iterator.advance();
+            std.debug.assert(advanced);
+        }
     }
 
-    s.* = s.sliceFrom(s.getPosition(1));
+    return .{
+        .bits = result,
+        .nextBitOffset = bitOffset,
+        .nextSequenceStart = iterator.sequence.start(),
+    };
+}
 
-    const bitsLeftToRead = bitsCount - firstByteBitsLeft;
-    bitOffset.* = bitsLeftToRead;
-
-    if (bitsLeftToRead == 0)
+pub fn peekBits(context: *DeflateContext, ResultType: type)
+    !PeekNBitsResult(ResultType)
+{
+    const bitsCount = comptime b:
     {
-        return firstByteBits;
-    }
+        const typeInfo = @typeInfo(ResultType);
+        const bitsCount: u4 = @intCast(typeInfo.Int.bits);
+        break :b bitsCount;
+    };
 
-    const secondByte = s.peekFirstByte().?;
-    const secondByteBits = secondByte >> (8 - bitsLeftToRead);
-    const result = firstByteBits | (secondByteBits << firstByteBitsLeft);
-    return result;
+    std.debug.assert(bitsCount <= 32 and bitsCount > 0);
+
+    return @intCast(peekNBits(context, bitsCount));
+}
+
+pub fn readBits(context: *DeflateContext, ResultType: type) !ResultType
+{
+    const r = try peekBits(context, ResultType);
+    r.apply(context);
+    return r.bits;
+}
+
+pub fn readNBits(context: *DeflateContext, bitCount: u6) !u32
+{
+    const r = try peekNBits(context, bitCount);
+    r.apply(context);
+    return @intCast(r.bits);
 }
 
 const BackReference = struct
@@ -285,43 +395,44 @@ fn readSymbol(context: *DeflateContext) !bool
     {
         .Code7 =>
         {
-            const code7 = try readNBits(context, 7);
-            if (code7 == 0)
+            const code = try peekBits(context, u7);
+            if (code.bits == 0)
             {
+                code.apply(context);
                 return .{ .endBlock = {} };
             }
 
-            if (code7 <= lengthCodeUpperLimit)
+            if (code.bits <= lengthCodeUpperLimit)
             {
+                code.apply(context);
                 symbol.* = .{
                     .Length = .{ 
-                        .codeRemapped = code7 - 1,
+                        .codeRemapped = code.bits - 1,
                     },
                 };
                 return false;
             }
 
-            symbol.* = .{
-                .Code8 = .{ 
-                    .code7 = code7,
-                },
-            };
+            symbol.* = .{ .Code8 = {} };
         },
-        .Code8 => |c|
+        .Code8 =>
         {
-            const bit8 = try readNBits(context, 1);
-            const code8: u8 = (@as(u8, bit8) << 7) | @as(u8, c.code7);
+            const code = try peekBits(context, u8);
 
-            if (code8 >= literalLowerLimit and code8 <= literalUpperLimit)
+            if (code.bits >= literalLowerLimit and code.bits <= literalUpperLimit)
             {
-                const value = code8 - literalLowerLimit;
+                code.apply(context);
+
+                const value = code.bits - literalLowerLimit;
                 symbol.* = .{ .literalValue = value };
                 return true;
             }
 
-            if (code8 >= lengthLowerLimit2 and code8 <= lengthUpperLimit2)
+            if (code.bits >= lengthLowerLimit2 and code.bits <= lengthUpperLimit2)
             {
-                const codeRemapped = code8 - lengthLowerLimit2 + lengthCodeUpperLimit;
+                code.apply(context);
+
+                const codeRemapped = code.bits - lengthLowerLimit2 + lengthCodeUpperLimit;
                 symbol.* = .{ 
                     .Length = .{ 
                         .codeRemapped = codeRemapped,
@@ -335,31 +446,26 @@ fn readSymbol(context: *DeflateContext) !bool
                 return false;
             }
 
-            symbol.* = .{
-                .Code9 = .{ 
-                    .code8 = code8,
-                },
-            };
+            symbol.* = .{ .Code9 = {} };
         },
-        .Code9 => |c|
+        .Code9 =>
         {
-            const bit9 = try readNBits(context, 1);
-            const code9: u9 = (@as(u9, bit9) << 8) | @as(u9, c.code8);
-            if (code9 >= literalLowerLimit2)
+            const code = try readBits(context, u9);
+            if (code >= literalLowerLimit2)
             {
                 const literalOffset2 = literalUpperLimit - literalLowerLimit;
-                const value = code9 - literalLowerLimit2 + literalOffset2;
+                const value = code - literalLowerLimit2 + literalOffset2;
                 symbol.* = .{ .literalValue = value };
                 return true;
             }
 
-            symbol.* = .{ .Code9Value = code9 };
+            symbol.* = .{ .Code9Value = code };
             return error.DisallowedDeflateCodeValue;
         },
         .Length => |l|
         {
             const lengthBitCount = getLengthBitCount(l.codeRemapped);
-            const extraBits = try readNBits(context, lengthBitCount);
+            const extraBits = try readBits(context, lengthBitCount);
             const baseLength = getBaseLength(l.codeRemapped);
             const length = baseLength + extraBits;
             symbol.* = .{ 
@@ -370,7 +476,7 @@ fn readSymbol(context: *DeflateContext) !bool
         },
         .DistanceCode => |d|
         {
-            const distanceCode = try readNBits(context, 5);
+            const distanceCode = try readBits(context, u5);
             symbol.* = .{
                 .Distance = .{
                     .length = d.length,
@@ -386,7 +492,7 @@ fn readSymbol(context: *DeflateContext) !bool
         .Distance => |d|
         {
             const distanceBitCount = getDistanceBitCount(d.distanceCode);
-            const extraBits = try readNBits(context, distanceBitCount);
+            const extraBits = try readBits(context, distanceBitCount);
             const baseDistance = getBaseDistance(d.distanceCode);
             const distance = baseDistance + extraBits;
             symbol.* = .{
@@ -410,13 +516,13 @@ pub fn deflate(context: *DeflateContext) !void
     {
         .IsFinal =>
         {
-            const isFinal = try readNBits(context, 1);
+            const isFinal = try readBits(context, u1);
             state.isFinal = isFinal;
             state.action = DeflateStateAction.BlockType;
         },
         .BlockType =>
         {
-            const blockType = try readNBits(context, 2);
+            const blockType = try readBits(context, u2);
             state.blockType = @enumFromInt(blockType);
 
             switch (state.blockType)
@@ -433,6 +539,9 @@ pub fn deflate(context: *DeflateContext) !void
                 .FixedHuffman =>
                 {
                     // state.action = DeflateStateAction.FixedHuffman;
+                },
+                .DynamicHuffman =>
+                {
                 },
                 .Reserved =>
                 {
@@ -474,6 +583,8 @@ fn copyConst(from: type, to: type) type
     });
 }
 
+const DecodedCharacter = u16;
+
 const HuffmanTree = struct
 {
     prefixes: [MAX_PREFIX_COUNT]u16,
@@ -505,10 +616,11 @@ const HuffmanTree = struct
         characterIndex: u8,
 
         pub fn next(self: *Iterator)
-            ?struct {
+            ?struct
+            {
                 code: u16,
                 bitCount: u5,
-                decodedCharacter: u8,
+                decodedCharacter: DecodedCharacter,
             }
         {
             if (self.bitIndex > self.tree.maxBitCount)
@@ -555,16 +667,9 @@ const HuffmanTree = struct
         };
     }
 
-    const Lengths = struct
-    {
-        prefixLen: u4,
-        bitCount: u5,
-    };
-
     fn getNextBitCount(self: *const HuffmanTree, bitCount: u5) ?u5
     {
-        const maxBitCount_ = self.maxBitCount;
-        for ((bitCount + 1) .. (maxBitCount_ + 1)) |nextBitCount|
+        for ((bitCount + 1) .. (self.maxBitCount + 1)) |nextBitCount|
         {
             if (self.decodedCharactersLookup[nextBitCount - 1].len != 0)
             {
@@ -577,8 +682,8 @@ const HuffmanTree = struct
     pub fn tryDecode(self: *const HuffmanTree, code: u16, bitCount: u5)
         !union(enum)
         {
-            decodedCharacter: u8,
-            nextBitCount: u5,
+            DecodedCharacter: DecodedCharacter,
+            NextBitCount: u5,
         }
     {
         const bitIndex: u4 = @intCast(bitCount - 1);
@@ -699,11 +804,11 @@ fn createHuffmanTree(
     {
         if (count != 0)
         {
-            lookup.* = try allocator.alloc(u8, count);
+            lookup.* = try allocator.alloc(DecodedCharacter, count);
         }
     }
 
-    var counters: [MAX_PREFIX_COUNT]u8 = [_]u8{0} ** MAX_PREFIX_COUNT;
+    var counters: [MAX_PREFIX_COUNT]DecodedCharacter = [_]DecodedCharacter{0} ** MAX_PREFIX_COUNT;
 
     for (0 .., t.bitLensBySymbol) |i, bitLen|
     {
@@ -716,6 +821,15 @@ fn createHuffmanTree(
     }
 
     return codes;
+}
+
+fn generateHuffmanTree(
+    bitLensBySymbol: []const u5,
+    allocator: std.mem.Allocator) !HuffmanTree
+{
+    const t = try generateHuffmanTreeCreationContext(bitLensBySymbol);
+    const tree = try createHuffmanTree(&t, allocator);
+    return tree;
 }
 
 test "huffman tree correct"
@@ -767,6 +881,233 @@ test "huffman tree correct"
         const letterIndex = letter - 'A';
         const bitLen = bitLens[letterIndex];
         const decoded = try tree.tryDecode(expectedCode, bitLen);
-        try t.expectEqual(letterIndex, decoded.decodedCharacter);
+        try t.expectEqual(letterIndex, decoded.DecodedCharacter);
+    }
+}
+
+fn readArrayElement(
+    context: *DeflateContext,
+    array: anytype, 
+    currentNumberOfElements: *usize,
+    BitsType: type) !bool
+{
+
+    if (currentNumberOfElements.* < array.len)
+    {
+        const value = try readBits(context, BitsType);
+        array[currentNumberOfElements.*] = value;
+        currentNumberOfElements.* += 1;
+    }
+    if (currentNumberOfElements.* == array.len)
+    {
+        currentNumberOfElements.* = 0;
+        return true;
+    }
+    return false;
+}
+
+
+pub fn parseDynamicHuffmanTree(
+    context: *DeflateContext) !bool
+{
+    const state = &context.state.blockState.DynamicHuffman;
+
+    switch (state.action)
+    {
+        // TODO:
+        // Maybe actually really try using async here?
+        // Code like this kills me.
+        .LiteralOrLenCodeCount =>
+        {
+            const count = try readBits(context, u5);
+            state.literalOrLenCodeCount = count;
+            state.action = .DistanceCodeCount;
+            return false;
+        },
+        .DistanceCodeCount =>
+        {
+            const count = try readBits(context, u5);
+            state.distanceCodeCount = count;
+            state.action = .CodeLenCount;
+            return false;
+        },
+        .CodeLenCount =>
+        {
+            const count = try readBits(context, u4);
+            state.codeLenCodeCount = count;
+            state.action = .CodeLens;
+
+            const codeLenCount = count + 4;
+            state.codeLens = try context.allocator.alloc(u3, codeLenCount);
+
+            return false;
+        },
+        .CodeLens =>
+        {
+            const readAllArray = readArrayElement(
+                context,
+                state.codeLens[0 .. state.getLenCodeCount()],
+                &state.readListItemCount,
+                u3);
+            
+            if (readAllArray)
+            {
+                state.action = .LiteralOrLenCodeLens;
+                state.literalOrLengthCodeLens = try context.allocator
+                    .alloc(u5, 257 + state.literalOrLenCodeCount);
+
+                const copy = state.codeLens;
+                for (0 .. state.getLenCodeCount()) |i|
+                {
+                    const orderArray = &[_]u5{
+                        16, 17, 18, 0, 8,
+                        7, 9, 6, 10, 5,
+                        11, 4, 12, 3, 13,
+                        2, 14, 1, 15,
+                    };
+                    const remappedIndex = orderArray[i];
+                    state.codeLens[remappedIndex] = copy[i];
+
+                    const tree = try generateHuffmanTree(
+                        @ptrCast(state.codeLens),
+                        context.allocator);
+                    state.codeFrequencyState = .{
+                        .action = .ReadCodeLen,
+                        .codeLenTree = tree,
+                        .currentBitCount = 0,
+                        .len = 0,
+                    };
+                }
+            }
+            return false;
+        },
+        .LiteralOrLenCodeLens =>
+        {
+            const array = state.literalOrLengthCodeLens;
+            const readCount = &state.readListItemCount;
+            const freqState = &state.codeFrequencyState;
+            if (readCount.* < array.len)
+            {
+                while (true)
+                {
+                    const done = try readLiteralOrLenCode(context, state);
+                    if (done)
+                    {
+                        freqState.action = .LiteralLen;
+                        break;
+                    }
+                }
+            }
+
+            if (readCount.* == array.len)
+            {
+                state.action = .DistanceCodeLens;
+                state.distanceCodeLens = try context.allocator
+                    .alloc(u5, 1 + state.distanceCodeCount);
+                state.readListItemCount = 0;
+            }
+            return false;
+        },
+        .DistanceCodeLens =>
+        {
+            if (state.readListItemCount < state.distanceCodeLens.len)
+            {
+                const len = try readBits(context, 3);
+                state.distances[state.readListItemCount] = len;
+                state.readListItemCount += 1;
+            }
+            if (state.readListItemCount == state.distanceCodeLens.len)
+            {
+                state.action = .Done;
+            }
+            return false;
+        },
+    }
+}
+
+fn readAndDecodeCharacter(context: *DeflateContext, huffman: *HuffmanParsingState) !u16
+{
+    if (huffman.currentBitCount == 0)
+    {
+        huffman.currentBitCount = huffman.tree.getNextBitCount(0);
+    }
+
+    while (true)
+    {
+        const code = try peekNBits(context, huffman.currentBitCount);
+        const decoded = try huffman.tree.tryDecode(code.bits, huffman.currentBitCount);
+        switch (decoded)
+        {
+            .DecodedCharacter => |ch|
+            {
+                code.apply(context);
+                return ch;
+            },
+            .NextBitCount => |bitCount|
+            {
+                huffman.currentBitCount = bitCount;
+            },
+        }
+    }
+}
+
+fn readLiteralOrLenCode(
+    context: *DeflateContext,
+    state: *DynamicHuffmanState) !bool
+{
+    const freqState = &state.codeFrequencyState;
+    const outputArray = state.literalOrLengthCodeLens;
+    const readCount = &state.readListItemCount;
+
+    switch (freqState.action)
+    {
+        .LiteralLen =>
+        {
+            const character = try readAndDecodeCharacter(context, &freqState.huffman);
+            const len: u5 = @intCast(character);
+
+            std.debug.assert(len <= 18);
+
+            if (len >= 16)
+            {
+                freqState.action = .RepeatCount;
+
+                if (state.readCount.* == 0)
+                {
+                    return .NothingToRepeat;
+                }
+
+                return false;
+            }
+
+            freqState.action = .Done;
+            outputArray[readCount.*] = len;
+            readCount.* += 1;
+            return true;
+        },
+        .RepeatCount =>
+        {
+            const repeatBitCount = freqState.repeatBitCount();
+            const repeatCount = try readNBits(context, repeatBitCount);
+            freqState.repeatCount = @intCast(repeatCount);
+
+            const maxCanReadCount = outputArray.len - readCount.*;
+            if (repeatCount > maxCanReadCount)
+            {
+                return error.InvalidRepeatCount;
+            }
+
+            const repeatedLen = outputArray[readCount.* - 1];
+
+            for (0 .. repeatCount) |i|
+            {
+                const index = readCount.* + i;
+                outputArray[index] = repeatedLen;
+            }
+            readCount.* += repeatCount;
+            freqState.action = .Done;
+            return true;
+        },
+        .Done => unreachable,
     }
 }
