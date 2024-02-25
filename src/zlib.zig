@@ -608,6 +608,18 @@ const HuffmanTree = struct
             allocator.free(arr);
         }
     }
+    
+    fn getNextBitIndex(self: *HuffmanTree, startBitIndex: u5) u5
+    {
+        if (self.getNextBitCount(startBitIndex)) |ni|
+        {
+            return ni - 1;
+        }
+        else
+        {
+            return self.maxBitCount;
+        }
+    }
 
     pub const Iterator = struct
     {
@@ -623,7 +635,7 @@ const HuffmanTree = struct
                 decodedCharacter: DecodedCharacter,
             }
         {
-            if (self.bitIndex > self.tree.maxBitCount)
+            if (self.bitIndex == self.tree.maxBitCount)
             {
                 return null;
             }
@@ -638,14 +650,7 @@ const HuffmanTree = struct
             self.characterIndex += 1;
             if (self.characterIndex == lookup.len)
             {
-                if (self.tree.getNextBitCount(self.bitIndex + 1)) |ni|
-                {
-                    self.bitIndex = ni - 1;
-                }
-                else
-                {
-                    self.bitIndex = self.tree.maxBitCount + 1;
-                }
+                self.bitIndex = self.tree.getNextBitIndex(self.bitIndex + 1);
                 self.characterIndex = 0;
             }
 
@@ -659,7 +664,7 @@ const HuffmanTree = struct
 
     pub fn iterator(self: *const HuffmanTree) Iterator
     {
-        const bitIndex = self.getNextBitCount(0) orelse self.maxBitCount + 1;
+        const bitIndex = self.getNextBitIndex(0);
         return .{
             .tree = self,
             .bitIndex = bitIndex,
@@ -1006,6 +1011,7 @@ pub fn parseDynamicHuffmanTree(
                     .alloc(u5, 1 + state.distanceCodeCount);
                 state.readListItemCount = 0;
             }
+
             return false;
         },
         .DistanceCodeLens =>
@@ -1035,7 +1041,7 @@ fn readAndDecodeCharacter(context: *DeflateContext, huffman: *HuffmanParsingStat
     while (true)
     {
         const code = try peekNBits(context, huffman.currentBitCount);
-        const decoded = try huffman.tree.tryDecode(code.bits, huffman.currentBitCount);
+        const decoded = try huffman.tree.tryDecode(@intCast(code.bits), huffman.currentBitCount);
         switch (decoded)
         {
             .DecodedCharacter => |ch|
