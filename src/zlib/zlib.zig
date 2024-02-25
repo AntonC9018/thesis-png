@@ -72,6 +72,7 @@ const DeflateContext = struct
     sequence: *pipelines.Sequence,
     state: *DeflateState,
     allocator: std.mem.Allocator,
+    output: *helper.OutputBuffer,
 };
 
 const DeflateState = struct
@@ -86,7 +87,7 @@ const DeflateState = struct
 
     blockState: union(BlockType)
     {
-        NoCompression: void,
+        NoCompression: NoCompressionState,
         FixedHuffman: fixed.SymbolDecompressionState,
         DynamicHuffman: dynamic.State,
         Reserved: void,
@@ -129,7 +130,7 @@ pub fn deflate(context: *DeflateContext) !void
                         state.bitOffset = 0;
                     }
                     state.blockState = .{
-                        .NoCompression = {},
+                        .NoCompression = std.mem.zeroes(NoCompressionState),
                     };
                     state.action = .BlockInit;
                 },
@@ -162,19 +163,18 @@ pub fn deflate(context: *DeflateContext) !void
         {
             switch (state.blockState)
             {
-                .NoCompression =>
+                .NoCompression => |*s|
                 {
-                    const len = try pipelines.readNetworkUnsigned(context.sequence, u16);
-                    state.action = DeflateStateAction.NoCompressionNLen;
-                    state.len = len;
-
-                    const nlen = try pipelines.readNetworkUnsigned(context.sequence, u16);
-                    if (nlen != ~state.len)
+                    const done = try initNoCompression(context, s.init);
+                    if (done)
                     {
-                        return error.NLenNotOnesComplement;
+                        s.* = .{
+                            .decompression = .{
+                                .bytesLeftToCopy = s.init.len,
+                            },
+                        };
+                        state.action = .DecompressionLoop;
                     }
-                    state.action = .UncompressedBytes;
-                    state.dataBytesRead = 0;
                 },
                 .FixedHuffman => unreachable,
                 .DynamicHuffman => |*s|
@@ -193,8 +193,42 @@ pub fn deflate(context: *DeflateContext) !void
         {
             switch (state.blockState)
             {
-                .NoCompression =>
+                .NoCompression => |*s|
                 {
+                    if (s.decompression.bytesLeftToCopy == 0)
+                    {
+                        state.action = .Done;
+                        return;
+                    }
+
+                    var iter = pipelines.SegmentIterator.create(context.sequence)
+                        orelse return error.NotEnoughBytes;
+                    while (true)
+                    {
+                        const segment = iter.current();
+                        const len = segment.len;
+                        const bytesWillRead = @min(s.decompression.bytesLeftToCopy, len);
+                        s.decompression.bytesLeftToCopy -= bytesWillRead;
+
+                        const slice = segment.ptr[0 .. bytesWillRead];
+                        context.output.write(slice);
+
+                        if (s.decompression.bytesLeftToCopy == 0)
+                        {
+                            const currentPos = iter.currentPosition.add(bytesWillRead);
+                            context.sequence = context.sequence.sliceFrom(currentPos);
+                            break;
+                        }
+
+                        const advanced = iter.advance();
+                        if (!advanced)
+                        {
+                            context.sequence = context.sequence.sliceFrom(iter.currentPosition);
+                            return error.NotEnoughBytes;
+                        }
+                    }
+
+                    state.action = .Done;
                 },
                 .FixedHuffman =>
                 {
@@ -210,12 +244,7 @@ pub fn deflate(context: *DeflateContext) !void
                 .Reserved => unreachable,
             }
         },
-        .UncompressedBytes =>
-        {
-            // TODO:
-            // use the read bytes helper, move it from the parser
-            // into pipelines or pipelines.extensions
-        },
+        .Done => unreachable,
     }
 }
 
@@ -231,4 +260,53 @@ fn copyConst(from: type, to: type) type
 test
 {
     _ = huffman;
+}
+
+const NoCompressionInitStateAction = enum
+{
+    Len,
+    NLen,
+    Done,
+};
+
+const NoCompressionState = union
+{
+    init: struct
+    {
+        action: NoCompressionInitStateAction,
+        len: u16,
+        nlen: u16,
+    },
+    decompression: struct
+    {
+        bytesLeftToCopy: u16,
+    },
+};
+
+pub fn initNoCompression(context: *DeflateContext, state: *NoCompressionState) !bool
+{
+    switch (state.action)
+    {
+        .Len =>
+        {
+            const len = try pipelines.readNetworkUnsigned(context.sequence, u16);
+            state.len = len;
+            state.action = .NLen;
+            return false;
+        },
+        .NLen =>
+        {
+            const nlen = try pipelines.readNetworkUnsigned(context.sequence, u16);
+            state.nlen = nlen;
+
+            if (nlen != ~state.len)
+            {
+                return error.NLenNotOnesComplement;
+            }
+
+            state.action = .Done;
+            return true;
+        },
+        .Done => unreachable,
+    }
 }

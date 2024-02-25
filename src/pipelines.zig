@@ -538,12 +538,22 @@ pub const SegmentIterator = struct
 
     pub fn advance(self: *SegmentIterator) bool
     {
-        self.currentPosition.segment += 1;
-        self.currentPosition.offset = 0;
         // I try to keep the ends in the same segment 
         // such that there are no empty segments.
         // So this should be correct.
-        return self.currentPosition.segment <= self.sequence.end().segment;
+        const nextSegment = self.currentPosition.segment + 1;
+        const movedPastEnd = nextSegment <= self.sequence.end().segment;
+        if (movedPastEnd)
+        {
+            self.currentPosition = SequencePosition.End;
+            return false;
+        }
+        else
+        {
+            self.currentPosition.segment = nextSegment;
+            self.currentPosition.offset = 0;
+            return true;
+        }
     }
 
     pub fn getCurrentPosition(self: *SegmentIterator) SequencePosition

@@ -100,7 +100,6 @@ pub fn peekNBits(context: PeekNBitsContext) !PeekNBitsResult(u32)
         .nextBitOffset = bitOffset,
         .nextSequenceStart = iterator.sequence.start(),
     };
-
 }
 
 pub fn peekBits(context: *DeflateContext, ResultType: type)
@@ -194,10 +193,17 @@ fn readArrayElement(
     return false;
 }
 
-const OutputBuffer = struct
+pub const OutputBuffer = struct
 {
     position: usize,
     len: usize,
+
+    pub fn writeBytes(self: *OutputBuffer, buffer: []const u8) void
+    {
+        _ = self;
+        _ = buffer;
+        unreachable;
+    }
 
     pub fn referBack(self: *const OutputBuffer, byteOffset: usize) u8
     {
