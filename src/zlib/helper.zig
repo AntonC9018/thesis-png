@@ -23,21 +23,31 @@ pub fn PeekNBitsResult(resultType: type) type
 
 pub const PeekNBitsContext = struct
 {
-    sequence: *const pipelines.Sequence,
+    context: *const DeflateContext,
     bitsCount: u6,
     comptime reverse: bool = false,
+
+    fn sequence(self: *PeekNBitsContext) *const pipelines.Sequence
+    {
+        return self.context.sequence;
+    }
+
+    fn bitOffset(self: *PeekNBitsContext) u4
+    {
+        return self.context.state.bitOffset;
+    }
 };
 
 pub fn peekNBits(context: PeekNBitsContext) !PeekNBitsResult(u32)
 {
     const ResultType = u32;
-    const len = context.sequence.len();
+    const len = context.sequence().len();
     if (len == 0)
     {
         return error.NotEnoughBytes;
     }
 
-    const availableBits = len * 8 - context.state.bitOffset;
+    const availableBits = len * 8 - context.bitOffset();
     if (availableBits < context.bitsCount)
     {
         return error.NotEnoughBytes;
@@ -47,7 +57,7 @@ pub fn peekNBits(context: PeekNBitsContext) !PeekNBitsResult(u32)
     var bitsRead = 0;
     var result: ResultType = 0;
 
-    var iterator = pipelines.SegmentIterator.create(context.sequence).?;
+    var iterator = pipelines.SegmentIterator.create(context.sequence()).?;
     while (bitsRead < context.bitsCount)
     {
         const byte = iterator.current();
@@ -106,7 +116,7 @@ pub fn peekBits(context: *DeflateContext, ResultType: type)
     std.debug.assert(bitsCount <= 32 and bitsCount > 0);
 
     return @intCast(peekNBits(.{
-        .sequence = context.sequence,
+        .context = context,
         .bitsCount = bitsCount
     }));
 }
@@ -121,7 +131,7 @@ pub fn readBits(context: *DeflateContext, ResultType: type) !ResultType
 pub fn readNBits(context: *DeflateContext, bitsCount: u6) !u32
 {
     const r = try peekNBits(.{
-        .sequence = context.sequence,
+        .context = context,
         .bitsCount = bitsCount,
     });
     r.apply(context);
@@ -138,7 +148,7 @@ pub fn readAndDecodeCharacter(context: *DeflateContext, huffman_: *HuffmanParsin
     while (true)
     {
         const code = try peekNBits(.{
-            .sequence = context.sequence,
+            .context = context,
             .bitsCount = huffman_.currentBitCount,
             .reverse = true,
         });
