@@ -251,7 +251,7 @@ pub const OutputBuffer = struct
         unreachable;
     }
 
-    pub fn copyFromSelf(self: *OutputBuffer, length: usize, distance: usize) !void
+    pub fn copyFromSelf(self: *OutputBuffer, backRef: BackReference) !void
     {
         for (0 .. length) |_|
         {
@@ -261,3 +261,51 @@ pub const OutputBuffer = struct
         unreachable;
     }
 };
+
+pub const BackReference = struct
+{
+    distance: u16,
+    len: u16,
+};
+
+pub const Symbol = union(enum)
+{
+    endBlock: void,
+    literalValue: u8,
+    backReference: BackReference,
+};
+
+pub fn writeSymbolToOutput(context: *DeflateContext, symbol: ?Symbol) !bool
+{
+    if (symbol) |s|
+    {
+        const done = try writeSymbolToOutput_switch(context, s);
+        if (done)
+        {
+            context.state.action = .Done;
+            return true;
+        }
+    }
+    return false;
+}
+
+fn writeSymbolToOutput_switch(context: *DeflateContext, symbol: Symbol) !bool
+{
+    switch (symbol)
+    {
+        .endBlock =>
+        {
+            return true;
+        },
+        .literalValue => |literal|
+        {
+            try context.output.writeByte(literal);
+        },
+        .backReference => |backReference|
+        {
+            try context.output.copyFromSelf(backReference);
+        },
+    }
+    return false;
+}
+

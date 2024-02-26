@@ -85,6 +85,7 @@ const DeflateState = struct
     len: u16,
 
     dataBytesRead: u16,
+    lastSymbol: ?helper.Symbol,
 
     blockState: union(BlockType)
     {
@@ -103,8 +104,10 @@ const DeflateStateAction = enum
     BlockInit,
 
     DecompressionLoop,
+    Done,
 };
 
+// Returns true when it's done with a block.
 pub fn deflate(context: *DeflateContext) !bool
 {
     const state = context.state;
@@ -114,7 +117,7 @@ pub fn deflate(context: *DeflateContext) !bool
         {
             const isFinal = try helper.readBits(context, u1);
             state.isFinal = isFinal;
-            state.action = DeflateStateAction.BlockType;
+            state.action = .BlockType;
         },
         .BlockType =>
         {
@@ -125,11 +128,13 @@ pub fn deflate(context: *DeflateContext) !bool
             {
                 .NoCompression =>
                 {
+                    // The uncompressed info starts on a byte boundary.
                     if (state.bitOffset != 0)
                     {
                         _ = pipelines.removeFirst(context.sequence) catch unreachable;
                         state.bitOffset = 0;
                     }
+                    // It still needs to read some metadata though.
                     state.blockState = .{
                         .NoCompression = std.mem.zeroes(noCompression.State),
                     };
@@ -140,6 +145,8 @@ pub fn deflate(context: *DeflateContext) !bool
                     state.blockState = .{
                         .FixedHuffman = fixed.SymbolDecompressionState.Initial,
                     };
+                    // It doesn't need to read any metadata.
+                    // The symbol tables are predefined by the spec.
                     state.action = .DecompressionLoop;
                 },
                 .DynamicHuffman =>
@@ -166,6 +173,9 @@ pub fn deflate(context: *DeflateContext) !bool
             {
                 .NoCompression => |*s|
                 {
+                    // It's getting initialized in mutliple calls to this.
+                    // You have to call the whole function again.
+                    // (Could have done a for loop within here, but it's more flexible otherwise).
                     const done = try noCompression.initState(context, s.init);
                     if (done)
                     {
@@ -196,23 +206,23 @@ pub fn deflate(context: *DeflateContext) !bool
             {
                 .NoCompression => |*s|
                 {
+                    // This reads as much as possible, because there's nothing interesting going on.
                     try noCompression.decompress(context, s.decompression);
                     state.action = .Done;
                 },
-                .FixedHuffman =>
+                .FixedHuffman => |*s|
                 {
+                    const symbol = try fixed.decompressSymbol(context, s);
+                    state.lastSymbol = symbol;
+                    const done = try helper.writeSymbolToOutput(context, symbol);
+                    return done;
                 },
                 .DynamicHuffman => |*s|
                 {
-                    while (true)
-                    {
-                        const done = try dynamic.decompress(context, s.decompression);
-                        if (done)
-                        {
-                            state.action = .Done;
-                            break;
-                        }
-                    }
+                    const symbol = try dynamic.decompressSymbol(context, s.decompression);
+                    state.lastSymbol = symbol;
+                    const done = try helper.writeSymbolToOutput(context, symbol);
+                    return done;
                 },
                 .Reserved => unreachable,
             }

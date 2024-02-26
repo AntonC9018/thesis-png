@@ -90,7 +90,6 @@ const DecompressionAction = enum
 {
     LiteralOrLen,
     Distance,
-    Done,
 };
 
 const DecompressionState = struct
@@ -139,7 +138,7 @@ pub fn decodeCodes(
         },
         .CodeLens =>
         {
-            const readAllArray = helper.readArrayElement(
+            const readAllArray = try helper.readArrayElement(
                 context,
                 state.codeLenCodeLens[0 .. state.getLenCodeCount()],
                 &state.readListItemCount,
@@ -319,24 +318,24 @@ pub fn initializeDecompressionState(
     };
 }
 
-pub fn decompress(
+pub fn decompressSymbol(
     context: *helper.DeflateContext,
-    state: *DecompressionState) !bool
+    state: *DecompressionState) !?helper.Symbol
 {
     switch (state.action)
     {
         .LiteralOrLen =>
         {
-            const value = try helper.peekAndDecodeCharacter(context, &state.literalOrLenCodesTree);
-            switch (value.character)
+            const value = try helper.readAndDecodeCharacter(context, &state.literalOrLenCodesTree);
+            switch (value)
             {
                 0 ... 255 =>
                 {
-                    try context.output.writeByte(value);
+                    return .{ .literalValue = value };
                 },
                 256 =>
                 {
-                    state.action = .Done;
+                    return .{ .endBlock = { } };
                 },
                 257 ... 285 =>
                 {
@@ -344,16 +343,20 @@ pub fn decompress(
                     state.len = value;
                 },
             }
-            value.apply(context);
         },
         .Distance =>
         {
-            const distance = try helper.peekAndDecodeCharacter(context, &state.distanceCodesTree);
-            try context.output.copyFromSelf(distance.character, state.len);
+            const distance = try helper.readAndDecodeCharacter(context, &state.distanceCodesTree);
             state.action = .LiteralOrLen;
-            distance.apply(context);
+
+            return .{
+                .backReference = .{
+                    .distance = distance,
+                    .len = state.len
+                }
+            };
+                    
         },
-        .Done => unreachable,
     }
     return state.action == .Done;
 }

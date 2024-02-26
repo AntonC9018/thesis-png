@@ -19,31 +19,8 @@ const SymbolDecompressionState = union(enum)
         length: u8,
         distanceCode: u5,
     },
-    Done: Symbol,
 
     const Initial: SymbolDecompressionState = .{ .Code7 = {} };
-};
-
-const BackReference = struct
-{
-    unadjustedDistance: u16,
-    unadjustedLength: u8,
-
-    pub fn length(self: BackReference) u8
-    {
-        return self.unadjustedLength + 3;
-    }
-    pub fn distance(self: BackReference) u16
-    {
-        return self.unadjustedDistance + 1;
-    }
-};
-
-const Symbol = union(enum)
-{
-    endBlock: void,
-    literalValue: u8,
-    backReference: BackReference,
 };
 
 const lengthCodeStart = 257;
@@ -115,10 +92,10 @@ fn getBaseDistance(distanceCode: u5) u16
     return baseDistanceLookup[distanceCode];
 }
 
-fn readSymbol(context: *helper.DeflateContext) !bool
+fn readSymbol(
+    context: *helper.DeflateContext,
+    state: *SymbolDecompressionState) !?helper.Symbol
 {
-    const symbol = &context.state.blockState.FixedHuffman;
-
     const lengthCodeUpperLimit = 0b001_0111;
 
     const literalLowerLimit = 0b0011_0000;
@@ -129,7 +106,7 @@ fn readSymbol(context: *helper.DeflateContext) !bool
 
     const literalLowerLimit2 = 0b1_1001_0000;
 
-    switch (symbol.*)
+    switch (state.*)
     {
         .Code7 =>
         {
@@ -143,15 +120,15 @@ fn readSymbol(context: *helper.DeflateContext) !bool
             if (code.bits <= lengthCodeUpperLimit)
             {
                 code.apply(context);
-                symbol.* = .{
+                state.* = .{
                     .Length = .{ 
                         .codeRemapped = code.bits - 1,
                     },
                 };
-                return false;
+                return null;
             }
 
-            symbol.* = .{ .Code8 = {} };
+            state.* = .{ .Code8 = {} };
         },
         .Code8 =>
         {
@@ -162,8 +139,8 @@ fn readSymbol(context: *helper.DeflateContext) !bool
                 code.apply(context);
 
                 const value = code.bits - literalLowerLimit;
-                symbol.* = .{ .literalValue = value };
-                return true;
+                state.* = SymbolDecompressionState.Initial;
+                return .{ .literalValue = value };
             }
 
             if (code.bits >= lengthLowerLimit2 and code.bits <= lengthUpperLimit2)
@@ -171,7 +148,7 @@ fn readSymbol(context: *helper.DeflateContext) !bool
                 code.apply(context);
 
                 const codeRemapped = code.bits - lengthLowerLimit2 + lengthCodeUpperLimit;
-                symbol.* = .{ 
+                state.* = .{ 
                     .Length = .{ 
                         .codeRemapped = codeRemapped,
                     }
@@ -181,10 +158,10 @@ fn readSymbol(context: *helper.DeflateContext) !bool
                     return error.LengthCodeTooLarge;
                 }
 
-                return false;
+                return null;
             }
 
-            symbol.* = .{ .Code9 = {} };
+            state.* = .{ .Code9 = {} };
         },
         .Code9 =>
         {
@@ -193,11 +170,11 @@ fn readSymbol(context: *helper.DeflateContext) !bool
             {
                 const literalOffset2 = literalUpperLimit - literalLowerLimit;
                 const value = code - literalLowerLimit2 + literalOffset2;
-                symbol.* = .{ .literalValue = value };
-                return true;
+                state.* = SymbolDecompressionState.Initial;
+                return .{ .literalValue = value };
             }
 
-            symbol.* = .{ .Code9Value = code };
+            state.* = .{ .Code9Value = code };
             return error.DisallowedDeflateCodeValue;
         },
         .Length => |l|
@@ -206,7 +183,7 @@ fn readSymbol(context: *helper.DeflateContext) !bool
             const extraBits = try helper.readBits(context, lengthBitCount);
             const baseLength = getBaseLength(l.codeRemapped);
             const length = baseLength + extraBits;
-            symbol.* = .{ 
+            state.* = .{ 
                 .Distance = .{
                     .length = length,
                 },
@@ -215,7 +192,7 @@ fn readSymbol(context: *helper.DeflateContext) !bool
         .DistanceCode => |d|
         {
             const distanceCode = try helper.readBits(context, u5);
-            symbol.* = .{
+            state.* = .{
                 .Distance = .{
                     .length = d.length,
                     .distanceCode = distanceCode,
@@ -233,16 +210,14 @@ fn readSymbol(context: *helper.DeflateContext) !bool
             const extraBits = try helper.readBits(context, distanceBitCount);
             const baseDistance = getBaseDistance(d.distanceCode);
             const distance = baseDistance + extraBits;
-            symbol.* = .{
-                .Done = .{
-                    .unadjustedDistance = distance,
-                    .unadjustedLength = d.length,
-                },
+
+            state.* = SymbolDecompressionState.Initial;
+            return .{
+                .distance = distance + 1,
+                .length = @as(u16, d.length) + 3,
             };
-            return true;
         },
-        .Done => unreachable,
     }
 
-    return false;
+    return null;
 }
