@@ -2,6 +2,7 @@ const helper = @import("helper.zig");
 const std = helper.std;
 const huffman = helper.huffman;
 const pipelines = helper.pipelines;
+const noCompression = @import("noCompression.zig");
 
 const fixed = @import("fixed.zig");
 const dynamic = @import("dynamic.zig");
@@ -87,7 +88,7 @@ const DeflateState = struct
 
     blockState: union(BlockType)
     {
-        NoCompression: NoCompressionState,
+        NoCompression: noCompression.State,
         FixedHuffman: fixed.SymbolDecompressionState,
         DynamicHuffman: dynamic.State,
         Reserved: void,
@@ -130,7 +131,7 @@ pub fn deflate(context: *DeflateContext) !bool
                         state.bitOffset = 0;
                     }
                     state.blockState = .{
-                        .NoCompression = std.mem.zeroes(NoCompressionState),
+                        .NoCompression = std.mem.zeroes(noCompression.State),
                     };
                     state.action = .BlockInit;
                 },
@@ -165,7 +166,7 @@ pub fn deflate(context: *DeflateContext) !bool
             {
                 .NoCompression => |*s|
                 {
-                    const done = try initNoCompression(context, s.init);
+                    const done = try noCompression.initState(context, s.init);
                     if (done)
                     {
                         s.* = .{
@@ -189,51 +190,13 @@ pub fn deflate(context: *DeflateContext) !bool
                 .Reserved => unreachable,
             }
         },
-        .DecompressionLoop => decompression:
+        .DecompressionLoop =>
         {
             switch (state.blockState)
             {
                 .NoCompression => |*s|
                 {
-                    if (s.decompression.bytesLeftToCopy == 0)
-                    {
-                        state.action = .Done;
-                        break :decompression;
-                    }
-
-                    const sequence = context.sequence;
-                    var iter = pipelines.SegmentIterator.create(sequence)
-                        orelse return error.NotEnoughBytes;
-                    while (true)
-                    {
-                        const segment = iter.current();
-                        const len = segment.len;
-                        const bytesWillRead = @min(s.decompression.bytesLeftToCopy, len);
-
-                        const slice = segment[0 .. bytesWillRead];
-                        context.output.writeBytes(slice)
-                            catch |err|
-                            {
-                                sequence.* = sequence.sliceFrom(iter.currentPosition);
-                                return err;
-                            };
-
-                        s.decompression.bytesLeftToCopy -= bytesWillRead;
-                        if (s.decompression.bytesLeftToCopy == 0)
-                        {
-                            const currentPos = iter.currentPosition.add(bytesWillRead);
-                            sequence.* = sequence.sliceFrom(currentPos);
-                            break;
-                        }
-
-                        const advanced = iter.advance();
-                        if (!advanced)
-                        {
-                            sequence.* = sequence.sliceFrom(iter.currentPosition);
-                            return error.NotEnoughBytes;
-                        }
-                    }
-
+                    try noCompression.decompress(context, s.decompression);
                     state.action = .Done;
                 },
                 .FixedHuffman =>
@@ -273,51 +236,3 @@ test
     _ = huffman;
 }
 
-const NoCompressionInitStateAction = enum
-{
-    Len,
-    NLen,
-    Done,
-};
-
-const NoCompressionState = union
-{
-    init: struct
-    {
-        action: NoCompressionInitStateAction,
-        len: u16,
-        nlen: u16,
-    },
-    decompression: struct
-    {
-        bytesLeftToCopy: u16,
-    },
-};
-
-pub fn initNoCompression(context: *DeflateContext, state: *NoCompressionState) !bool
-{
-    switch (state.action)
-    {
-        .Len =>
-        {
-            const len = try pipelines.readNetworkUnsigned(context.sequence, u16);
-            state.len = len;
-            state.action = .NLen;
-            return false;
-        },
-        .NLen =>
-        {
-            const nlen = try pipelines.readNetworkUnsigned(context.sequence, u16);
-            state.nlen = nlen;
-
-            if (nlen != ~state.len)
-            {
-                return error.NLenNotOnesComplement;
-            }
-
-            state.action = .Done;
-            return true;
-        },
-        .Done => unreachable,
-    }
-}
