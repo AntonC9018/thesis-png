@@ -2,5 +2,8 @@
 	path = raylib
 	url = https://github.com/ryupold/raylib.zig
 [submodule "zpng_reference"]
-	path = zpng_reference
+	path = references/zpng
 	url = https://github.com/silversquirl/zpng
+[submodule "uzlib_reference"]
+	path = references/uzlib
+	url = https://github.com/pfalcon/uzlib

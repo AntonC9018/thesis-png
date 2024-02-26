@@ -92,7 +92,7 @@ fn getBaseDistance(distanceCode: u5) u16
     return baseDistanceLookup[distanceCode];
 }
 
-fn readSymbol(
+fn decompressSymbol(
     context: *helper.DeflateContext,
     state: *SymbolDecompressionState) !?helper.Symbol
 {
