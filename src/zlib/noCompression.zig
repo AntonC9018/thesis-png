@@ -1,14 +1,14 @@
 const helper = @import("helper.zig");
 const pipelines = helper.pipelines;
 
-pub fn decompress(context: *helper.DeflateContext, state: *DecompressionState) !void
+pub fn decompress(context: *const helper.DeflateContext, state: *DecompressionState) !void
 {
     if (state.bytesLeftToCopy == 0)
     {
         return;
     }
 
-    const sequence = context.sequence;
+    const sequence = context.pipelines;
     var iter = pipelines.SegmentIterator.create(sequence)
         orelse return error.NotEnoughBytes;
     while (true)
@@ -18,7 +18,7 @@ pub fn decompress(context: *helper.DeflateContext, state: *DecompressionState) !
         const bytesWillRead = @min(state.bytesLeftToCopy, len);
 
         const slice = segment[0 .. bytesWillRead];
-        context.output.writeBytes(slice)
+        context.output().writeBytes(slice)
             catch |err|
             {
                 sequence.* = sequence.sliceFrom(iter.currentPosition);
@@ -49,36 +49,38 @@ const InitStateAction = enum
     Done,
 };
 
-const State = union
+pub const State = union
 {
-    init: struct
-    {
-        action: InitStateAction,
-        len: u16,
-        nlen: u16,
-    },
+    init: InitState,
     decompression: DecompressionState,
 };
 
-const DecompressionState = struct
+pub const InitState = struct
+{
+    action: InitStateAction,
+    len: u16,
+    nlen: u16,
+};
+
+pub const DecompressionState = struct
 {
     bytesLeftToCopy: u16,
 };
 
-pub fn initState(context: *helper.DeflateContext, state: *State) !bool
+pub fn initState(context: *const helper.DeflateContext, state: *InitState) !bool
 {
     switch (state.action)
     {
         .Len =>
         {
-            const len = try pipelines.readNetworkUnsigned(context.sequence, u16);
+            const len = try pipelines.readNetworkUnsigned(context.sequence(), u16);
             state.len = len;
             state.action = .NLen;
             return false;
         },
         .NLen =>
         {
-            const nlen = try pipelines.readNetworkUnsigned(context.sequence, u16);
+            const nlen = try pipelines.readNetworkUnsigned(context.sequence(), u16);
             state.nlen = nlen;
 
             if (nlen != ~state.len)

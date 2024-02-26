@@ -1,6 +1,6 @@
 const helper = @import("helper.zig");
 
-const SymbolDecompressionState = union(enum)
+pub const SymbolDecompressionState = union(enum)
 {
     Code7: void,
     Code8: void,
@@ -20,7 +20,7 @@ const SymbolDecompressionState = union(enum)
         distanceCode: u5,
     },
 
-    const Initial: SymbolDecompressionState = .{ .Code7 = {} };
+    pub const Initial: SymbolDecompressionState = .{ .Code7 = {} };
 };
 
 const lengthCodeStart = 257;

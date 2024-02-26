@@ -1,5 +1,5 @@
 pub const pipelines = @import("../pipelines.zig");
-pub const DeflateContext = @import("zlib.zig").DeflateContext;
+pub const DeflateContext = @import("deflate.zig").Context;
 pub const std = @import("std");
 pub const huffman = @import("huffmanTree.zig");
 
@@ -8,10 +8,10 @@ pub const PeekApplyHelper = struct
     nextBitOffset: u4,
     nextSequenceStart: pipelines.SequencePosition,
 
-    pub fn apply(self: PeekApplyHelper, context: *DeflateContext) void
+    pub fn apply(self: PeekApplyHelper, context: *const DeflateContext) void
     {
         context.state.bitOffset = self.nextBitOffset;
-        context.sequence.* = context.sequence.sliceFrom(self.nextSequenceStart);
+        context.sequence().* = context.sequence().sliceFrom(self.nextSequenceStart);
     }
 };
 
@@ -24,7 +24,7 @@ pub fn PeekNBitsResult(resultType: type) type
 
         const Self = @This();
 
-        pub fn apply(self: Self, context: *DeflateContext) void
+        pub fn apply(self: Self, context: *const DeflateContext) void
         {
             self.applyHelper.apply(context);
         }
@@ -37,12 +37,12 @@ pub const PeekNBitsContext = struct
     bitsCount: u6,
     comptime reverse: bool = false,
 
-    fn sequence(self: *PeekNBitsContext) *const pipelines.Sequence
+    fn sequence(self: *const PeekNBitsContext) *const pipelines.Sequence
     {
-        return self.context.sequence;
+        return self.context.sequence();
     }
 
-    fn bitOffset(self: *PeekNBitsContext) u4
+    fn bitOffset(self: *const PeekNBitsContext) u3
     {
         return self.context.state.bitOffset;
     }
@@ -63,58 +63,63 @@ pub fn peekNBits(context: PeekNBitsContext) !PeekNBitsResult(u32)
         return error.NotEnoughBytes;
     }
 
-    var bitOffset = context.state.bitOffset;
-    var bitsRead = 0;
+    var bitOffset = context.bitOffset();
+    var bitsRead: u5 = 0;
     var result: ResultType = 0;
 
     var iterator = pipelines.SegmentIterator.create(context.sequence()).?;
-    while (bitsRead < context.bitsCount)
+    const newPosition = newStart: while (true)
     {
-        const byte = iterator.current();
-        const availableByteBitCount = 8 - bitOffset;
-        const byteBits = byte >> bitOffset;
-
-        const bitCountLeftToRead = context.bitsCount - bitsRead;
-        const bitCountWillRead = @min(bitCountLeftToRead, availableByteBitCount);
-        bitOffset = (bitOffset + bitCountWillRead) % 8;
-
-        const willReadMask = 0xFF >> (8 - bitCountWillRead);
-        const readBits_ = byteBits & willReadMask;
-        const readBitsAsResultType: ResultType = @intCast(readBits_);
-
-        if (context.reverse)
+        const slice = iterator.current();
+        for (0 .., slice) |byteIndex, byte|
         {
-            const c = context.bitsCount - bitsRead - 1;
-            for (0 .. bitCountWillRead) |i|
+            const availableByteBitCount: u4 = @intCast(@as(u8, 8) - @as(u8, bitOffset));
+            const byteBits = byte >> bitOffset;
+
+            const bitCountLeftToRead = context.bitsCount - bitsRead;
+            const bitCountWillRead = @min(bitCountLeftToRead, availableByteBitCount);
+            bitOffset = @intCast((@as(u8, bitOffset) + @as(u8, bitCountWillRead)) % 8);
+            
+            const willReadMask = @as(u8, 0xFF) >> @intCast(@as(u8, 8) - @as(u8, bitCountWillRead));
+            const readBits_ = byteBits & willReadMask;
+            const readBitsAsResultType: ResultType = @intCast(readBits_);
+
+            if (context.reverse)
             {
-                const bit = (readBitsAsResultType >> i) & 1;
-                result |= bit << (c + i);
+                const c = context.bitsCount - bitsRead - 1;
+                for (0 .. bitCountWillRead) |i|
+                {
+                    const bit = (readBitsAsResultType >> i) & 1;
+                    result |= bit << (c + i);
+                }
+            }
+            else
+            {
+                result |= readBitsAsResultType << bitsRead;
+            }
+
+            bitsRead += bitCountWillRead;
+
+            if (bitsRead == context.bitsCount)
+            {
+                break :newStart iterator.currentPosition.add(@intCast(byteIndex + 1));
             }
         }
-        else
-        {
-            result |= readBitsAsResultType << bitsRead;
-        }
 
-        bitsRead += bitCountWillRead;
-
-        if (bitCountWillRead >= availableByteBitCount)
-        {
-            const advanced = iterator.advance();
-            std.debug.assert(advanced);
-        }
-    }
+        const advanced = iterator.advance();
+        std.debug.assert(advanced);
+    };
 
     return .{
         .bits = result,
         .applyHelper = .{
             .nextBitOffset = bitOffset,
-            .nextSequenceStart = iterator.sequence.start(),
+            .nextSequenceStart = newPosition,
         },
     };
 }
 
-pub fn peekBits(context: *DeflateContext, ResultType: type)
+pub fn peekBits(context: *const DeflateContext, ResultType: type)
     !PeekNBitsResult(ResultType)
 {
     const bitsCount = comptime b:
@@ -126,20 +131,25 @@ pub fn peekBits(context: *DeflateContext, ResultType: type)
 
     std.debug.assert(bitsCount <= 32 and bitsCount > 0);
 
-    return @intCast(peekNBits(.{
+    const result = try peekNBits(.{
         .context = context,
-        .bitsCount = bitsCount
-    }));
+        .bitsCount = bitsCount,
+    });
+
+    return .{
+        .bits = @intCast(result.bits),
+        .applyHelper = result.applyHelper,
+    };
 }
 
-pub fn readBits(context: *DeflateContext, ResultType: type) !ResultType
+pub fn readBits(context: *const DeflateContext, ResultType: type) !ResultType
 {
     const r = try peekBits(context, ResultType);
     r.apply(context);
     return r.bits;
 }
 
-pub fn readNBits(context: *DeflateContext, bitsCount: u6) !u32
+pub fn readNBits(context: *const DeflateContext, bitsCount: u6) !u32
 {
     const r = try peekNBits(.{
         .context = context,
@@ -155,14 +165,14 @@ pub const DecodedCharacterResult = struct
     applyHelper: PeekApplyHelper,
     huffman_: *HuffmanParsingState,
 
-    pub fn apply(self: *DecodedCharacterResult, context: *DeflateContext) void
+    pub fn apply(self: *DecodedCharacterResult, context: *const DeflateContext) void
     {
         self.applyHelper.apply(context);
         self.huffman_.currentBitCount = 0;
     }
 };
 
-pub fn readAndDecodeCharacter(context: *DeflateContext, huffman_: *HuffmanParsingState) !u16
+pub fn readAndDecodeCharacter(context: *const DeflateContext, huffman_: *HuffmanParsingState) !u16
 {
     const r = try peekAndDecodeCharacter(context, huffman_);
     r.apply(context, huffman_);
@@ -173,7 +183,7 @@ pub fn peekAndDecodeCharacter(context: *const DeflateContext, huffman_: *Huffman
 {
     if (huffman_.currentBitCount == 0)
     {
-        huffman_.currentBitCount = huffman_.tree.getNextBitCount(0);
+        huffman_.currentBitCount = huffman_.tree.getInitialBitCount();
     }
 
     while (true)
@@ -198,14 +208,14 @@ pub fn peekAndDecodeCharacter(context: *const DeflateContext, huffman_: *Huffman
     }
 }
 
-const HuffmanParsingState = struct
+pub const HuffmanParsingState = struct
 {
     tree: huffman.Tree,
     currentBitCount: u5,
 };
 
-fn readArrayElement(
-    context: *DeflateContext,
+pub fn readArrayElement(
+    context: *const DeflateContext,
     array: anytype, 
     currentNumberOfElements: *usize,
     bitsCount: u5) !bool
@@ -213,7 +223,7 @@ fn readArrayElement(
     if (currentNumberOfElements.* < array.len)
     {
         const value = try readNBits(context, bitsCount);
-        array[currentNumberOfElements.*] = value;
+        array[currentNumberOfElements.*] = @intCast(value);
         currentNumberOfElements.* += 1;
     }
     if (currentNumberOfElements.* == array.len)
@@ -224,41 +234,65 @@ fn readArrayElement(
     return false;
 }
 
+pub const CommonContext = struct
+{
+    sequence: *pipelines.Sequence,
+    allocator: std.mem.Allocator,
+    output: *OutputBuffer,
+};
+
 pub const OutputBuffer = struct
 {
+    buffer: []u8,
     position: usize,
-    len: usize,
+    windowSize: usize,
+
+    pub fn setWindowSize(self: *OutputBuffer, windowSize: usize) void
+    {
+        self.windowSize = windowSize;
+    }
+
+    pub fn deinit(self: *OutputBuffer, allocator: std.mem.Allocator) void
+    {
+        allocator.free(self.buffer);
+    }
 
     pub fn writeByte(self: *OutputBuffer, byte: u8) !void
     {
-        _ = self;
-        _ = byte;
-        unreachable;
+        self.buffer[self.position] = byte;
+        self.position += 1;
     }
 
     pub fn writeBytes(self: *OutputBuffer, buffer: []const u8) !void
     {
-        _ = self;
-        _ = buffer;
-        unreachable;
-    }
-
-    pub fn referBack(self: *const OutputBuffer, byteOffset: usize) u8
-    {
-        std.debug.assert(byteOffset < 32 * 1024);
-
-        _ = self;
-        unreachable;
+        const start = self.position;
+        const end = start + buffer.len;
+        for (self.buffer[start .. end], buffer) |*dest, source|
+        {
+            dest.* = source;
+        }
+        self.position = end;
     }
 
     pub fn copyFromSelf(self: *OutputBuffer, backRef: BackReference) !void
     {
-        for (0 .. length) |_|
+        if (self.buffer.len < backRef.distance)
         {
-            const byte = self.referBack(distance);
-            try self.writeByte(byte);
+            return error.BackReferenceDistanceTooLarge;
         }
-        unreachable;
+
+        if (backRef.distance == 0)
+        {
+            return error.BackReferenceDistanceIsZero;
+        }
+
+        // NOTE: the memory can overlap here.
+        for (0 .. backRef.len) |_|
+        {
+            const byte = self.buffer[self.position - backRef.distance];
+            self.buffer[self.position] = byte;
+            self.position += 1;
+        }
     }
 };
 
@@ -275,7 +309,7 @@ pub const Symbol = union(enum)
     backReference: BackReference,
 };
 
-pub fn writeSymbolToOutput(context: *DeflateContext, symbol: ?Symbol) !bool
+pub fn writeSymbolToOutput(context: *const DeflateContext, symbol: ?Symbol) !bool
 {
     if (symbol) |s|
     {
@@ -289,7 +323,7 @@ pub fn writeSymbolToOutput(context: *DeflateContext, symbol: ?Symbol) !bool
     return false;
 }
 
-fn writeSymbolToOutput_switch(context: *DeflateContext, symbol: Symbol) !bool
+fn writeSymbolToOutput_switch(context: *const DeflateContext, symbol: Symbol) !bool
 {
     switch (symbol)
     {

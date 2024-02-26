@@ -2,17 +2,17 @@ const std = @import("std");
 const pipelines = @import("pipelines.zig");
 
 // What is the next expected type?
-pub const ParserAction = enum(u8) 
+pub const Action = enum(u8) 
 {
     Signature = 0,
     StartChunk,
     Chunk,
 };
 
-pub const ParserState = struct
+pub const State = struct
 {
-    chunk: ChunkParserState,
-    action: ParserAction = .Signature,
+    chunk: ChunkState,
+    action: Action = .Signature,
 
     imageHeader: ?IHDR = null,
     // True after the IEND chunk has been parsed.
@@ -22,25 +22,25 @@ pub const ParserState = struct
     paletteLength: ?u32 = null,
 };
 
-pub fn isParserStateTerminal(state: *const ParserState) bool 
+pub fn isParserStateTerminal(state: *const State) bool 
 {
     return state.action == .StartChunk;
 }
 
-pub const ParserSettings = struct
+pub const Settings = struct
 {
     logChunkStart: bool,
 };
 
-pub const ParserContext = struct
+pub const Context = struct
 {
-    state: *ParserState,
+    state: *State,
     sequence: *pipelines.Sequence,
     allocator: std.mem.Allocator,
-    settings: *const ParserSettings,
+    settings: *const Settings,
 };
 
-pub const ChunkParserStateKey = enum 
+pub const ChunkAction = enum 
 {
     // Length of the data field.
     Length,
@@ -371,9 +371,9 @@ pub const TopLevelNode = union(enum)
     }
 };
 
-pub const ChunkParserState = struct
+pub const ChunkState = struct
 {
-    key: ChunkParserStateKey = .Length,
+    key: ChunkAction = .Length,
     node: ChunkNode,
     dataNode: DataNodeParserState,
 };
@@ -539,7 +539,7 @@ pub const KnownDataChunkType = enum(u32)
     }
 };
 
-pub fn printStepName(writer: anytype, parserState: *const ParserState) !void
+pub fn printStepName(writer: anytype, parserState: *const State) !void
 {
     switch (parserState.action)
     {
@@ -602,7 +602,7 @@ pub fn getKnownDataChunkType(chunkType: ChunkType) KnownDataChunkType
     return @enumFromInt(chunkType.value);
 }
 
-pub fn parseTopLevelNode(context: *ParserContext) !bool
+pub fn parseTopLevelNode(context: *const Context) !bool
 {
     while (true)
     {
@@ -622,7 +622,7 @@ pub fn parseTopLevelNode(context: *ParserContext) !bool
     }
 }
 
-pub fn parseNextNode(context: *ParserContext) !bool
+pub fn parseNextNode(context: *const Context) !bool
 {
     switch (context.state.action)
     {
@@ -680,7 +680,7 @@ fn readPngU32Dimension(sequence: *pipelines.Sequence) !u32
     return value;
 }
 
-pub fn parseChunkItem(context: *ParserContext) !bool
+pub fn parseChunkItem(context: *const Context) !bool
 {
     var chunk = &context.state.chunk;
     switch (chunk.key)
@@ -742,7 +742,7 @@ pub fn parseChunkItem(context: *ParserContext) !bool
 }
 
 
-fn initChunkDataNode(context: *ParserContext, chunkType: ChunkType) !void
+fn initChunkDataNode(context: *const Context, chunkType: ChunkType) !void
 {
     const knownChunkType = getKnownDataChunkType(chunkType);
     if (context.state.imageHeader == null
@@ -761,13 +761,13 @@ fn initChunkDataNode(context: *ParserContext, chunkType: ChunkType) !void
     const chunk = &context.state.chunk;
     const h = struct
     {
-        fn skipChunkBytes(chunk_: *ChunkParserState) void
+        fn skipChunkBytes(chunk_: *ChunkState) void
         {
             chunk_.dataNode = .{ .bytesSkipped = 0 };
             chunk_.node.dataNode.data = .{ .none = {} };
         }
 
-        fn setTransparencyData(chunk_: *ChunkParserState, data: TransparencyData) void
+        fn setTransparencyData(chunk_: *ChunkState, data: TransparencyData) void
         {
             chunk_.node.dataNode.data = .{
                 .transparency = data,
@@ -899,7 +899,7 @@ fn initChunkDataNode(context: *ParserContext, chunkType: ChunkType) !void
     }
 }
 
-fn skipBytes(context: *ParserContext, chunk: *ChunkParserState) !bool
+fn skipBytes(context: *const Context, chunk: *ChunkState) !bool
 {
     const bytesSkipped = &chunk.dataNode.bytesSkipped;
     const totalBytes = chunk.node.dataNode.base.length;
@@ -924,7 +924,7 @@ fn skipBytes(context: *ParserContext, chunk: *ChunkParserState) !bool
 }
 
 fn removeAndProcessAsManyBytesAsAvailable(
-    context: *ParserContext,
+    context: *const Context,
     bytesRead: *u32,
     // Must have a function each that takes in the byte.
     // Can have an optional function init that takes the count.
@@ -984,7 +984,7 @@ fn removeAndProcessAsManyBytesAsAvailable(
 
 const PlteBytesProcessor = struct
 {
-    context: *ParserContext,
+    context: *const Context,
     plteState: *PLTEState,
     plteNode: *PLTE,
 
@@ -1031,7 +1031,7 @@ const TransparencyBytesProcessor = struct
     }
 };
 
-fn parseChunkData(context: *ParserContext) !bool
+fn parseChunkData(context: *const Context) !bool
 {
     const chunk = &context.state.chunk;
     const knownChunkType = getKnownDataChunkType(chunk.node.chunkType);
@@ -1227,10 +1227,10 @@ fn parseChunkData(context: *ParserContext) !bool
     }
 }
 
-pub fn createParserState() ParserState
+pub fn createParserState() State
 {
     return .{
-        .chunk = std.mem.zeroInit(ChunkParserState, .{
+        .chunk = std.mem.zeroInit(ChunkState, .{
             .dataNode = .{ .none = {} },
             .node = std.mem.zeroInit(ChunkNode, .{
                 .dataNode = std.mem.zeroInit(ChunkDataNode, .{
@@ -1241,9 +1241,9 @@ pub fn createParserState() ParserState
     };
 }
 
-fn createChunkParserState(startOffset: usize) ChunkParserState
+fn createChunkParserState(startOffset: usize) ChunkState
 {
-    return std.mem.zeroInit(ChunkParserState, .{
+    return std.mem.zeroInit(ChunkState, .{
         .node = std.mem.zeroInit(ChunkNode, .{
             .base = NodeBase
             {

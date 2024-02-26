@@ -1,23 +1,78 @@
+const deflate = @import("deflate.zig");
 const helper = @import("helper.zig");
-const std = helper.std;
-const huffman = helper.huffman;
+const std = @import("std");
 const pipelines = helper.pipelines;
-const noCompression = @import("noCompression.zig");
 
-const fixed = @import("fixed.zig");
-const dynamic = @import("dynamic.zig");
-
-const ZlibHeader = struct
+const Header = struct
 {
     compressionMethod: CompressionMethodAndFlags,
     flags: Flags,
     dictionaryId: u4,
 };
 
-const ZlibState = struct
+const Action = enum
 {
-    // Adler-32 checksum
-    checksum: u32,
+    CompressionMethodAndFlags,
+    Flags,
+    PresetDictionary,
+    CompressedData,
+    Adler32Checksum,
+    Done,
+};
+
+const Adler32State = struct
+{
+    a: u32 = 1,
+    b: u32 = 0,
+
+    pub fn update(self: Adler32State, buffer: []const u8) void
+    {
+        for (buffer) |byte|
+        {
+            // first prime less than 2^16
+            const modulus = 65521;
+            self.a = (self.a + byte) % modulus;
+            self.b = (self.b + self.a) % modulus;
+        }
+    }
+
+    pub fn updateWithSequence(self: Adler32State, sequence: *const pipelines.Sequence) void
+    {
+        var iter = pipelines.SegmentIterator.create(sequence) orelse return;
+        while (true)
+        {
+            self.update(iter.current());
+            if (!iter.advance())
+            {
+                break;
+            }
+        }
+    }
+
+    pub fn getChecksum(self: Adler32State) u32
+    {
+        return (self.b << 16) | self.a;
+    }
+};
+
+pub const State = struct
+{
+    action: Action = .CompressionMethodAndFlags,
+    adler32: Adler32State = .{},
+
+    decompressor: union
+    {
+        none: void,
+        deflate: deflate.State,
+    } = .{ .none = {} },
+
+    data: union
+    {
+        none: void,
+        // Used for checks
+        cmf: CompressionMethodAndFlags,
+        dictionaryId: u32,
+    } = .{ .none = {} },
 };
 
 const CompressionMethodAndFlags = packed struct
@@ -30,6 +85,7 @@ const CompressionMethod = enum(u4)
 {
     Deflate = 8,
     Reserved = 15,
+    _,
 };
 
 const CompressionInfo = u4;
@@ -55,181 +111,148 @@ fn checkCheckFlag(cmf: CompressionMethodAndFlags, flags: Flags) bool
 {
     const cmfByte: u8 = @bitCast(cmf);
     const flagsByte: u8 = @bitCast(flags);
-    const value: u16 = (cmfByte << 8) | flagsByte;
+    const value: u16 = (@as(u16, cmfByte) << 8) | @as(u16, flagsByte);
     const remainder = value % 31;
     return remainder == 0;
 }
 
-const BlockType = enum(u2)
+const Context = struct
 {
-    NoCompression = 0,
-    FixedHuffman = 1,
-    DynamicHuffman = 2,
-    Reserved = 3,
-};
+    common: *const helper.CommonContext,
+    state: *State,
 
-const DeflateContext = struct
-{
-    sequence: *pipelines.Sequence,
-    state: *DeflateState,
-    allocator: std.mem.Allocator,
-    output: *helper.OutputBuffer,
-};
-
-const DeflateState = struct
-{
-    action: DeflateStateAction,
-    bitOffset: u4,
-
-    isFinal: bool,
-    len: u16,
-
-    dataBytesRead: u16,
-    lastSymbol: ?helper.Symbol,
-
-    blockState: union(BlockType)
+    pub fn output(self: *const Context) *helper.OutputBuffer
     {
-        NoCompression: noCompression.State,
-        FixedHuffman: fixed.SymbolDecompressionState,
-        DynamicHuffman: dynamic.State,
-        Reserved: void,
-    },
+        return self.common.output;
+    }
+    pub fn sequence(self: *const Context) *pipelines.Sequence
+    {
+        return self.common.sequence;
+    }
 };
 
-const DeflateStateAction = enum
-{
-    IsFinal,
-    BlockType,
-
-    BlockInit,
-
-    DecompressionLoop,
-    Done,
-};
-
-// Returns true when it's done with a block.
-pub fn deflate(context: *DeflateContext) !bool
+pub fn decode(context: *const Context) !bool
 {
     const state = context.state;
+
+    if (false)
+    {
+        const sequenceBefore = context.sequence().*;
+        // We don't need to 
+        const shouldComputeChecksum = state.action != .Adler32Checksum;
+        defer if (shouldComputeChecksum)
+        {
+            const newSequenceStart = context.sequence().start();
+            const readSequence = sequenceBefore.sliceToExclusive(newSequenceStart);
+            context.state.adler32.update(&readSequence);
+        };
+    }
+
     switch (state.action)
     {
-        .IsFinal =>
+        .CompressionMethodAndFlags =>
         {
-            const isFinal = try helper.readBits(context, u1);
-            state.isFinal = isFinal;
-            state.action = .BlockType;
-        },
-        .BlockType =>
-        {
-            const blockType = try helper.readBits(context, u2);
-            const typedBlockType: BlockType = @enumFromInt(blockType);
+            const value = try pipelines.removeFirst(context.sequence());
+            const cmf: CompressionMethodAndFlags = @bitCast(value);
+            state.data.cmf = cmf;
 
-            switch (typedBlockType)
+            switch (cmf.compressionMethod)
             {
-                .NoCompression =>
+                .Deflate =>
                 {
-                    // The uncompressed info starts on a byte boundary.
-                    if (state.bitOffset != 0)
-                    {
-                        _ = pipelines.removeFirst(context.sequence) catch unreachable;
-                        state.bitOffset = 0;
-                    }
-                    // It still needs to read some metadata though.
-                    state.blockState = .{
-                        .NoCompression = std.mem.zeroes(noCompression.State),
+                    const logBase2OfWindowSize = cmf.compressionInfo;
+                    const windowSize = @as(u16, 1) << logBase2OfWindowSize;
+                    context.output().setWindowSize(windowSize);
+
+                    state.decompressor = .{
+                        .deflate = .{},
                     };
-                    state.action = .BlockInit;
+                    state.action = Action.Flags;
                 },
-                .FixedHuffman =>
-                {
-                    state.blockState = .{
-                        .FixedHuffman = fixed.SymbolDecompressionState.Initial,
-                    };
-                    // It doesn't need to read any metadata.
-                    // The symbol tables are predefined by the spec.
-                    state.action = .DecompressionLoop;
-                },
-                .DynamicHuffman =>
-                {
-                    state.blockState = .{
-                        .DynamicHuffman = .{
-                            .codeDecoding = std.mem.zeroes(dynamic.CodeDecodingState),
-                        },
-                    };
-                    state.action = .DynamicHuffmanHeader;
-                },
-                .Reserved =>
-                {
-                    state.blockState = .{
-                        .Reserved = {},
-                    };
-                    return error.ReservedBlockTypeUsed;
-                },
+                else => return error.UnsupportedCompressionMethod,
             }
         },
-        .BlockInit =>
+        .Flags =>
         {
-            switch (state.blockState)
+            const value = try pipelines.removeFirst(context.sequence());
+            const flags: Flags = @bitCast(value);
+            const flagValid = checkCheckFlag(state.data.cmf, flags);
+            if (!flagValid)
             {
-                .NoCompression => |*s|
-                {
-                    // It's getting initialized in mutliple calls to this.
-                    // You have to call the whole function again.
-                    // (Could have done a for loop within here, but it's more flexible otherwise).
-                    const done = try noCompression.initState(context, s.init);
-                    if (done)
-                    {
-                        s.* = .{
-                            .decompression = .{
-                                .bytesLeftToCopy = s.init.len,
-                            },
-                        };
-                        state.action = .DecompressionLoop;
-                    }
-                },
-                .FixedHuffman => unreachable,
-                .DynamicHuffman => |*s|
-                {
-                    const done = try dynamic.decodeCodes(context, &s.codeDecoding);
-                    if (done)
-                    {
-                        dynamic.initializeDecompressionState(s, context.allocator);
-                        state.action = .DecompressionLoop;
-                    }
-                },
-                .Reserved => unreachable,
+                return error.InvalidFlags;
+            }
+
+            if (flags.presetDictionary)
+            {
+                state.action = .PresetDictionary;
+                return error.PresetDictionaryNotSupported;
+            }
+            else
+            {
+                state.action = .CompressedData;
             }
         },
-        .DecompressionLoop =>
+        .PresetDictionary =>
         {
-            switch (state.blockState)
+            const value = try pipelines.readNetworkUnsigned(context.sequence(), u32);
+            state.data.dictionaryId = value;
+            state.action = .CompressedData;
+        },
+        .CompressedData =>
+        {
+            const decompressor = &state.decompressor.deflate;
+
+            const bufferPositionBefore = context.output().position;
+            defer
             {
-                .NoCompression => |*s|
-                {
-                    // This reads as much as possible, because there's nothing interesting going on.
-                    try noCompression.decompress(context, s.decompression);
-                    state.action = .Done;
-                },
-                .FixedHuffman => |*s|
-                {
-                    const symbol = try fixed.decompressSymbol(context, s);
-                    state.lastSymbol = symbol;
-                    const done = try helper.writeSymbolToOutput(context, symbol);
-                    return done;
-                },
-                .DynamicHuffman => |*s|
-                {
-                    const symbol = try dynamic.decompressSymbol(context, s.decompression);
-                    state.lastSymbol = symbol;
-                    const done = try helper.writeSymbolToOutput(context, symbol);
-                    return done;
-                },
-                .Reserved => unreachable,
+                const currentPosition = context.output().position;
+                const addedBytes = context.output().buffer[bufferPositionBefore .. currentPosition];
+                state.adler32.update(addedBytes);
             }
+
+            const deflateContext = deflate.Context
+            {
+                .common = context.common,
+                .state = decompressor,
+            };
+
+            const doneWithBlock = try deflate.deflate(&deflateContext);
+            if (doneWithBlock and decompressor.isFinal)
+            {
+                state.action = .Adler32Checksum;
+            }
+            if (doneWithBlock)
+            {
+                decompressor.action = deflate.Action.Initial;
+            }
+        },
+        .Adler32Checksum =>
+        {
+            const checksum = try pipelines.readNetworkUnsigned(context.sequence(), u32);
+            state.checksum = checksum;
+
+            const computedChecksum = state.adler32.getChecksum();
+            if (checksum != computedChecksum)
+            {
+                return error.ChecksumMismatch;
+            }
+
+            return true;
         },
         .Done => unreachable,
     }
-    return state.action == .Done;
+}
+
+pub fn decodeAsMuchAsPossible(context: *const Context) !void
+{
+    while (true)
+    {
+        const done = try decode(context);
+        if (done)
+        {
+            return true;
+        }
+    }
 }
 
 fn copyConst(from: type, to: type) type
@@ -243,6 +266,178 @@ fn copyConst(from: type, to: type) type
 
 test
 {
-    _ = huffman;
+    _ = deflate;
 }
 
+test "failing tests"
+{
+    const examplesDirectoryPath = "references/tests/decomp-bad-inputs";
+    const cwd = std.fs.cwd();
+
+    var allExamplesDirectory = try cwd.openDir(examplesDirectoryPath, .{
+        .iterate = true,
+    });
+    defer allExamplesDirectory.close();
+
+    var exampleDirectories = allExamplesDirectory.iterate();
+    while (try exampleDirectories.next()) |exampleDirectoryEntry|
+    {
+        std.debug.assert(exampleDirectoryEntry.kind == .directory);
+
+        var exampleDirectory = try allExamplesDirectory.openDir(exampleDirectoryEntry.name, .{
+            .iterate = true,
+        });
+        defer exampleDirectory.close();
+
+        var exampleFiles = exampleDirectory.iterate();
+        while (try exampleFiles.next()) |exampleFileEntry|
+        {
+            if (true)
+            {
+                if (!std.mem.eql(u8, exampleDirectoryEntry.name, "00"))
+                {
+                    continue;
+                }
+
+                if (!std.mem.eql(u8, exampleFileEntry.name, "id_000000_sig_11_src_000000_op_flip1_pos_10"))
+                {
+                    continue;
+                }
+            }
+
+            const exampleFile = try exampleDirectory.openFile(exampleFileEntry.name, .{});
+            defer exampleFile.close();
+            const reader = exampleFile.reader();
+
+            const testResult = try doTest(reader);
+            if (testResult.err) |_| {}
+            else
+            {
+                std.debug.print("Test {s} didn't fail\n", .{ exampleFileEntry.name });
+                return;
+            }
+        }
+    }
+}
+
+fn doTest(file: anytype)
+    !struct
+    {
+        err: ?anyerror,
+        state: State,
+        filePosition: usize,
+    }
+{
+    const allocator = std.heap.page_allocator;
+    var reader = pipelines.Reader(@TypeOf(file))
+    {
+        .dataProvider = file,
+        .allocator = allocator,
+        .preferredBufferSize = 4096 * 4,
+    };
+    defer reader.deinit();
+
+    var outputBuffer = outputBuffer:
+    {
+        // Pretty arbitrary, but right now there's just the buffer, straight up.
+        // There's no resizing of any sort.
+        const bufferSize = 4096 * 8;
+        const buffer = try allocator.alloc(u8, bufferSize);
+
+        break :outputBuffer helper.OutputBuffer
+        {
+            .buffer = buffer,
+            .position = 0,
+            .windowSize = undefined,
+        };
+    };
+    defer outputBuffer.deinit(allocator);
+
+    var state = State{};
+    var resultError: ?anyerror = null;
+
+    outerLoop: while (true)
+    {
+        const readResult = try reader.read();
+        var sequence = readResult.sequence;
+
+        const common = helper.CommonContext
+        {
+            .sequence = &sequence,
+            .output = &outputBuffer,
+            .allocator = allocator,
+        };
+
+        const context = Context
+        {
+            .state = &state,
+            .common = &common,
+        };
+
+        decodeAsMuchAsPossible(&context)
+        catch |err|
+        {
+            const isRecoverableError = err:
+            {
+                switch (err)
+                {
+                    error.NotEnoughBytes => break :err true,
+                    else =>
+                    {
+                        std.debug.print("Error: {}\n", .{ err });
+                        break :err false;
+                    },
+                }
+            };
+
+            if (!isRecoverableError)
+            {
+                resultError = err;
+                break :outerLoop;
+            }
+        };
+
+        if (readResult.isEnd)
+        {
+            const remaining = context.sequence().len();
+            if (remaining > 0)
+            {
+                std.debug.print("Not all input consumed. Remaining length: {}\n", .{remaining});
+                resultError = error.NotAllInputConsumed;
+                break :outerLoop;
+            }
+
+            if (context.state.action != .Done)
+            {
+                std.debug.print("Ended in a non-terminal state.", .{});
+                resultError = error.UnexpectedEndOfInput;
+                break :outerLoop;
+            }
+        }
+    }
+
+    for (0 .., outputBuffer.buffer[0 .. outputBuffer.position]) |i, byte|
+    {
+        if (i % 16 == 0)
+        {
+            std.debug.print("\n", .{});
+        }
+        switch (byte)
+        {
+            ' ' ... '~' =>
+            {
+                std.debug.print("{c}  ", .{ byte });
+            },
+            else =>
+            {
+                std.debug.print("{:02x} ", byte);
+            },
+        }
+    }
+
+    return .{
+        .err = resultError,
+        .state = state,
+        .filePosition = reader.buffer().getBytePosition(),
+    };
+}

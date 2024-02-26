@@ -102,6 +102,11 @@ pub const Tree = struct
         return null;
     }
 
+    pub fn getInitialBitCount(self: *const Tree) u5
+    {
+        return self.getNextBitCount(0);
+    }
+
     pub fn tryDecode(self: *const Tree, code: u16, bitCount: u5)
         !union(enum)
         {
@@ -134,7 +139,7 @@ pub const Tree = struct
     }
 };
 
-fn createTree(
+pub fn createTree(
     bitLensBySymbol: []const u5,
     allocator: std.mem.Allocator) !Tree
 {

@@ -1065,15 +1065,15 @@ pub fn removeFront(self: *Sequence, string: []const u8) RemoveResult
     }
 }
 
-pub fn removeFirst(self: *Sequence) error{NotEnoughBytes}!u8
+pub fn removeFirst(sequence: *Sequence) error{NotEnoughBytes}!u8
 {
-    if (self.isEmpty())
+    if (sequence.isEmpty())
     {
         return error.NotEnoughBytes;
     }
-    const segment = self.getFirstSegment();
+    const segment = sequence.getFirstSegment();
     const value = segment[0];
-    self.* = self.sliceFrom(self.getPosition(1));
+    sequence.* = sequence.sliceFrom(sequence.getPosition(1));
     return value;
 }
 

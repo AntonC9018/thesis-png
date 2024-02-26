@@ -39,13 +39,13 @@ const CodeFrequencyState = struct
     }
 };
 
-const State = union
+pub const State = union
 {
     codeDecoding: CodeDecodingState,
     decompression: DecompressionState,
 };
 
-const CodeDecodingState = struct
+pub const CodeDecodingState = struct
 {
     action: CodeDecodingAction,
 
@@ -103,7 +103,7 @@ const DecompressionState = struct
 };
 
 pub fn decodeCodes(
-    context: *helper.DeflateContext,
+    context: *const helper.DeflateContext,
     state: *CodeDecodingState) !bool
 {
     switch (state.action)
@@ -131,9 +131,6 @@ pub fn decodeCodes(
             state.codeLenCodeCount = count;
             state.action = .CodeLens;
 
-            const codeLenCount = count + 4;
-            state.codeLenCodeLens = try context.allocator.alloc(u3, codeLenCount);
-
             return false;
         },
         .CodeLens =>
@@ -147,8 +144,8 @@ pub fn decodeCodes(
             if (readAllArray)
             {
                 state.action = .LiteralOrLenCodeLens;
-                state.literalOrLenCodeLens = try context.allocator
-                    .alloc(u5, state.getLiteralOrLenCodeCount());
+                state.literalOrLenCodeLens = try context.allocator()
+                    .alloc(u8, state.getLiteralOrLenCodeCount());
 
                 const copy = state.codeLenCodeLens;
                 for (0 .. state.getLenCodeCount()) |i|
@@ -163,14 +160,15 @@ pub fn decodeCodes(
                     state.codeLenCodeLens[remappedIndex] = copy[i];
 
                     const tree = try huffman.createTree(
-                        @ptrCast(state.codeLenCodeLens),
-                        context.allocator);
-                    state.codeFrequencyState = .{
-                        .action = .ReadCodeLen,
-                        .codeLenTree = tree,
-                        .currentBitCount = 0,
-                        .len = 0,
-                    };
+                        @ptrCast(&state.codeLenCodeLens),
+                        context.allocator());
+                    state.codeFrequencyState = std.mem.zeroInit(CodeFrequencyState, .{
+                        .action = .LiteralLen,
+                        .huffman = .{
+                            .tree = tree,
+                            .currentBitCount = 0,
+                        },
+                    });
                 }
             }
             return false;
@@ -183,7 +181,7 @@ pub fn decodeCodes(
             if (readAllArray)
             {
                 state.action = .DistanceCodeLens;
-                state.distanceCodeLens = try context.allocator
+                state.distanceCodeLens = try context.allocator()
                     .alloc(u8, state.getDistanceCodeCount());
                 state.readListItemCount = 0;
             }
@@ -208,7 +206,7 @@ pub fn decodeCodes(
 }
 
 fn readCodeLenEncodedFrequency(
-    context: *helper.DeflateContext,
+    context: *const helper.DeflateContext,
     state: *CodeDecodingState,
     outputArray: []u8) !bool
 {
@@ -269,7 +267,7 @@ fn readCodeLenEncodedFrequency(
 }
 
 fn fullyReadCodeLenEncodedFrequency(
-    context: *helper.DeflateContext,
+    context: *const helper.DeflateContext,
     state: *CodeDecodingState,
     outputArray: []u8) !bool
 {
@@ -319,7 +317,7 @@ pub fn initializeDecompressionState(
 }
 
 pub fn decompressSymbol(
-    context: *helper.DeflateContext,
+    context: *const helper.DeflateContext,
     state: *DecompressionState) !?helper.Symbol
 {
     switch (state.action)
