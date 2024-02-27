@@ -252,9 +252,14 @@ pub const CommonContext = struct
 
 pub const OutputBuffer = struct
 {
-    buffer: []u8,
+    _buffer: std.ArrayList(u8),
     position: usize,
     windowSize: usize,
+
+    pub fn buffer(self: *const OutputBuffer) []u8
+    {
+        return self._buffer.items;
+    }
 
     pub fn setWindowSize(self: *OutputBuffer, windowSize: usize) void
     {
@@ -263,20 +268,20 @@ pub const OutputBuffer = struct
 
     pub fn deinit(self: *OutputBuffer, allocator: std.mem.Allocator) void
     {
-        allocator.free(self.buffer);
+        allocator.free(self.buffer());
     }
 
     pub fn writeByte(self: *OutputBuffer, byte: u8) !void
     {
-        self.buffer[self.position] = byte;
+        self.buffer()[self.position] = byte;
         self.position += 1;
     }
 
-    pub fn writeBytes(self: *OutputBuffer, buffer: []const u8) !void
+    pub fn writeBytes(self: *OutputBuffer, b: []const u8) !void
     {
         const start = self.position;
-        const end = start + buffer.len;
-        for (self.buffer[start .. end], buffer) |*dest, source|
+        const end = start + b.len;
+        for (self.buffer()[start .. end], b) |*dest, source|
         {
             dest.* = source;
         }
@@ -285,7 +290,7 @@ pub const OutputBuffer = struct
 
     pub fn copyFromSelf(self: *OutputBuffer, backRef: BackReference) !void
     {
-        if (self.buffer.len < backRef.distance)
+        if (self.buffer().len < backRef.distance)
         {
             return error.BackReferenceDistanceTooLarge;
         }
@@ -298,8 +303,8 @@ pub const OutputBuffer = struct
         // NOTE: the memory can overlap here.
         for (0 .. backRef.len) |_|
         {
-            const byte = self.buffer[self.position - backRef.distance];
-            self.buffer[self.position] = byte;
+            const byte = self.buffer()[self.position - backRef.distance];
+            self.buffer()[self.position] = byte;
             self.position += 1;
         }
     }

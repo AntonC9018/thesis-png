@@ -198,8 +198,6 @@ pub const Sequence = struct
     buffer: *const Buffer,
     range: SequenceRange,
 
-    const Self = @This();
-
     pub fn createEmpty(buffer: *const Buffer) Sequence
     {
         const pos = SequencePosition
@@ -221,7 +219,7 @@ pub const Sequence = struct
         const segments_ = buffer.segments.items;
         if (segments_.len == 0)
         {
-            return Self.createEmpty(buffer);
+            return Sequence.createEmpty(buffer);
         }
 
         const start_ = SequencePosition
@@ -244,17 +242,17 @@ pub const Sequence = struct
         };
     }
 
-    pub fn start(self: *const Self) SequencePosition 
+    pub fn start(self: *const Sequence) SequencePosition 
     {
         return self.range.start;
     }
 
-    pub fn end(self: *const Self) SequencePosition 
+    pub fn end(self: *const Sequence) SequencePosition 
     {
         return self.range.end;
     }
 
-    pub fn len(self: *const Self) usize
+    pub fn len(self: *const Sequence) usize
     {
         const start_ = self.start();
         const end_ = self.end();
@@ -263,17 +261,17 @@ pub const Sequence = struct
         return endAbsolute - startAbsolute;
     }
 
-    pub fn getStartOffset(self: *const Self) usize
+    pub fn getStartOffset(self: *const Sequence) usize
     {
         return getOffset(self, self.start());
     }
 
-    pub fn getOffset(self: *const Self, position: SequencePosition) usize
+    pub fn getOffset(self: *const Sequence, position: SequencePosition) usize
     {
         return self.buffer.getBytePosition(position);
     }
 
-    pub fn getPosition(self: *const Self, offset: usize) SequencePosition
+    pub fn getPosition(self: *const Sequence, offset: usize) SequencePosition
     {
         std.debug.assert(offset <= self.len());
 
@@ -301,12 +299,12 @@ pub const Sequence = struct
         unreachable;
     }
 
-    pub fn isEmpty(self: *const Self) bool
+    pub fn isEmpty(self: *const Sequence) bool
     {
         return self.len() == 0;
     }
 
-    pub fn getWholeSegmentCount(self: *const Self) u32
+    pub fn getWholeSegmentCount(self: *const Sequence) u32
     {
         const start_ = self.start();
         const end_ = self.end();
@@ -318,7 +316,7 @@ pub const Sequence = struct
         return result;
     }
 
-    pub fn sliceFrom(self: *const Self, newStart: SequencePosition) Sequence
+    pub fn sliceFrom(self: *const Sequence, newStart: SequencePosition) Sequence
     {
         return self.slice(.{
             .start = newStart,
@@ -326,7 +324,7 @@ pub const Sequence = struct
         });
     }
 
-    pub fn sliceToExclusive(self: *const Self, newEnd: SequencePosition) Sequence
+    pub fn sliceToExclusive(self: *const Sequence, newEnd: SequencePosition) Sequence
     {
         return self.slice(.{
             .start = self.start(),
@@ -337,7 +335,7 @@ pub const Sequence = struct
     // Creates two slices:
     // One up to the middle position, exclusive.
     // Second from the middle position, inclusive.
-    pub fn disect(self: *const Self, middle: SequencePosition) 
+    pub fn disect(self: *const Sequence, middle: SequencePosition) 
         struct
         { 
             left: Sequence,
@@ -361,14 +359,14 @@ pub const Sequence = struct
     // }
 
     pub fn slice(
-        self: *const Self,
+        self: *const Sequence,
         range: SequenceRange) Sequence
     {
         var range_ = range;
 
         const local = struct
         {
-            fn collapseEnds(s: *const Self, pos: *SequencePosition) void
+            fn collapseEnds(s: *const Sequence, pos: *SequencePosition) void
             {
                 if (bytesEqual(pos.*, SequencePosition.End))
                 {
@@ -446,7 +444,7 @@ pub const Sequence = struct
         };
     }
 
-    pub fn copyTo(self: *const Self, buffer: []u8) void
+    pub fn copyTo(self: *const Sequence, buffer: []u8) void
     {
         var buffer_ = buffer;
         std.debug.assert(self.len() == buffer_.len);
@@ -477,14 +475,14 @@ pub const Sequence = struct
         }
     }
 
-    pub fn getFirstSegment(self: *const Self) []const u8
+    pub fn getFirstSegment(self: *const Sequence) []const u8
     {
         const start_ = self.start();
         const wholeSegment = self.buffer.getSegment(start_.segment);
         return wholeSegment[start_.offset ..];
     }
 
-    pub fn peekFirstByte(self: *const Self) ?u8
+    pub fn peekFirstByte(self: *const Sequence) ?u8
     {
         if (self.isEmpty())
         {
@@ -494,13 +492,18 @@ pub const Sequence = struct
         return firstSegment[0];
     }
 
-    pub fn debugPrint(self: *const Self) void
+    pub fn debugPrint(self: *const Sequence) void
     {
         const allocator = std.heap.page_allocator;
         const mem = allocator.alloc(u8, self.len()) catch unreachable;
         defer allocator.free(mem);
         self.copyTo(mem);
         std.debug.print("Sequence: {s}\n", .{mem});
+    }
+
+    pub fn iterate(self: *const Sequence) ?SegmentIterator
+    {
+        return SegmentIterator.create(self);
     }
 };
 

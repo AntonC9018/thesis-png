@@ -208,7 +208,7 @@ pub fn decode(context: *const Context) !bool
             defer
             {
                 const currentPosition = context.output().position;
-                const addedBytes = context.output().buffer[bufferPositionBefore .. currentPosition];
+                const addedBytes = context.output().buffer()[bufferPositionBefore .. currentPosition];
                 state.adler32.update(addedBytes);
             }
 
@@ -355,14 +355,11 @@ fn doTest(file: anytype, allocator: std.mem.Allocator)
 
     var outputBuffer = outputBuffer:
     {
-        // Pretty arbitrary, but right now there's just the buffer, straight up.
-        // There's no resizing of any sort.
-        const bufferSize = 4096 * 8;
-        const buffer = try allocator.alloc(u8, bufferSize);
-
         break :outputBuffer helper.OutputBuffer
         {
-            .buffer = buffer,
+            .buffer = .{
+                .allocator = allocator,
+            },
             .position = 0,
             .windowSize = undefined,
         };

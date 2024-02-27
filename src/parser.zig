@@ -21,8 +21,6 @@ pub const State = struct
     // True after the first IDAT chunk data start being parsed.
     isData: bool = false,
     paletteLength: ?u32 = null,
-
-    zlib: zlib.State = .{},
 };
 
 pub fn isParserStateTerminal(state: *const State) bool 
@@ -88,7 +86,14 @@ pub const ChunkDataNode = struct
         gamma: Gamma,
         primaryChroms: PrimaryChroms,
         renderingIntent: RenderingIntent,
+        iccProfile: ICCProfile,
     },
+};
+
+pub const ICCProfile = struct
+{
+    name: std.ArrayListUnmanaged(u8) = .{},
+    decompressedProfile: std.ArrayListUnmanaged(u8) = .{},
 };
 
 pub const IHDR = struct
@@ -389,6 +394,21 @@ pub const DataNodeParserState = union
     none: void,
     transparency: TransparencyState,
     primaryChrom: PrimaryChromState,
+    iccProfile: ICCProfileState,
+};
+
+pub const ICCProfileAction = enum
+{
+    ProfileName,
+    CompressionMethod,
+    CompressedData,
+};
+
+pub const ICCProfileState = struct
+{
+    action: ICCProfileAction,
+    zlib: zlib.State,
+    outputBuffer: zlib.OutputBuffer,
 };
 
 pub const TransparencyState = union
@@ -899,6 +919,16 @@ fn initChunkDataNode(context: *const Context, chunkType: ChunkType) !void
             chunk.dataNode = .{ .none = {} };
             chunk.node.dataNode.data = .{ .renderingIntent = std.mem.zeroes(RenderingIntent) };
         },
+        .ICCProfile =>
+        {
+            chunk.dataNode = .{
+                .iccProfile = .{
+                    .action = .ProfileName,
+                    .zlib = .{},
+                },
+            };
+            chunk.node.dataNode.data = .{ .iccProfile = .{} };
+        },
         else => h.skipChunkBytes(chunk),
     }
 }
@@ -1034,6 +1064,157 @@ const TransparencyBytesProcessor = struct
         seq.copyTo(newItems);
     }
 };
+
+fn readNullTerminatedText(
+    context: *const Context,
+    output: *std.ArrayListUnmanaged(u8),
+    maxLenExcludingNull: usize) !void
+{
+    const sequence = context.sequence;
+
+    if (output.items.len == maxLenExcludingNull)
+    {
+        return;
+    }
+
+    var iter = sequence.iterate() orelse return error.NotEnoughBytes;
+
+    while (true)
+    {
+        const slice = iter.current();
+        const bytesLeftToRead = maxLenExcludingNull - output.items.len;
+        const maxBytesWillRead = @min(slice.len, bytesLeftToRead);
+
+        const nullBytePos = n:
+        {
+            // +1 because the null termination might be outside the bytes of the string.
+            for (0 .. maxBytesWillRead + 1) |i|
+            {
+                const byte = slice[i];
+                if (byte == 0)
+                {
+                    break :n i;
+                }
+            }
+            break :n null;
+        };
+
+        if (nullBytePos == null)
+        {
+            // Just this is fine by itself if the null byte is in the next segment.
+            if (maxBytesWillRead == bytesLeftToRead
+                and maxBytesWillRead < slice.len)
+            {
+                // TODO: Should we consume the bytes still in case of error?
+                return error.ExpectedNullByteAtEndOfString;
+            }
+
+            // We were only looking for the last null byte on this iteration,
+            // but didn't find it.
+            if (maxBytesWillRead == 0)
+            {
+                return error.ExpectedNullByteAtEndOfString;
+            }
+        }
+
+        const copyUntilPos = nullBytePos orelse maxBytesWillRead;
+        const sourceSlice = slice[0 .. copyUntilPos];
+
+        const containsConsecutiveOrLeadingSpaces = sp:
+        {
+            if (copyUntilPos == 0)
+            {
+                break :sp false;
+            }
+
+            if (output.items.len == 0)
+            {
+                if (slice[0] == ' ')
+                {
+                    break :sp true;
+                }
+            }
+            else
+            {
+                var isPreviousSpace = output.items[output.items.len - 1] == ' ';
+                for (sourceSlice) |byte|
+                {
+                    const isSpace = byte == ' ';
+                    if (isSpace and isPreviousSpace)
+                    {
+                        break :sp true;
+                    }
+                    isPreviousSpace = isSpace;
+                }
+            }
+
+            break :sp false;
+        };
+        const nonPrintableCharacterIndex = ch:
+        {
+            for (0 .., sourceSlice) |i, byte|
+            {
+                switch (byte)
+                {
+                    ' ' ... '~' => {},
+                    161 ... 255 => {},
+                    else => break :ch i,
+                }
+            }
+            break :ch null;
+        };
+
+        const anyError = containsConsecutiveOrLeadingSpaces or nonPrintableCharacterIndex != null;
+        if (anyError)
+        {
+            const offset = offset:
+            {
+                if (containsConsecutiveOrLeadingSpaces)
+                {
+                    break :offset 0;
+                }
+                if (nonPrintableCharacterIndex != null)
+                {
+                    break :offset nonPrintableCharacterIndex;
+                }
+                unreachable;
+            };
+
+            const newStart = iter.getCurrentPosition().add(offset);
+            sequence.* = sequence.sliceFrom(newStart);
+
+            if (containsConsecutiveOrLeadingSpaces)
+            {
+                return error.ContainsConsecutiveOrLeadingSpaces;
+            }
+            if (nonPrintableCharacterIndex != null)
+            {
+                return error.NonPrintableCharacter;
+            }
+        }
+
+        if (copyUntilPos > 0)
+        {
+            const destinationSlice = try output.addManyAsSlice(context.allocator, copyUntilPos);
+            @memcpy(destinationSlice, sourceSlice);
+        }
+
+        if (nullBytePos) |readUntilPos|
+        {
+            // We want to consume the null termination as well.
+            const newStart = iter.getCurrentPosition().add(readUntilPos + 1);
+            // Update the sequence to this position.
+            sequence.* = sequence.sliceFrom(newStart);
+            return;
+        }
+
+        if (!iter.advance())
+        {
+            sequence.* = sequence.sliceFrom(sequence.end());
+            return error.NotEnoughBytes;
+        }
+    }
+}
 
 fn parseChunkData(context: *const Context) !bool
 {
@@ -1225,6 +1406,34 @@ fn parseChunkData(context: *const Context) !bool
                 return error.InvalidRenderingIntent;
             }
             return true;
+        },
+        .ICCProfile =>
+        {
+            const state = &chunk.dataNode.iccProfile;
+            const node = &dataNode.data.iccProfile;
+
+            switch (state.action)
+            {
+                .ProfileName =>
+                {
+                    const maxNameLen = 80;
+                    try readNullTerminatedText(context, &node.name, maxNameLen);
+                    state.action = .CompressionMethod;
+                },
+                .CompressionMethod =>
+                {
+                    const compressionMethod = try pipelines.removeFirst(context.sequence);
+                    if (compressionMethod != 0)
+                    {
+                        error.InvalidCompressionMethod;
+                    }
+                    state.action = .CompressedData;
+                },
+                .CompressedData =>
+                {
+                    try zlib.decode(context, &state, &node.compressedData);
+                },
+            }
         },
         // Let's just skip for now.
         else => return try skipBytes(context, chunk),

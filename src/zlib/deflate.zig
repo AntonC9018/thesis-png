@@ -3,6 +3,7 @@ const std = helper.std;
 const huffman = helper.huffman;
 const pipelines = helper.pipelines;
 
+pub const OutputBuffer = helper.OutputBuffer;
 pub const noCompression = @import("noCompression.zig");
 pub const fixed = @import("fixed.zig");
 pub const dynamic = @import("dynamic.zig");
