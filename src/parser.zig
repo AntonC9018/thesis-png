@@ -1,5 +1,6 @@
 const std = @import("std");
 const pipelines = @import("pipelines.zig");
+const zlib = @import("zlib/zlib.zig");
 
 // What is the next expected type?
 pub const Action = enum(u8) 
@@ -20,6 +21,8 @@ pub const State = struct
     // True after the first IDAT chunk data start being parsed.
     isData: bool = false,
     paletteLength: ?u32 = null,
+
+    zlib: zlib.State = .{},
 };
 
 pub fn isParserStateTerminal(state: *const State) bool 
@@ -418,7 +421,6 @@ pub const PrimaryChromState = struct
 
 pub const IHDRParserStateKey = enum(u32)
 {
-    const Initial = .Width;
     Width,
     Height,
     BitDepth,
@@ -427,6 +429,8 @@ pub const IHDRParserStateKey = enum(u32)
     FilterMethod,
     InterlaceMethod,
     Done,
+
+    pub const Initial = .Width;
 };
 
 pub const PLTEState = struct

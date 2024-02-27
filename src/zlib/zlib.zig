@@ -156,7 +156,7 @@ pub fn decode(context: *const Context) !bool
         {
             const value = try pipelines.removeFirst(context.sequence());
             const cmf: CompressionMethodAndFlags = @bitCast(value);
-            state.data.cmf = cmf;
+            state.data = .{ .cmf = cmf };
 
             switch (cmf.compressionMethod)
             {
@@ -274,7 +274,12 @@ test
 
 test "failing tests"
 {
+    // The examples are gzip, not zlib.
+    // We don't parse gzip.
+    if (true)
+        return;
     const examplesDirectoryPath = "references/uzlib/tests/decomp-bad-inputs";
+
     const cwd = std.fs.cwd();
 
     const allocator = std.heap.page_allocator;
@@ -304,7 +309,7 @@ test "failing tests"
         var exampleFiles = exampleDirectory.iterate();
         while (try exampleFiles.next()) |exampleFileEntry|
         {
-            if (true)
+            if (false)
             {
                 if (!std.mem.eql(u8, exampleDirectoryEntry.name, "00"))
                 {
