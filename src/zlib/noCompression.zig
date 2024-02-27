@@ -8,7 +8,7 @@ pub fn decompress(context: *const helper.DeflateContext, state: *DecompressionSt
         return;
     }
 
-    const sequence = context.pipelines;
+    const sequence = context.sequence();
     var iter = pipelines.SegmentIterator.create(sequence)
         orelse return error.NotEnoughBytes;
     while (true)

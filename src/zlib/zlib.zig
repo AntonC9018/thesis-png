@@ -25,7 +25,7 @@ const Adler32State = struct
     a: u32 = 1,
     b: u32 = 0,
 
-    pub fn update(self: Adler32State, buffer: []const u8) void
+    pub fn update(self: *Adler32State, buffer: []const u8) void
     {
         for (buffer) |byte|
         {
@@ -73,6 +73,8 @@ pub const State = struct
         cmf: CompressionMethodAndFlags,
         dictionaryId: u32,
     } = .{ .none = {} },
+
+    checksum: u32 = 0,
 };
 
 const CompressionMethodAndFlags = packed struct
@@ -241,6 +243,7 @@ pub fn decode(context: *const Context) !bool
         },
         .Done => unreachable,
     }
+    return false;
 }
 
 pub fn decodeAsMuchAsPossible(context: *const Context) !void
@@ -250,7 +253,7 @@ pub fn decodeAsMuchAsPossible(context: *const Context) !void
         const done = try decode(context);
         if (done)
         {
-            return true;
+            return;
         }
     }
 }
@@ -271,8 +274,17 @@ test
 
 test "failing tests"
 {
-    const examplesDirectoryPath = "references/tests/decomp-bad-inputs";
+    const examplesDirectoryPath = "references/uzlib/tests/decomp-bad-inputs";
     const cwd = std.fs.cwd();
+
+    const allocator = std.heap.page_allocator;
+
+    if (false)
+    {
+        const cwdPath = try cwd.realpathAlloc(allocator, "");
+        std.debug.print("cwd: {s}\n", .{ cwdPath });
+        allocator.free(cwdPath);
+    }
 
     var allExamplesDirectory = try cwd.openDir(examplesDirectoryPath, .{
         .iterate = true,
@@ -309,7 +321,7 @@ test "failing tests"
             defer exampleFile.close();
             const reader = exampleFile.reader();
 
-            const testResult = try doTest(reader);
+            const testResult = try doTest(reader, allocator);
             if (testResult.err) |_| {}
             else
             {
@@ -320,7 +332,7 @@ test "failing tests"
     }
 }
 
-fn doTest(file: anytype)
+fn doTest(file: anytype, allocator: std.mem.Allocator)
     !struct
     {
         err: ?anyerror,
@@ -328,7 +340,6 @@ fn doTest(file: anytype)
         filePosition: usize,
     }
 {
-    const allocator = std.heap.page_allocator;
     var reader = pipelines.Reader(@TypeOf(file))
     {
         .dataProvider = file,
@@ -355,11 +366,12 @@ fn doTest(file: anytype)
 
     var state = State{};
     var resultError: ?anyerror = null;
+    var sequence: pipelines.Sequence = undefined;
 
     outerLoop: while (true)
     {
         const readResult = try reader.read();
-        var sequence = readResult.sequence;
+        sequence = readResult.sequence;
 
         const common = helper.CommonContext
         {
@@ -430,7 +442,7 @@ fn doTest(file: anytype)
             },
             else =>
             {
-                std.debug.print("{:02x} ", byte);
+                std.debug.print("{x:02} ", .{ byte });
             },
         }
     }
@@ -438,6 +450,6 @@ fn doTest(file: anytype)
     return .{
         .err = resultError,
         .state = state,
-        .filePosition = reader.buffer().getBytePosition(),
+        .filePosition = sequence.getStartOffset(),
     };
 }

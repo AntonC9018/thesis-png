@@ -5,7 +5,7 @@ pub const huffman = @import("huffmanTree.zig");
 
 pub const PeekApplyHelper = struct
 {
-    nextBitOffset: u4,
+    nextBitOffset: u3,
     nextSequenceStart: pipelines.SequencePosition,
 
     pub fn apply(self: PeekApplyHelper, context: *const DeflateContext) void
@@ -35,7 +35,7 @@ pub const PeekNBitsContext = struct
 {
     context: *const DeflateContext,
     bitsCount: u6,
-    comptime reverse: bool = false,
+    reverse: bool = false,
 
     fn sequence(self: *const PeekNBitsContext) *const pipelines.Sequence
     {
@@ -89,8 +89,8 @@ pub fn peekNBits(context: PeekNBitsContext) !PeekNBitsResult(u32)
                 const c = context.bitsCount - bitsRead - 1;
                 for (0 .. bitCountWillRead) |i|
                 {
-                    const bit = (readBitsAsResultType >> i) & 1;
-                    result |= bit << (c + i);
+                    const bit = (readBitsAsResultType >> @intCast(i)) & 1;
+                    result |= bit << @intCast(c + i);
                 }
             }
             else
@@ -163,55 +163,64 @@ pub const DecodedCharacterResult = struct
 {
     character: huffman.DecodedCharacter,
     applyHelper: PeekApplyHelper,
-    huffman_: *HuffmanParsingState,
+    currentBitCount: *u5,
 
-    pub fn apply(self: *DecodedCharacterResult, context: *const DeflateContext) void
+    pub fn apply(self: *const DecodedCharacterResult, context: *const DeflateContext) void
     {
         self.applyHelper.apply(context);
-        self.huffman_.currentBitCount = 0;
+        self.currentBitCount.* = 0;
     }
 };
 
-pub fn readAndDecodeCharacter(context: *const DeflateContext, huffman_: *HuffmanParsingState) !u16
+pub fn readAndDecodeCharacter(context: *const DeflateContext, huffman_: HuffmanContext) !u16
 {
     const r = try peekAndDecodeCharacter(context, huffman_);
-    r.apply(context, huffman_);
+    r.apply(context);
     return r.character;
 }
 
-pub fn peekAndDecodeCharacter(context: *const DeflateContext, huffman_: *HuffmanParsingState) !DecodedCharacterResult
+fn peekAndDecodeCharacter(context: *const DeflateContext, huffman_: HuffmanContext) !DecodedCharacterResult
 {
-    if (huffman_.currentBitCount == 0)
+    if (huffman_.currentBitCount.* == 0)
     {
-        huffman_.currentBitCount = huffman_.tree.getInitialBitCount();
+        huffman_.currentBitCount.* = huffman_.tree.getInitialBitCount();
     }
 
     while (true)
     {
         const code = try peekNBits(.{
             .context = context,
-            .bitsCount = huffman_.currentBitCount,
+            .bitsCount = huffman_.currentBitCount.*,
             .reverse = true,
         });
-        const decoded = try huffman_.tree.tryDecode(code.bits, huffman_.currentBitCount);
+        const decoded = try huffman_.tree.tryDecode(
+            @intCast(code.bits),
+            huffman_.currentBitCount.*);
         switch (decoded)
         {
             .DecodedCharacter => |ch|
             {
-                return ch;
+                return .{
+                    .character = ch,
+                    .applyHelper = code.applyHelper,
+                    .currentBitCount = huffman_.currentBitCount,
+                };
             },
             .NextBitCount => |bitCount|
             {
-                huffman_.currentBitCount = bitCount;
+                huffman_.currentBitCount.* = bitCount;
             },
         }
     }
 }
 
-pub const HuffmanParsingState = struct
+pub const HuffmanContext = struct
 {
-    tree: huffman.Tree,
-    currentBitCount: u5,
+    tree: *huffman.Tree,
+    // Could make this store the currently read number as well if needed for optimization.
+    // Adding on just a single bit is easier than rereading the whole thing.
+    // So this ideally should be wrapped in a HuffamState sort of struct.
+    currentBitCount: *u5,
 };
 
 pub fn readArrayElement(
@@ -333,11 +342,11 @@ fn writeSymbolToOutput_switch(context: *const DeflateContext, symbol: Symbol) !b
         },
         .literalValue => |literal|
         {
-            try context.output.writeByte(literal);
+            try context.output().writeByte(literal);
         },
         .backReference => |backReference|
         {
-            try context.output.copyFromSelf(backReference);
+            try context.output().copyFromSelf(backReference);
         },
     }
     return false;

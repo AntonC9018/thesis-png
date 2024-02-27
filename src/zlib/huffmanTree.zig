@@ -104,7 +104,7 @@ pub const Tree = struct
 
     pub fn getInitialBitCount(self: *const Tree) u5
     {
-        return self.getNextBitCount(0);
+        return self.getNextBitCount(0).?;
     }
 
     pub fn tryDecode(self: *const Tree, code: u16, bitCount: u5)

@@ -202,7 +202,8 @@ pub const Sequence = struct
 
     pub fn createEmpty(buffer: *const Buffer) Sequence
     {
-        const pos = SequencePosition {
+        const pos = SequencePosition
+        {
             .offset = 0,
             .segment = @intCast(buffer.getFirstSegmentOffset()),
         };
@@ -542,7 +543,7 @@ pub const SegmentIterator = struct
         // such that there are no empty segments.
         // So this should be correct.
         const nextSegment = self.currentPosition.segment + 1;
-        const movedPastEnd = nextSegment <= self.sequence.end().segment;
+        const movedPastEnd = nextSegment > self.sequence.end().segment;
         if (movedPastEnd)
         {
             self.currentPosition = SequencePosition.End;

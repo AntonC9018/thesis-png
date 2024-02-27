@@ -54,7 +54,7 @@ pub const State = struct
     } = .{ .Reserved = {} },
 };
 
-const Action = enum
+pub const Action = enum
 {
     IsFinal,
     BlockType,
@@ -62,7 +62,7 @@ const Action = enum
     DecompressionLoop,
     Done,
 
-    const Initial: Action = .IsFinal;
+    pub const Initial: Action = .IsFinal;
 };
 
 // Returns true when it's done with a block.
@@ -94,7 +94,9 @@ pub fn deflate(context: *const Context) !bool
                     }
                     // It still needs to read some metadata though.
                     state.blockState = .{
-                        .NoCompression = std.mem.zeroes(noCompression.State),
+                        .NoCompression = .{
+                            .init = std.mem.zeroes(noCompression.InitState),
+                        },
                     };
                     state.action = .BlockInit;
                 },
@@ -151,7 +153,7 @@ pub fn deflate(context: *const Context) !bool
                     const done = try dynamic.decodeCodes(context, &s.codeDecoding);
                     if (done)
                     {
-                        dynamic.initializeDecompressionState(s, context.allocator()());
+                        try dynamic.initializeDecompressionState(s, context.allocator());
                         state.action = .DecompressionLoop;
                     }
                 },
@@ -165,7 +167,7 @@ pub fn deflate(context: *const Context) !bool
                 .NoCompression => |*s|
                 {
                     // This reads as much as possible, because there's nothing interesting going on.
-                    try noCompression.decompress(context, s.decompression);
+                    try noCompression.decompress(context, &s.decompression);
                     state.action = .Done;
                 },
                 .FixedHuffman => |*s|
@@ -177,7 +179,7 @@ pub fn deflate(context: *const Context) !bool
                 },
                 .DynamicHuffman => |*s|
                 {
-                    const symbol = try dynamic.decompressSymbol(context, s.decompression);
+                    const symbol = try dynamic.decompressSymbol(context, &s.decompression);
                     state.lastSymbol = symbol;
                     const done = try helper.writeSymbolToOutput(context, symbol);
                     return done;

@@ -12,11 +12,11 @@ pub const SymbolDecompressionState = union(enum)
     },
     DistanceCode: struct
     {
-        length: u8,
+        len: u8,
     },
     Distance: struct
     {
-        length: u8,
+        len: u8,
         distanceCode: u5,
     },
 
@@ -25,13 +25,17 @@ pub const SymbolDecompressionState = union(enum)
 
 const lengthCodeStart = 257;
 
-fn getLengthBitCount(code: u8) u8
+fn adjustStart(offset: u16) u8
 {
-    const s = lengthCodeStart;
+    return @intCast(offset - lengthCodeStart);
+}
+
+fn getLengthBitCount(code: u8) u6
+{
     return switch (code)
     {
-        (257 - s) ... (264 - s), (285 - s) => 0,
-        else => (code - (265 - s)) / 4 + 1,
+        adjustStart(257) ... adjustStart(264), adjustStart(285) => 0,
+        else => @intCast((code - adjustStart(265)) / 4 + 1),
     };
 }
 
@@ -61,7 +65,7 @@ fn getBaseLength(code: u8) u8
     return baseLengthLookup[code];
 }
 
-fn getDistanceBitCount(distanceCode: u5) u8
+fn getDistanceBitCount(distanceCode: u5) u6
 {
     return switch (distanceCode)
     {
@@ -92,8 +96,8 @@ fn getBaseDistance(distanceCode: u5) u16
     return baseDistanceLookup[distanceCode];
 }
 
-fn decompressSymbol(
-    context: *helper.DeflateContext,
+pub fn decompressSymbol(
+    context: *const helper.DeflateContext,
     state: *SymbolDecompressionState) !?helper.Symbol
 {
     const lengthCodeUpperLimit = 0b001_0111;
@@ -171,7 +175,7 @@ fn decompressSymbol(
                 const literalOffset2 = literalUpperLimit - literalLowerLimit;
                 const value = code - literalLowerLimit2 + literalOffset2;
                 state.* = SymbolDecompressionState.Initial;
-                return .{ .literalValue = value };
+                return .{ .literalValue = @intCast(value) };
             }
 
             state.* = .{ .Code9Value = code };
@@ -180,12 +184,12 @@ fn decompressSymbol(
         .Length => |l|
         {
             const lengthBitCount = getLengthBitCount(l.codeRemapped);
-            const extraBits = try helper.readBits(context, lengthBitCount);
+            const extraBits = try helper.readNBits(context, lengthBitCount);
             const baseLength = getBaseLength(l.codeRemapped);
-            const length = baseLength + extraBits;
+            const len = baseLength + extraBits;
             state.* = .{ 
-                .Distance = .{
-                    .length = length,
+                .DistanceCode = .{
+                    .len = @intCast(len),
                 },
             };
         },
@@ -194,7 +198,7 @@ fn decompressSymbol(
             const distanceCode = try helper.readBits(context, u5);
             state.* = .{
                 .Distance = .{
-                    .length = d.length,
+                    .len = d.len,
                     .distanceCode = distanceCode,
                 },
             };
@@ -207,16 +211,19 @@ fn decompressSymbol(
         .Distance => |d|
         {
             const distanceBitCount = getDistanceBitCount(d.distanceCode);
-            const extraBits = try helper.readBits(context, distanceBitCount);
+            const extraBits = try helper.readNBits(context, distanceBitCount);
             const baseDistance = getBaseDistance(d.distanceCode);
             const distance = baseDistance + extraBits;
 
             state.* = SymbolDecompressionState.Initial;
             return .{
-                .distance = distance + 1,
-                .length = @as(u16, d.length) + 3,
+                .backReference = .{
+                    .distance = @intCast(distance + 1),
+                    .len = @as(u16, d.len) + 3,
+                },
             };
         },
+        .Code9Value => unreachable,
     }
 
     return null;

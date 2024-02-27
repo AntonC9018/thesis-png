@@ -23,9 +23,20 @@ const CodeFrequencyAction = enum
 const CodeFrequencyState = struct
 {
     action: CodeFrequencyAction,
-    huffman: helper.HuffmanParsingState,
+
+    tree: huffman.Tree,
+    currentBitCount: u5,
+
     decodedLen: u5,
     repeatCount: u7,
+
+    pub fn huffmanContext(self: *CodeFrequencyState) helper.HuffmanContext
+    {
+        return .{
+            .tree = &self.tree,
+            .currentBitCount = &self.currentBitCount,
+        };
+    }
 
     pub fn repeatBitCount(self: *const CodeFrequencyState) u5
     {
@@ -50,12 +61,12 @@ pub const CodeDecodingState = struct
     action: CodeDecodingAction,
 
     // Reset as it's being read.
-    literalOrLenCodeCount: u5,
+    readListItemCount: usize,
     codeFrequencyState: CodeFrequencyState,
 
-    distanceCodeCount: u5,
+    literalOrLenCodeCount: u5,
     codeLenCodeCount: u4,
-    readListItemCount: usize,
+    distanceCodeCount: u5,
 
     codeLenCodeLens: [19]u3,
     literalOrLenCodeLens: []u8,
@@ -65,12 +76,12 @@ pub const CodeDecodingState = struct
 
     pub fn getLiteralOrLenCodeCount(self: *const Self) usize
     {
-        return self.literalOrLenCodeCount + 257;
+        return @as(usize, self.literalOrLenCodeCount) + 257;
     }
 
     pub fn getLenCodeCount(self: *const Self) usize
     {
-        return self.literalOrLenCodeCount + 4;
+        return self.codeLenCodeCount + 4;
     }
 
     pub fn getDistanceCodeCount(self: *const Self) usize
@@ -80,7 +91,7 @@ pub const CodeDecodingState = struct
 
     pub fn deinit(self: *Self, allocator: std.mem.Allocator) void
     {
-        self.codeFrequencyState.huffman.tree.deinit(allocator);
+        self.codeFrequencyState.tree.deinit(allocator);
         allocator.free(self.literalOrLenCodeLens);
         allocator.free(self.distanceCodeLens);
     }
@@ -95,7 +106,7 @@ const DecompressionAction = enum
 const DecompressionState = struct
 {
     distanceTree: huffman.Tree,
-    literalOrLenCodesTree: huffman.Tree,
+    literalOrLenTree: huffman.Tree,
     currentBitCount: u5,
 
     action: DecompressionAction,
@@ -164,10 +175,7 @@ pub fn decodeCodes(
                         context.allocator());
                     state.codeFrequencyState = std.mem.zeroInit(CodeFrequencyState, .{
                         .action = .LiteralLen,
-                        .huffman = .{
-                            .tree = tree,
-                            .currentBitCount = 0,
-                        },
+                        .tree = tree,
                     });
                 }
             }
@@ -217,18 +225,20 @@ fn readCodeLenEncodedFrequency(
     {
         .LiteralLen =>
         {
-            const character = try helper.readAndDecodeCharacter(context, &freqState.huffman);
+            const character = try helper.readAndDecodeCharacter(context, freqState.huffmanContext());
             const len: u5 = @intCast(character);
+            state.literalOrLenCodeCount = len;
 
             std.debug.assert(len <= 18);
 
+            // Value above 16 means the bits that follow are the repeat count.
             if (len >= 16)
             {
                 freqState.action = .RepeatCount;
 
-                if (state.readCount.* == 0)
+                if (readCount.* == 0)
                 {
-                    return .NothingToRepeat;
+                    return error.NothingToRepeat;
                 }
 
                 return false;
@@ -310,8 +320,8 @@ pub fn initializeDecompressionState(
 
     state.* = .{
         .decompression = std.mem.zeroInit(DecompressionState, .{
-            .literalOrLenCodesTree = literalTree,
-            .distanceCodesTree = distanceTree,
+            .literalOrLenTree = literalTree,
+            .distanceTree = distanceTree,
         }),
     };
 }
@@ -324,12 +334,16 @@ pub fn decompressSymbol(
     {
         .LiteralOrLen =>
         {
-            const value = try helper.readAndDecodeCharacter(context, &state.literalOrLenCodesTree);
+            const value = try helper.readAndDecodeCharacter(context, .{
+                .tree = &state.literalOrLenTree,
+                .currentBitCount = &state.currentBitCount,
+            });
             switch (value)
             {
+                // TODO: Share these constants with the fixed module.
                 0 ... 255 =>
                 {
-                    return .{ .literalValue = value };
+                    return .{ .literalValue = @intCast(value) };
                 },
                 256 =>
                 {
@@ -338,23 +352,26 @@ pub fn decompressSymbol(
                 257 ... 285 =>
                 {
                     state.action = .Distance;
-                    state.len = value;
+                    state.len = @intCast(value - 257);
                 },
+                else => unreachable,
             }
         },
         .Distance =>
         {
-            const distance = try helper.readAndDecodeCharacter(context, &state.distanceCodesTree);
+            const distance = try helper.readAndDecodeCharacter(context, .{
+                .tree = &state.distanceTree,
+                .currentBitCount = &state.currentBitCount,
+            });
             state.action = .LiteralOrLen;
 
             return .{
                 .backReference = .{
                     .distance = distance,
-                    .len = state.len
+                    .len = state.len,
                 }
             };
-                    
         },
     }
-    return state.action == .Done;
+    return null;
 }
