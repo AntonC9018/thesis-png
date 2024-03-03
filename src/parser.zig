@@ -87,7 +87,14 @@ pub const ChunkDataNode = struct
         primaryChroms: PrimaryChroms,
         renderingIntent: RenderingIntent,
         iccProfile: ICCProfile,
+        text: TextData,
     },
+};
+
+pub const TextData = struct
+{
+    keyword: std.ArrayListUnmanaged(u8) = .{},
+    text: std.ArrayListUnmanaged(u8) = .{},
 };
 
 pub const ICCProfile = struct
@@ -395,6 +402,34 @@ pub const DataNodeParserState = union
     transparency: TransparencyState,
     primaryChrom: PrimaryChromState,
     iccProfile: ICCProfileState,
+    text: TextState,
+    compressedText: CompressedTextState,
+};
+
+pub const CompressedTextAction = enum
+{
+    Keyword,
+    CompressionMethod,
+    Text,
+};
+
+pub const CompressedTextState = struct
+{
+    bytesRead: u32 = 0,
+    action: CompressedTextAction = .Keyword,
+    zlib: zlib.State,
+};
+
+pub const TextAction = enum
+{
+    Keyword,
+    Text,
+};
+
+pub const TextState = struct
+{
+    bytesRead: u32 = 0,
+    action: TextAction = .Keyword,
 };
 
 pub const ICCProfileAction = enum
@@ -766,6 +801,10 @@ pub fn parseChunkItem(context: *const Context) !bool
 }
 
 
+// TODO:
+// Check if the size specified matches the expected size.
+// If the size of the chunk is dynamic, resize
+// the sequence appropriately and reinterpret error.NotEnoughBytes.
 fn initChunkDataNode(context: *const Context, chunkType: ChunkType) !void
 {
     const knownChunkType = getKnownDataChunkType(chunkType);
@@ -929,6 +968,24 @@ fn initChunkDataNode(context: *const Context, chunkType: ChunkType) !void
             };
             chunk.node.dataNode.data = .{ .iccProfile = .{} };
         },
+        .Text =>
+        {
+            chunk.dataNode = .{
+                .text = .{},
+            };
+            chunk.node.dataNode.data = .{
+                .text = .{},
+            };
+        },
+        .CompressedText =>
+        {
+            chunk.dataNode = .{
+                .compressedText = .{},
+            };
+            chunk.node.dataNode.data = .{
+                .text = .{},
+            };
+        },
         else => h.skipChunkBytes(chunk),
     }
 }
@@ -1061,6 +1118,24 @@ const TransparencyBytesProcessor = struct
     {
         const len = seq.len();
         const newItems = try self.alphaValues.addManyAsSlice(self.allocator, len);
+        seq.copyTo(newItems);
+    }
+};
+
+const TextBytesProcessor = struct
+{
+    text: *std.ArrayListUnmanaged(u8),
+    allocator: std.mem.Allocator,
+
+    pub fn initCount(self: *const TextBytesProcessor, count: u32) !void
+    {
+        try self.text.ensureTotalCapacity(self.allocator, count);
+    }
+
+    pub fn sequence(self: *const TextBytesProcessor, seq: pipelines.Sequence) !void
+    {
+        const len = seq.len();
+        const newItems = try self.text.addManyAsSlice(self.allocator, len);
         seq.copyTo(newItems);
     }
 };
@@ -1419,6 +1494,7 @@ fn parseChunkData(context: *const Context) !bool
                     const maxNameLen = 80;
                     try readNullTerminatedText(context, &node.name, maxNameLen);
                     state.action = .CompressionMethod;
+                    return false;
                 },
                 .CompressionMethod =>
                 {
@@ -1428,12 +1504,56 @@ fn parseChunkData(context: *const Context) !bool
                         error.InvalidCompressionMethod;
                     }
                     state.action = .CompressedData;
+                    return false;
                 },
                 .CompressedData =>
                 {
-                    try zlib.decode(context, &state, &node.compressedData);
+                    // NOTE:
+                    // The dynamically allocated memory will have to be dealloced here.
+                    // That is something the caller has to do, because they might want to use it.
+                    var outputBuffer = zlib.OutputBuffer{};
+                    const zlibContext = .{
+                    };
+                    const isDone = try zlib.decode(context, &state, &node.compressedData);
+                    if (isDone)
+                    {
+                        return true;
+                    }
+                    return false;
                 },
             }
+        },
+        .Text =>
+        {
+            const state = &chunk.dataNode.text;
+            const node = &dataNode.data.text;
+            switch (state.action)
+            {
+                .Keyword =>
+                {
+                    const maxLen = 80;
+                    try readNullTerminatedText(context, &node.keyword, maxLen);
+                    state.action = .Text;
+                    // TODO: This is kind of dumb. It should be kept track of at a higher level.
+                    state.bytesRead = node.keyword.len + 1;
+                    return false;
+                },
+                .Text =>
+                {
+                    const bytesRead = &state.bytesRead;
+                    const functor = TextBytesProcessor
+                    {
+                        .text = &state.text,
+                        .allocator = context.allocator,
+                    };
+
+                    const done = try removeAndProcessAsManyBytesAsAvailable(context, bytesRead, functor);
+                    return done;
+                },
+            }
+        },
+        .CompressedText =>
+        {
         },
         // Let's just skip for now.
         else => return try skipBytes(context, chunk),

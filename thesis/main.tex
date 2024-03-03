@@ -347,7 +347,212 @@ Acesta nu este o problemă, deoarece interfața are acces la starea privată a p
 Mai complicat conceptual este sistemul de decompresie,
 deoarece acesta trebuie să păstreze octeții decodificate pentru a se referi la ei
 în procesul de decompresie, până la 32 KB de date.
+Pentru prototip, a fost realizată o abordare simplă --- se păstrează toți octeții într-un bufer dinamic.
 
+\subsection{Testarea}
+
+Problema legată de testare este faptul că, deoarece programul este orientat
+la decompresie și nici nu realizează un compresor,
+este dificit să se genereze niște date pentru teste.
+
+Sunt două variante care ar putea fi folosie:
+\begin{enumerate}
+    \item
+        Se poate folosi un compresor existent, adică o altă librarie, pentru a genera datele.
+        Minusul acestei abordări este faptul că codul de generare a datelor atunci va exista
+        ca un modul independent și nu poate fi ușor folosită abordarea "kitchen sink", adică
+        compresia dintr-o structură de date, și urmând-o decompresia, după ce să se verifice
+        dacă rezultatul este echivalent cu structura de date originală.
+        Însă, testarea de așa fel n-ar fi de neatins --- cu o anumită masură de lucru,
+        poate fi realizat un sistem care permite testele declarative folosind așa abordare.
+        Pentru prototipul dat însă s-a decis că această abordare ar fi prea consumătoare de timp.
+    \item
+        Se poate găsi niște date de test, și a le folosi pentru a face testarea
+        la întregul sistem, cu diferite intrări, fără a înțelege toate nuanțele ale datelor de intrare.
+        Adică, dacă se găsește o eroare pentru un samplu corect -- testul se eșuează,
+        și invers, pentru un samplu incorect decompresia trebuie să se eșueze.
+        Una din referințe \cite{gzip_impl} folosește așa abordare pentru teste negative,
+        însă are datele pentru formatul gzip, dar nu zlib, din care cauză acestea nu au putut fi folosite.
+\end{enumerate}
+
+Ca atare există și încă o abordare -- să nu se facă testarea la modulul zlib direct.
+Pentru prototip, această abordare este cea mai aplicabilă pentru a putea sălva timpul.
+
+Testarea indirectă oricum va fi folosită la testarea intrărilor diferite ale formatului \ac{PNG},
+deoarece acesta numaidecât folosește zlib pentru chunk-urile \texttt{IDAT} care trebuie să fie prezente
+în orice exemplu de fișier \ac{PNG}.
+
+\section{Procesarea erorilor}
+
+La implementarea inițială a prototipului s-a observat că erorile pot să fie semnalizate
+la momente diferite de detectare a lor și unele din ele pot avea niște date asociate
+care trebuie să fie accesibile de utilizator, de dorit într-un mod consistent.
+
+De exemplu, când se citește un număr întreg de 4 octeți din fluxul de intrare,
+avem 3 posibilități diferite de implementare a acestei idei.
+Acestea implică transferul diferit al contextului de eroare și
+urmează în poziții diferite înregistrate ale secvenței curente de intrare.
+
+\begin{minted}{zig}
+pub fn impl(context: *Context) !void
+{
+    // ...
+
+    switch (context.state.action)
+    {
+        // ...
+
+        .Number =>
+        {
+            // Read the int, modify the stream
+            const number = try pipelines.readInt(context.sequence);
+
+            // Save the context
+            context.state.number = number;
+
+            // Validate
+            if (number == 256)
+            {
+                return error.CannotBe256;
+            }
+        },
+
+        // ...
+    }
+}
+
+pub fn callSite()
+{
+    // ...
+
+    impl(&context)
+    catch |err|
+    {
+        switch (err)
+        {
+            error.CannotBe256 =>
+            {
+                // If multiple states can result in this error,
+                // need to check which state we're in.
+                switch (context.state.action)
+                {
+                    // ...
+
+                    .Number =>
+                    {
+                        std.debug.print("The number {} is invalid while parsing Number\n", .{
+                            context.state.number
+                        });
+                    },
+
+                    // ...
+                }
+
+                return error.ParsingFailed;
+            },
+        }
+    };
+}
+\end{minted}
+
+O altă variantă ar fi putea următoarea, unde octeții citiți
+se consumă numai dacă nu s-a observat o eroare.
+
+\begin{minted}{zig}
+pub fn impl(context: *Context) !void
+{
+    // ...
+
+    switch (context.state.action)
+    {
+        // ...
+
+        .Number =>
+        {
+            // Read the int, but do not consume the stream
+            const number = try pipelines.peekInt(context.sequence);
+
+            // Validate
+            if (number.value == 256)
+            {
+                return error.CannotBe256;
+            }
+
+            // Save the context
+            context.state.number = number.value;
+
+            // Consume the read bytes if the result is valid.
+            number.apply(context);
+        },
+
+        // ...
+    }
+}
+\end{minted}
+
+Se mai poate afișa eroarea într-un mod diferit.
+
+\begin{minted}{zig}
+pub fn impl(context: *Context) !void
+{
+    // ...
+
+    switch (context.state.action)
+    {
+        // ...
+
+        .Number =>
+        {
+            // Read the int, modify the stream
+            const number = try pipelines.readInt(context.sequence);
+
+            // Save the context
+            context.state.number = number;
+
+            // Validate
+            if (number == 256)
+            {
+                return error.CannotBe256;
+            }
+        },
+
+        // ...
+    }
+}
+
+pub fn callSite()
+{
+    // ...
+
+    impl(&context)
+    catch |err|
+    {
+        switch (err)
+        {
+            error.CannotBe256 =>
+            {
+                // If multiple states can result in this error,
+                // need to check which state we're in.
+                switch (context.state.action)
+                {
+                    // ...
+
+                    .Number =>
+                    {
+                        std.debug.print("The number {} is invalid while parsing Number\n", .{
+                            context.state.number
+                        });
+                    },
+
+                    // ...
+                }
+
+                return error.ParsingFailed;
+            },
+        }
+    };
+}
+\end{minted}
 
 
 
@@ -386,3 +591,4 @@ deoarece acesta trebuie să păstreze octeții decodificate pentru a se referi l
 % insert appendices here
 
 \end{document}
+% vim: fdm=syntax
