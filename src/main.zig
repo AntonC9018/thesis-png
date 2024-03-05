@@ -30,15 +30,15 @@ pub fn main() !void
 
     var parserState = parser.createParserState();
     var chunks = std.ArrayList(parser.ChunkNode).init(allocator);
-    const settings = parser.ParserSettings
+    const settings = parser.Settings
     {
-        .logChunkStart = true,
+        .logChunkStart = false,
     };
 
     outerLoop: while (true)
     {
         var readResult = try reader.read();
-        var context = parser.ParserContext
+        var context = parser.Context
         { 
             .state = &parserState,
             .sequence = &readResult.sequence,
@@ -91,7 +91,7 @@ pub fn main() !void
 
             if (!parser.isParserStateTerminal(context.state))
             {
-                std.debug.print("Ended in a non-terminal state.", .{});
+                std.debug.print("Ended in a non-terminal state.\n", .{});
             }
 
             break;
@@ -129,7 +129,7 @@ pub fn main() !void
 }
 
 fn doMaximumAmountOfParsing(
-    context: *parser.ParserContext,
+    context: *parser.Context,
     nodes: *std.ArrayList(parser.ChunkNode)) !void
 {
     while (true)
@@ -154,11 +154,10 @@ fn doMaximumAmountOfParsing(
             .StartChunk => unreachable,
         }
 
+        context.state.action = .StartChunk;
         if (context.state.isEnd)
         {
             return;
         }
-
-        context.state.action = .StartChunk;
     }
 }

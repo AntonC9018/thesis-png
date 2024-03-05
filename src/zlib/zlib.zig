@@ -3,6 +3,8 @@ const helper = @import("helper.zig");
 const std = @import("std");
 const pipelines = helper.pipelines;
 
+pub const OutputBuffer = deflate.OutputBuffer;
+
 const Header = struct
 {
     compressionMethod: CompressionMethodAndFlags,
@@ -58,6 +60,7 @@ const Adler32State = struct
 pub const State = struct
 {
     action: Action = .CompressionMethodAndFlags,
+    windowSize: u16 = 0,
     adler32: Adler32State = .{},
 
     decompressor: union
@@ -118,9 +121,11 @@ fn checkCheckFlag(cmf: CompressionMethodAndFlags, flags: Flags) bool
     return remainder == 0;
 }
 
-const Context = struct
+pub const CommonContext = helper.CommonContext;
+
+pub const Context = struct
 {
-    common: *const helper.CommonContext,
+    common: *const CommonContext,
     state: *State,
 
     pub fn output(self: *const Context) *helper.OutputBuffer
@@ -164,7 +169,7 @@ pub fn decode(context: *const Context) !bool
                 {
                     const logBase2OfWindowSize = cmf.compressionInfo;
                     const windowSize = @as(u16, 1) << logBase2OfWindowSize;
-                    context.output().setWindowSize(windowSize);
+                    context.state.windowSize = windowSize;
 
                     state.decompressor = .{
                         .deflate = .{},
@@ -204,10 +209,10 @@ pub fn decode(context: *const Context) !bool
         {
             const decompressor = &state.decompressor.deflate;
 
-            const bufferPositionBefore = context.output().position;
+            const bufferPositionBefore = context.output().position();
             defer
             {
-                const currentPosition = context.output().position;
+                const currentPosition = context.output().position();
                 const addedBytes = context.output().buffer()[bufferPositionBefore .. currentPosition];
                 state.adler32.update(addedBytes);
             }
@@ -375,7 +380,7 @@ fn doTest(file: anytype, allocator: std.mem.Allocator)
         const readResult = try reader.read();
         sequence = readResult.sequence;
 
-        const common = helper.CommonContext
+        const common = CommonContext
         {
             .sequence = &sequence,
             .output = &outputBuffer,
@@ -423,14 +428,14 @@ fn doTest(file: anytype, allocator: std.mem.Allocator)
 
             if (context.state.action != .Done)
             {
-                std.debug.print("Ended in a non-terminal state.", .{});
+                std.debug.print("Ended in a non-terminal state.\n", .{});
                 resultError = error.UnexpectedEndOfInput;
                 break :outerLoop;
             }
         }
     }
 
-    for (0 .., outputBuffer.buffer[0 .. outputBuffer.position]) |i, byte|
+    for (0 .., outputBuffer.buffer()) |i, byte|
     {
         if (i % 16 == 0)
         {

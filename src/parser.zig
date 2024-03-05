@@ -430,6 +430,7 @@ pub const TextState = struct
 {
     bytesRead: u32 = 0,
     action: TextAction = .Keyword,
+    text: std.ArrayListUnmanaged(u8) = .{},
 };
 
 pub const ICCProfileAction = enum
@@ -441,9 +442,9 @@ pub const ICCProfileAction = enum
 
 pub const ICCProfileState = struct
 {
-    action: ICCProfileAction,
+    action: ICCProfileAction = .ProfileName,
+    bytes: std.ArrayListUnmanaged(u8) = .{},
     zlib: zlib.State,
-    outputBuffer: zlib.OutputBuffer,
 };
 
 pub const TransparencyState = union
@@ -962,7 +963,6 @@ fn initChunkDataNode(context: *const Context, chunkType: ChunkType) !void
         {
             chunk.dataNode = .{
                 .iccProfile = .{
-                    .action = .ProfileName,
                     .zlib = .{},
                 },
             };
@@ -980,7 +980,9 @@ fn initChunkDataNode(context: *const Context, chunkType: ChunkType) !void
         .CompressedText =>
         {
             chunk.dataNode = .{
-                .compressedText = .{},
+                .compressedText = .{
+                    .zlib = .{},
+                },
             };
             chunk.node.dataNode.data = .{
                 .text = .{},
@@ -1248,14 +1250,14 @@ fn readNullTerminatedText(
                 {
                     break :offset 0;
                 }
-                if (nonPrintableCharacterIndex != null)
+                if (nonPrintableCharacterIndex) |i|
                 {
-                    break :offset nonPrintableCharacterIndex;
+                    break :offset i;
                 }
                 unreachable;
             };
 
-            const newStart = iter.getCurrentPosition().add(offset);
+            const newStart = iter.getCurrentPosition().add(@intCast(offset));
             sequence.* = sequence.sliceFrom(newStart);
 
             if (containsConsecutiveOrLeadingSpaces)
@@ -1277,7 +1279,7 @@ fn readNullTerminatedText(
         if (nullBytePos) |readUntilPos|
         {
             // We want to consume the null termination as well.
-            const newStart = iter.getCurrentPosition().add(readUntilPos + 1);
+            const newStart = iter.getCurrentPosition().add(@intCast(readUntilPos + 1));
             // Update the sequence to this position.
             sequence.* = sequence.sliceFrom(newStart);
             return;
@@ -1289,6 +1291,44 @@ fn readNullTerminatedText(
             return error.NotEnoughBytes;
         }
     }
+}
+
+fn readZlibData(
+    context: *const Context,
+    state: *zlib.State,
+    output: *std.ArrayListUnmanaged(u8)) !bool
+{
+    var outputBuffer = zlib.OutputBuffer
+    {
+        .allocator = context.allocator,
+        .array = output,
+        .windowSize = &state.windowSize,
+    };
+    const common = zlib.CommonContext
+    {
+        .allocator = context.allocator,
+        .output = &outputBuffer,
+        .sequence = context.sequence,
+    };
+    const zlibContext = zlib.Context
+    {
+        .common = &common,
+        .state = state,
+    };
+    const isDone = try zlib.decode(&zlibContext);
+    if (isDone)
+    {
+        return true;
+    }
+    return false;
+}
+
+fn readKeywordText(context: *const Context, keyword: *std.ArrayListUnmanaged(u8), bytesRead: *u32) !void
+{
+    const maxLen = 80;
+    try readNullTerminatedText(context, keyword, maxLen);
+    // TODO: This is kind of dumb. It should be kept track of at a higher level.
+    bytesRead.* = @intCast(keyword.items.len + 1);
 }
 
 fn parseChunkData(context: *const Context) !bool
@@ -1501,25 +1541,15 @@ fn parseChunkData(context: *const Context) !bool
                     const compressionMethod = try pipelines.removeFirst(context.sequence);
                     if (compressionMethod != 0)
                     {
-                        error.InvalidCompressionMethod;
+                        return error.InvalidCompressionMethod;
                     }
                     state.action = .CompressedData;
                     return false;
                 },
                 .CompressedData =>
                 {
-                    // NOTE:
-                    // The dynamically allocated memory will have to be dealloced here.
-                    // That is something the caller has to do, because they might want to use it.
-                    var outputBuffer = zlib.OutputBuffer{};
-                    const zlibContext = .{
-                    };
-                    const isDone = try zlib.decode(context, &state, &node.compressedData);
-                    if (isDone)
-                    {
-                        return true;
-                    }
-                    return false;
+                    const isDone = try readZlibData(context, &state.zlib, &node.decompressedProfile);
+                    return isDone;
                 },
             }
         },
@@ -1531,11 +1561,8 @@ fn parseChunkData(context: *const Context) !bool
             {
                 .Keyword =>
                 {
-                    const maxLen = 80;
-                    try readNullTerminatedText(context, &node.keyword, maxLen);
+                    try readKeywordText(context, &node.keyword, &state.bytesRead);
                     state.action = .Text;
-                    // TODO: This is kind of dumb. It should be kept track of at a higher level.
-                    state.bytesRead = node.keyword.len + 1;
                     return false;
                 },
                 .Text =>
@@ -1554,6 +1581,34 @@ fn parseChunkData(context: *const Context) !bool
         },
         .CompressedText =>
         {
+            const state = &chunk.dataNode.compressedText;
+            const node = &dataNode.data.text;
+            switch (state.action)
+            {
+                .Keyword =>
+                {
+                    try readKeywordText(context, &node.keyword, &state.bytesRead);
+                    state.action = .CompressionMethod;
+                    return false;
+                },
+                .CompressionMethod =>
+                {
+                    const value = try pipelines.removeFirst(context.sequence);
+                    // Maybe store it?
+                    if (value != 0)
+                    {
+                        return error.UnsupportedCompressionMethod;
+                    }
+                    state.action = .Text;
+                    return false;
+                },
+                .Text =>
+                {
+                    const isDone = try readZlibData(context, &state.zlib, &node.text);
+                    return isDone;
+                },
+            }
+
         },
         // Let's just skip for now.
         else => return try skipBytes(context, chunk),

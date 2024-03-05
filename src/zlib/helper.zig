@@ -250,42 +250,36 @@ pub const CommonContext = struct
     output: *OutputBuffer,
 };
 
+
 pub const OutputBuffer = struct
 {
-    _buffer: std.ArrayList(u8),
-    position: usize,
-    windowSize: usize,
+    array: *std.ArrayListUnmanaged(u8),
+    allocator: std.mem.Allocator,
+    windowSize: *const u16,
+
+    pub fn position(self: *const OutputBuffer) usize
+    {
+        return self.buffer().len;
+    }
 
     pub fn buffer(self: *const OutputBuffer) []u8
     {
-        return self._buffer.items;
+        return self.array.items;
     }
 
-    pub fn setWindowSize(self: *OutputBuffer, windowSize: usize) void
+    pub fn deinit(self: *OutputBuffer) void
     {
-        self.windowSize = windowSize;
-    }
-
-    pub fn deinit(self: *OutputBuffer, allocator: std.mem.Allocator) void
-    {
-        allocator.free(self.buffer());
+        self.array.deinit(self.allocator);
     }
 
     pub fn writeByte(self: *OutputBuffer, byte: u8) !void
     {
-        self.buffer()[self.position] = byte;
-        self.position += 1;
+        try self.array.append(self.allocator, byte);
     }
 
     pub fn writeBytes(self: *OutputBuffer, b: []const u8) !void
     {
-        const start = self.position;
-        const end = start + b.len;
-        for (self.buffer()[start .. end], b) |*dest, source|
-        {
-            dest.* = source;
-        }
-        self.position = end;
+        try self.array.appendSlice(self.allocator, b);
     }
 
     pub fn copyFromSelf(self: *OutputBuffer, backRef: BackReference) !void
@@ -300,12 +294,16 @@ pub const OutputBuffer = struct
             return error.BackReferenceDistanceIsZero;
         }
 
+        if (backRef.distance > self.windowSize.*)
+        {
+            return error.BackReferenceDistanceTooLarge;
+        }
+
         // NOTE: the memory can overlap here.
         for (0 .. backRef.len) |_|
         {
-            const byte = self.buffer()[self.position - backRef.distance];
-            self.buffer()[self.position] = byte;
-            self.position += 1;
+            const byte = self.buffer()[self.position() - backRef.distance];
+            try self.writeByte(byte);
         }
     }
 };
