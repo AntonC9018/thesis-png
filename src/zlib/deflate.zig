@@ -83,6 +83,9 @@ pub fn deflate(context: *const Context) !bool
             const blockType = try helper.readBits(context, u2);
             const typedBlockType: BlockType = @enumFromInt(blockType);
 
+            std.debug.print("Block type bits: {}\n", .{blockType});
+            std.debug.print("Block type value: {}\n", .{blockType});
+
             switch (typedBlockType)
             {
                 .NoCompression =>

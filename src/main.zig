@@ -32,7 +32,7 @@ pub fn main() !void
     var chunks = std.ArrayList(parser.ChunkNode).init(allocator);
     const settings = parser.Settings
     {
-        .logChunkStart = false,
+        .logChunkStart = true,
     };
 
     outerLoop: while (true)
@@ -122,6 +122,14 @@ pub fn main() !void
             .Gamma =>
             {
                 std.debug.print("  {any}\n", .{ chunk.dataNode.data.gamma });
+            },
+            .Text =>
+            {
+                std.debug.print("  {any}\n", .{ chunk.dataNode.data.text });
+            },
+            .Transparency =>
+            {
+                std.debug.print("  {any}\n", .{ chunk.dataNode.data.transparency });
             },
             else => {},
         }

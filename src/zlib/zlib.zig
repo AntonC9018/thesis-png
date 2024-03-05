@@ -97,12 +97,13 @@ const CompressionInfo = u4;
 
 const Flags = packed struct
 {
-    check: u4,
+    check: u5,
     presetDictionary: bool,
     compressionLevel: CompressionLevel,
 };
 
-const CompressionLevel = enum(u3)
+
+const CompressionLevel = enum(u2)
 {
     Fastest = 0,
     Fast = 1,
@@ -275,6 +276,7 @@ fn copyConst(from: type, to: type) type
 test
 {
     _ = deflate;
+    _ = helper;
 }
 
 test "failing tests"

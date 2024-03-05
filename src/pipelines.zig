@@ -731,7 +731,7 @@ pub fn Reader(comptime ReaderType: type) type
     };
 }
 
-const TestDataProvider = struct
+pub const TestDataProvider = struct
 {
     data: []const u8,
 
@@ -744,7 +744,7 @@ const TestDataProvider = struct
     }
 };
 
-fn createTestBufferFromData(
+pub fn createTestBufferFromData(
     data: []const []const u8,
     allocator: std.mem.Allocator) !Buffer
 {
@@ -1100,8 +1100,8 @@ test "removeFirst works"
 
 pub fn isLittleEndian() bool
 {
-    const one: [4]u8 = @bitCast(@as(u32, 1));
-    return one[0] == 1;
+    const native_endian = @import("builtin").target.cpu.arch.endian();
+    return native_endian == .little; 
 }
 
 pub fn readNetworkU31(self: *Sequence) error{NotEnoughBytes,NumberTooLarge}!u31
@@ -1143,7 +1143,7 @@ pub fn readNetworkUnsigned(self: *Sequence, comptime resultType: type) error{Not
 
 fn readNetworkUnsigned_impl(sequence: *Sequence, comptime size: u8) [size]u8
 {
-    const reverseBytes = isLittleEndian();
+    const reverseBytes = comptime isLittleEndian();
     var resultBytes: [size]u8 = undefined;
     var bytesLeftToWrite: u3 = size;
 

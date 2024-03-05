@@ -21,6 +21,8 @@ pub const State = struct
     // True after the first IDAT chunk data start being parsed.
     isData: bool = false,
     paletteLength: ?u32 = null,
+
+    imageData: ImageData = .{},
 };
 
 pub fn isParserStateTerminal(state: *const State) bool 
@@ -89,6 +91,14 @@ pub const ChunkDataNode = struct
         iccProfile: ICCProfile,
         text: TextData,
     },
+};
+
+// Of course, this will need to be reworked once I do the tree range optimizations
+pub const ImageData = struct
+{
+    // Just read the raw bytes for now
+    bytes: std.ArrayListUnmanaged(u8) = .{},
+    zlib: zlib.State = .{},
 };
 
 pub const TextData = struct
@@ -404,6 +414,13 @@ pub const DataNodeParserState = union
     iccProfile: ICCProfileState,
     text: TextState,
     compressedText: CompressedTextState,
+    imageData: ImageDataState,
+};
+
+pub const ImageDataState = struct
+{
+    // TODO: Unite this logic, making the sequence automatically cut.
+    bytesRead: u32 = 0,
 };
 
 pub const CompressedTextAction = enum
@@ -886,8 +903,11 @@ fn initChunkDataNode(context: *const Context, chunkType: ChunkType) !void
         },
         .ImageData =>
         {
-            context.state.isData = true;
-            h.skipChunkBytes(chunk);
+            if (!context.state.isData)
+            {
+                context.state.isData = true;
+            }
+            chunk.dataNode = .{ .imageData = .{} };
         },
         .Transparency =>
         {
@@ -1294,7 +1314,7 @@ fn readNullTerminatedText(
 }
 
 fn readZlibData(
-    context: *const Context,
+    context: anytype,
     state: *zlib.State,
     output: *std.ArrayListUnmanaged(u8)) !bool
 {
@@ -1453,7 +1473,46 @@ fn parseChunkData(context: *const Context) !bool
         },
         .ImageData =>
         {
-            return try skipBytes(context, chunk);
+            const imageData = &context.state.imageData;
+            const bytesRead = &chunk.dataNode.imageData.bytesRead;
+            const bytesLeftToRead = chunk.node.byteLength - bytesRead.*;
+
+            var sequence = context.sequence.*;
+            const newLen = @min(sequence.len(), bytesLeftToRead);
+            sequence = sequence.sliceToExclusive(sequence.getPosition(newLen));
+
+            defer
+            {
+                const lenChange = newLen - sequence.len();
+                bytesRead.* += @intCast(lenChange);
+
+                context.sequence.* = context.sequence.sliceFrom(sequence.start());
+            }
+
+            const readContext = .{
+                .allocator = context.allocator,
+                .sequence = &sequence,
+            };
+
+            // This is actually a bit wrong, because the datastream can wrap at any point,
+            // we have to handle chunk boundaries with a second level of wrapping.
+            // Might have to hijack the pipeline abstractions.
+            _ = readZlibData(readContext, &imageData.zlib, &imageData.bytes)
+                catch |err|
+                {
+                    if (err != error.NotEnoughBytes)
+                    {
+                        return err;
+                    }
+
+                    if (newLen == bytesLeftToRead and sequence.len() == 0)
+                    {
+                        return true;
+                    }
+
+                    return error.NotEnoughBytes;
+                };
+            return sequence.len() == 0;
         },
         .Transparency =>
         {

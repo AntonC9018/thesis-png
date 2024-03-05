@@ -64,7 +64,7 @@ pub fn peekNBits(context: PeekNBitsContext) !PeekNBitsResult(u32)
     }
 
     var bitOffset = context.bitOffset();
-    var bitsRead: u5 = 0;
+    var bitsRead: u6 = 0;
     var result: ResultType = 0;
 
     var iterator = pipelines.SegmentIterator.create(context.sequence()).?;
@@ -89,20 +89,31 @@ pub fn peekNBits(context: PeekNBitsContext) !PeekNBitsResult(u32)
                 const c = context.bitsCount - bitsRead - 1;
                 for (0 .. bitCountWillRead) |i|
                 {
+
                     const bit = (readBitsAsResultType >> @intCast(i)) & 1;
-                    result |= bit << @intCast(c + i);
+                    result |= bit << @intCast(c - i);
                 }
             }
             else
             {
-                result |= readBitsAsResultType << bitsRead;
+                result |= readBitsAsResultType << @intCast(bitsRead);
             }
 
             bitsRead += bitCountWillRead;
 
             if (bitsRead == context.bitsCount)
             {
-                break :newStart iterator.currentPosition.add(@intCast(byteIndex + 1));
+                const byteOffset = byteOffset:
+                {
+                    var r = byteIndex;
+                    const readLastByteFully = bitOffset == 0;
+                    if (readLastByteFully)
+                    {
+                        r += 1;
+                    }
+                    break :byteOffset r;
+                };
+                break :newStart iterator.currentPosition.add(@intCast(byteOffset));
             }
         }
 
@@ -117,6 +128,188 @@ pub fn peekNBits(context: PeekNBitsContext) !PeekNBitsResult(u32)
             .nextSequenceStart = newPosition,
         },
     };
+}
+
+const BitsTestContext = struct
+{
+    allocator: std.mem.Allocator,
+    buffer: pipelines.Buffer,
+    sequence: pipelines.Sequence = undefined,
+    state: @import("deflate.zig").State = .{},
+    common: CommonContext = undefined,
+
+    pub fn reset(self: *BitsTestContext) void
+    {
+        self.sequence = pipelines.Sequence.create(&self.buffer);
+        self.state.bitOffset = 0;
+    }
+
+    pub fn init(self: *BitsTestContext) void
+    {
+        self.common = .{
+            .sequence = &self.sequence,
+            .allocator = self.allocator,
+            .output = undefined,
+        };
+        self.sequence = pipelines.Sequence.create(&self.buffer);
+    }
+
+    pub fn context(self: *BitsTestContext) DeflateContext
+    {
+        return .{
+            .common = &self.common,
+            .state = &self.state,
+        };
+    }
+};
+
+fn createTestContext() !BitsTestContext
+{
+    const allocator = std.heap.page_allocator;
+    const buffer = try pipelines.createTestBufferFromData(&.{"\x01\x23\x45", "\x67\x89"}, allocator); 
+    const result = BitsTestContext
+    {
+        .allocator = allocator,
+        .buffer = buffer,
+    };
+    return result;
+}
+
+const expectEqual = std.testing.expectEqual;
+
+test "ApplyHelper works"
+{
+    var testContext = try createTestContext();
+    testContext.init();
+
+    const newStart = testContext.sequence.getPosition(4);
+    const newOffset = 3;
+    const helper = PeekApplyHelper
+    {
+        .nextBitOffset = newOffset,
+        .nextSequenceStart = newStart,
+    };
+    helper.apply(&testContext.context());
+
+    const start = testContext.sequence.start();
+    try expectEqual(newStart.offset, start.offset);
+    try expectEqual(newStart.segment, start.segment);
+    try expectEqual(newOffset, testContext.state.bitOffset);
+
+}
+
+test "Peek bits test"
+{
+    var testContext = try createTestContext();
+    testContext.init();
+
+    const context = &testContext.context();
+
+    {
+        const r = try peekNBits(.{
+            .bitsCount = 4,
+            .context = context,
+        });
+
+        try expectEqual(1, r.bits);
+        // Advance bit count by 4.
+        // Now reading the 0.
+        r.apply(context);
+
+        try expectEqual(0, testContext.sequence.start().offset);
+        try expectEqual(0, testContext.sequence.start().segment);
+        try expectEqual(4, testContext.state.bitOffset);
+    }
+
+    // Check wrapping.
+    {
+        const r = try peekNBits(.{
+            .bitsCount = 8,
+            .context = context,
+        });
+
+        try expectEqual(0x30, r.bits);
+
+        // Move on to the 2.
+        r.apply(context);
+    }
+
+    // Num bits > 8
+    {
+        const r = try peekNBits(.{
+            .bitsCount = 13,
+            .context = context,
+        });
+
+        // 2, 4, 5, lower 1 bits of 7
+        // 7 = 0111
+        try expectEqual(0x1_45_2, r.bits);
+
+        r.apply(context);
+    }
+
+    testContext.reset();
+
+    // Test the limit: reading 32 bytes.
+    {
+        const r = try peekNBits(.{
+            .bitsCount = 32,
+            .context = context,
+        });
+
+        try expectEqual(0x67_45_23_01, r.bits);
+        r.apply(context);
+    }
+
+    // Reading just a single bit
+    // 9 = 1001 --> 100  1
+    {
+        const r = try peekNBits(.{
+            .bitsCount = 1,
+            .context = context,
+        });
+        try expectEqual(1, r.bits);
+        r.apply(context);
+    }
+
+    // Reading one bit at an odd position
+    // 100 --> 10  0
+    {
+        const r = try peekNBits(.{
+            .bitsCount = 1,
+            .context = context,
+        });
+        try expectEqual(0, r.bits);
+    }
+
+    // Reading one bit at last offset should roll back to 0.
+    testContext.state.bitOffset = 7;
+    {
+        const r = try peekNBits(.{
+            .bitsCount = 1,
+            .context = context,
+        });
+        // 8 -> 1000, reading the MSB
+        try expectEqual(1, r.bits);
+        try expectEqual(0, r.applyHelper.nextBitOffset);
+    }
+
+    testContext.reset();
+
+    // In reverse mode, *the bits* are written backwards.
+    {
+        const r = try peekNBits(.{
+            .bitsCount = 16,
+            .context = context,
+            .reverse = true,
+        });
+
+        // 0001 0000 0011 0010   Right-To-Left (bits), Left-To-Right (per number)
+        // 1    0    3    2
+        // 1000 0000 1100 0100   Left-To-Right (bits), Left-To-Right (per number)
+        // 8    0    C    4
+        try expectEqual(0x80C4, r.bits);
+    }
 }
 
 pub fn peekBits(context: *const DeflateContext, ResultType: type)
