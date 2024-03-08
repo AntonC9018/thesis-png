@@ -740,7 +740,7 @@ pub fn parseTopLevelNode(context: *const Context) !bool
             const outputStream = std.io.getStdOut().writer();
             try printStepName(outputStream, context.state);
             const offset = context.sequence.getStartOffset();
-            try outputStream.print("Offset: {x}", .{offset});
+            try outputStream.print("Offset: {x}", .{ offset });
 
             {
                 const z = &context.state.imageData.zlib;
@@ -764,7 +764,7 @@ pub fn parseTopLevelNode(context: *const Context) !bool
                         switch (byte)
                         {
                             // ' ' ... '~' => try outputStream.print("{c} ", .{ byte }),
-                            else => try outputStream.print("{x:02} ", .{ byte }),
+                            else => try outputStream.print("{X:0<2} ", .{ byte }),
                         }
                     }
 
