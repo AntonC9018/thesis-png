@@ -74,28 +74,24 @@ pub fn deflate(context: *const Context) !bool
     {
         .IsFinal =>
         {
-            const isFinal = try helper.readBits(context, u1);
+            const isFinal = try helper.readBits(.{ .context = context }, u1);
             state.isFinal = isFinal == 1;
             state.action = .BlockType;
         },
         .BlockType =>
         {
-            const blockType = try helper.readBits(context, u2);
+            const blockType = try helper.readBits(.{ .context = context }, u2);
             const typedBlockType: BlockType = @enumFromInt(blockType);
 
-            std.debug.print("Block type bits: {}\n", .{blockType});
-            std.debug.print("Block type value: {}\n", .{blockType});
+            std.debug.print("Block type value: {}\n", .{typedBlockType});
 
             switch (typedBlockType)
             {
                 .NoCompression =>
                 {
                     // The uncompressed info starts on a byte boundary.
-                    if (state.bitOffset != 0)
-                    {
-                        _ = pipelines.removeFirst(context.sequence()) catch unreachable;
-                        state.bitOffset = 0;
-                    }
+                    skipToWholeByte(context);
+
                     // It still needs to read some metadata though.
                     state.blockState = .{
                         .NoCompression = .{
@@ -106,6 +102,8 @@ pub fn deflate(context: *const Context) !bool
                 },
                 .FixedHuffman =>
                 {
+                    // skipToWholeByte(context);
+
                     state.blockState = .{
                         .FixedHuffman = fixed.SymbolDecompressionState.Initial,
                     };
@@ -194,6 +192,16 @@ pub fn deflate(context: *const Context) !bool
         .Done => unreachable,
     }
     return state.action == .Done;
+}
+
+pub fn skipToWholeByte(context: *const Context) void
+{
+    const state = context.state;
+    if (state.bitOffset != 0)
+    {
+        _ = pipelines.removeFirst(context.sequence()) catch unreachable;
+        state.bitOffset = 0;
+    }
 }
 
 test

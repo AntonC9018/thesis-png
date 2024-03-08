@@ -40,7 +40,7 @@ const Adler32State = struct
 
     pub fn updateWithSequence(self: Adler32State, sequence: *const pipelines.Sequence) void
     {
-        var iter = pipelines.SegmentIterator.create(sequence) orelse return;
+        var iter = sequence.iterate() orelse return;
         while (true)
         {
             self.update(iter.current());
@@ -57,10 +57,18 @@ const Adler32State = struct
     }
 };
 
+test "Adler32"
+{
+    const str = "1234567890qwertyuiop";
+    var adler: Adler32State = .{};
+    adler.update(str);
+    try std.testing.expectEqual(0x38090677, adler.getChecksum());
+}
+
 pub const State = struct
 {
     action: Action = .CompressionMethodAndFlags,
-    windowSize: u16 = 0,
+    windowSize: usize = 0,
     adler32: Adler32State = .{},
 
     decompressor: union
@@ -169,7 +177,7 @@ pub fn decode(context: *const Context) !bool
                 .Deflate =>
                 {
                     const logBase2OfWindowSize = cmf.compressionInfo;
-                    const windowSize = @as(u16, 1) << logBase2OfWindowSize;
+                    const windowSize = @as(usize, 1) << (logBase2OfWindowSize + 8);
                     context.state.windowSize = windowSize;
 
                     state.decompressor = .{
@@ -203,7 +211,7 @@ pub fn decode(context: *const Context) !bool
         .PresetDictionary =>
         {
             const value = try pipelines.readNetworkUnsigned(context.sequence(), u32);
-            state.data.dictionaryId = value;
+            state.data = .{ .dictionaryId = value };
             state.action = .CompressedData;
         },
         .CompressedData =>
@@ -228,6 +236,7 @@ pub fn decode(context: *const Context) !bool
             if (doneWithBlock and decompressor.isFinal)
             {
                 state.action = .Adler32Checksum;
+                deflate.skipToWholeByte(&deflateContext);
             }
             if (doneWithBlock)
             {
@@ -236,8 +245,11 @@ pub fn decode(context: *const Context) !bool
         },
         .Adler32Checksum =>
         {
+            std.debug.print("Decoded count: {}\n", .{context.output().buffer().len});
+
             const checksum = try pipelines.readNetworkUnsigned(context.sequence(), u32);
             state.checksum = checksum;
+            std.debug.print("Checksum expected: {x:0>16}, Computed: {x:0>16}\n", .{checksum, state.adler32.getChecksum()});
 
             const computedChecksum = state.adler32.getChecksum();
             if (checksum != computedChecksum)

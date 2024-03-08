@@ -50,6 +50,11 @@ pub const PeekNBitsContext = struct
 
 pub fn peekNBits(context: PeekNBitsContext) !PeekNBitsResult(u32)
 {
+    if (context.bitsCount == 0)
+    {
+        return error.ReadingNoBits;
+    }
+
     const ResultType = u32;
     const len = context.sequence().len();
     if (len == 0)
@@ -73,11 +78,18 @@ pub fn peekNBits(context: PeekNBitsContext) !PeekNBitsResult(u32)
         const slice = iterator.current();
         for (0 .., slice) |byteIndex, byte|
         {
+            std.debug.assert(bitsRead < context.bitsCount);
+
             const availableByteBitCount: u4 = @intCast(@as(u8, 8) - @as(u8, bitOffset));
             const byteBits = byte >> bitOffset;
+            std.debug.assert(availableByteBitCount > 0);
 
             const bitCountLeftToRead = context.bitsCount - bitsRead;
+            std.debug.assert(bitCountLeftToRead > 0);
+
             const bitCountWillRead = @min(bitCountLeftToRead, availableByteBitCount);
+            std.debug.assert(bitCountWillRead > 0);
+
             bitOffset = @intCast((@as(u8, bitOffset) + @as(u8, bitCountWillRead)) % 8);
             
             const willReadMask = @as(u8, 0xFF) >> @intCast(@as(u8, 8) - @as(u8, bitCountWillRead));
@@ -312,7 +324,13 @@ test "Peek bits test"
     }
 }
 
-pub fn peekBits(context: *const DeflateContext, ResultType: type)
+pub const PeekBitsContext = struct
+{
+    context: *const DeflateContext,
+    reverse: bool = false,
+};
+
+pub fn peekBits(context: PeekBitsContext, ResultType: type)
     !PeekNBitsResult(ResultType)
 {
     const bitsCount = comptime b:
@@ -325,8 +343,9 @@ pub fn peekBits(context: *const DeflateContext, ResultType: type)
     std.debug.assert(bitsCount <= 32 and bitsCount > 0);
 
     const result = try peekNBits(.{
-        .context = context,
+        .context = context.context,
         .bitsCount = bitsCount,
+        .reverse = context.reverse,
     });
 
     return .{
@@ -335,15 +354,16 @@ pub fn peekBits(context: *const DeflateContext, ResultType: type)
     };
 }
 
-pub fn readBits(context: *const DeflateContext, ResultType: type) !ResultType
+pub fn readBits(context: PeekBitsContext, ResultType: type) !ResultType
 {
     const r = try peekBits(context, ResultType);
-    r.apply(context);
+    r.apply(context.context);
     return r.bits;
 }
 
 pub fn readNBits(context: *const DeflateContext, bitsCount: u6) !u32
 {
+    std.debug.assert(bitsCount > 0);
     const r = try peekNBits(.{
         .context = context,
         .bitsCount = bitsCount,
@@ -448,7 +468,7 @@ pub const OutputBuffer = struct
 {
     array: *std.ArrayListUnmanaged(u8),
     allocator: std.mem.Allocator,
-    windowSize: *const u16,
+    windowSize: *const usize,
 
     pub fn position(self: *const OutputBuffer) usize
     {
@@ -477,6 +497,8 @@ pub const OutputBuffer = struct
 
     pub fn copyFromSelf(self: *OutputBuffer, backRef: BackReference) !void
     {
+        std.debug.print("Buffer len: {}, distance: {}, windowSize: {}\n", .{self.buffer().len, backRef.distance, self.windowSize.*});
+
         if (self.buffer().len < backRef.distance)
         {
             return error.BackReferenceDistanceTooLarge;
@@ -509,9 +531,9 @@ pub const BackReference = struct
 
 pub const Symbol = union(enum)
 {
-    endBlock: void,
-    literalValue: u8,
-    backReference: BackReference,
+    EndBlock: void,
+    LiteralValue: u8,
+    BackReference: BackReference,
 };
 
 pub fn writeSymbolToOutput(context: *const DeflateContext, symbol: ?Symbol) !bool
@@ -532,15 +554,15 @@ fn writeSymbolToOutput_switch(context: *const DeflateContext, symbol: Symbol) !b
 {
     switch (symbol)
     {
-        .endBlock =>
+        .EndBlock =>
         {
             return true;
         },
-        .literalValue => |literal|
+        .LiteralValue => |literal|
         {
             try context.output().writeByte(literal);
         },
-        .backReference => |backReference|
+        .BackReference => |backReference|
         {
             try context.output().copyFromSelf(backReference);
         },

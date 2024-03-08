@@ -124,21 +124,21 @@ pub fn decodeCodes(
         // Code like this kills me.
         .LiteralOrLenCodeCount =>
         {
-            const count = try helper.readBits(context, u5);
+            const count = try helper.readBits(.{ .context = context }, u5);
             state.literalOrLenCodeCount = count;
             state.action = .DistanceCodeCount;
             return false;
         },
         .DistanceCodeCount =>
         {
-            const count = try helper.readBits(context, u5);
+            const count = try helper.readBits(.{ .context = context }, u5);
             state.distanceCodeCount = count;
             state.action = .CodeLenCount;
             return false;
         },
         .CodeLenCount =>
         {
-            const count = try helper.readBits(context, u4);
+            const count = try helper.readBits(.{ .context = context }, u4);
             state.codeLenCodeCount = count;
             state.action = .CodeLens;
 
@@ -343,11 +343,11 @@ pub fn decompressSymbol(
                 // TODO: Share these constants with the fixed module.
                 0 ... 255 =>
                 {
-                    return .{ .literalValue = @intCast(value) };
+                    return .{ .LiteralValue = @intCast(value) };
                 },
                 256 =>
                 {
-                    return .{ .endBlock = { } };
+                    return .{ .EndBlock = { } };
                 },
                 257 ... 285 =>
                 {
@@ -366,7 +366,7 @@ pub fn decompressSymbol(
             state.action = .LiteralOrLen;
 
             return .{
-                .backReference = .{
+                .BackReference = .{
                     .distance = distance,
                     .len = state.len,
                 }

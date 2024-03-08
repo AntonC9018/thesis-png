@@ -1,4 +1,5 @@
 const helper = @import("helper.zig");
+const std = helper.std;
 
 pub const SymbolDecompressionState = union(enum)
 {
@@ -39,6 +40,22 @@ fn getLengthBitCount(code: u8) u6
     };
 }
 
+
+fn testLengthBitCount(expected: u6, code: u16) !void
+{
+    const expect = std.testing.expectEqual;
+    try expect(expected, getLengthBitCount(adjustStart(code)));
+}
+
+test
+{
+    try testLengthBitCount(0, 257);
+    try testLengthBitCount(1, 267);
+    try testLengthBitCount(4, 280);
+    try testLengthBitCount(5, 281);
+    try testLengthBitCount(5, 282);
+}
+
 const baseLengthLookup = l:
 {
     const count = 285 - lengthCodeStart;
@@ -48,14 +65,21 @@ const baseLengthLookup = l:
         result[i] = i;
     }
 
+    var a = 8;
     for (8 .. count) |i|
     {
+        result[i] = a;
         const bitCount = getLengthBitCount(i);
         const representableNumberCount = 1 << bitCount;
-        result[i] = result[i - 1] + representableNumberCount;
+        a += representableNumberCount;
     }
 
-    result[count] = 0;
+    result[count] = 255;
+
+    // for (0 .., result) |i, v|
+    // {
+    //     @compileLog(lengthCodeStart + i, @as(u32, v) + 3);
+    // }
 
     break :l result;
 };
@@ -63,6 +87,22 @@ const baseLengthLookup = l:
 fn getBaseLength(code: u8) u8
 {
     return baseLengthLookup[code];
+}
+
+fn testBaseLength(expected: u16, code: u16) !void
+{
+    const expect = std.testing.expectEqual;
+    try expect(expected, @as(u16, getBaseLength(adjustStart(code))) + 3);
+}
+
+test "Base length"
+{
+    try testBaseLength(3, 257);
+    try testBaseLength(11, 265);
+    try testBaseLength(19, 269);
+    try testBaseLength(23, 270);
+    try testBaseLength(227, 284);
+    try testBaseLength(258, 285);
 }
 
 fn getDistanceBitCount(distanceCode: u5) u6
@@ -82,11 +122,13 @@ const baseDistanceLookup = l:
     {
         result[i] = i;
     }
+    var a = 2;
     for (2 .. count) |i|
     {
+        result[i] = a;
         const bitCount = getDistanceBitCount(i);
         const representableNumberCount = 1 << bitCount;
-        result[i] = result[i - 1] + representableNumberCount;
+        a += representableNumberCount;
     }
     break :l result;
 };
@@ -94,6 +136,21 @@ const baseDistanceLookup = l:
 fn getBaseDistance(distanceCode: u5) u16
 {
     return baseDistanceLookup[distanceCode];
+}
+
+fn testBaseDistance(expected: u16, code: u5) !void
+{
+    const expect = std.testing.expectEqual;
+    try expect(expected, getBaseDistance(code) + 1);
+}
+
+test "Base distance"
+{
+    try testBaseDistance(1, 0);
+    try testBaseDistance(5, 4);
+    try testBaseDistance(33, 10);
+    try testBaseDistance(1025, 20);
+    try testBaseDistance(24577, 29);
 }
 
 pub fn decompressSymbol(
@@ -110,15 +167,21 @@ pub fn decompressSymbol(
 
     const literalLowerLimit2 = 0b1_1001_0000;
 
+    const readCodeBitsContext = helper.PeekBitsContext
+    {
+        .context = context,
+        .reverse = true,
+    };
+
     switch (state.*)
     {
         .Code7 =>
         {
-            const code = try helper.peekBits(context, u7);
+            const code = try helper.peekBits(readCodeBitsContext, u7);
             if (code.bits == 0)
             {
                 code.apply(context);
-                return .{ .endBlock = {} };
+                return .{ .EndBlock = {} };
             }
 
             if (code.bits <= lengthCodeUpperLimit)
@@ -136,7 +199,7 @@ pub fn decompressSymbol(
         },
         .Code8 =>
         {
-            const code = try helper.peekBits(context, u8);
+            const code = try helper.peekBits(readCodeBitsContext, u8);
 
             if (code.bits >= literalLowerLimit and code.bits <= literalUpperLimit)
             {
@@ -144,7 +207,7 @@ pub fn decompressSymbol(
 
                 const value = code.bits - literalLowerLimit;
                 state.* = SymbolDecompressionState.Initial;
-                return .{ .literalValue = value };
+                return .{ .LiteralValue = value };
             }
 
             if (code.bits >= lengthLowerLimit2 and code.bits <= lengthUpperLimit2)
@@ -157,7 +220,7 @@ pub fn decompressSymbol(
                         .codeRemapped = codeRemapped,
                     }
                 };
-                if (codeRemapped >= (286 - lengthCodeStart))
+                if (codeRemapped >= adjustStart(286))
                 {
                     return error.LengthCodeTooLarge;
                 }
@@ -169,13 +232,13 @@ pub fn decompressSymbol(
         },
         .Code9 =>
         {
-            const code = try helper.readBits(context, u9);
+            const code = try helper.readBits(readCodeBitsContext, u9);
             if (code >= literalLowerLimit2)
             {
-                const literalOffset2 = literalUpperLimit - literalLowerLimit;
+                const literalOffset2 = 144;
                 const value = code - literalLowerLimit2 + literalOffset2;
                 state.* = SymbolDecompressionState.Initial;
-                return .{ .literalValue = @intCast(value) };
+                return .{ .LiteralValue = @intCast(value) };
             }
 
             state.* = .{ .Code9Value = code };
@@ -184,7 +247,11 @@ pub fn decompressSymbol(
         .Length => |l|
         {
             const lengthBitCount = getLengthBitCount(l.codeRemapped);
-            const extraBits = try helper.readNBits(context, lengthBitCount);
+            const extraBits = if (lengthBitCount == 0)
+                    0
+                else
+                    try helper.readNBits(context, lengthBitCount);
+
             const baseLength = getBaseLength(l.codeRemapped);
             const len = baseLength + extraBits;
             state.* = .{ 
@@ -195,7 +262,7 @@ pub fn decompressSymbol(
         },
         .DistanceCode => |d|
         {
-            const distanceCode = try helper.readBits(context, u5);
+            const distanceCode = try helper.readBits(readCodeBitsContext, u5);
             state.* = .{
                 .Distance = .{
                     .len = d.len,
@@ -211,13 +278,20 @@ pub fn decompressSymbol(
         .Distance => |d|
         {
             const distanceBitCount = getDistanceBitCount(d.distanceCode);
-            const extraBits = try helper.readNBits(context, distanceBitCount);
+            const extraBits = if (distanceBitCount == 0)
+                    0
+                else
+                    try helper.readNBits(context, distanceBitCount);
+
             const baseDistance = getBaseDistance(d.distanceCode);
+            std.debug.print("Distance code: {}\n", .{d.distanceCode});
+            std.debug.print("Extra bits: {}\n", .{extraBits});
+            std.debug.print("Base distance: {}\n", .{baseDistance});
             const distance = baseDistance + extraBits;
 
             state.* = SymbolDecompressionState.Initial;
             return .{
-                .backReference = .{
+                .BackReference = .{
                     .distance = @intCast(distance + 1),
                     .len = @as(u16, d.len) + 3,
                 },

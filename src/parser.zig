@@ -661,6 +661,11 @@ pub fn printStepName(writer: anytype, parserState: *const State) !void
                                 chunk.dataNode.plte.rgb,
                             });
                         },
+                        .ImageData =>
+                        {
+                            const z = &parserState.imageData.zlib;
+                            try printZlibState(z, writer);
+                        },
                         else => |x| try writer.print("{any}", .{ x }),
                         // _ => try writer.print("?", .{}),
                     }
@@ -672,6 +677,53 @@ pub fn printStepName(writer: anytype, parserState: *const State) !void
         .StartChunk => try writer.print("Chunk", .{}),
     }
     try writer.print("\n", .{});
+}
+
+fn printZlibState(z: *const zlib.State, writer: anytype) !void
+{
+    switch (z.action)
+    {
+        .CompressedData =>
+        {
+            const deflate = &z.decompressor.deflate;
+            try writer.print("CompressedData {} ", .{ deflate.action });
+            switch (deflate.action)
+            {
+                else => {},
+                .BlockInit =>
+                {
+                    switch (deflate.blockState)
+                    {
+                        .DynamicHuffman => |dyn|
+                        {
+                            try writer.print("{any}", .{ dyn.codeDecoding });
+                        },
+                        else => {},
+                    }
+                },
+                .DecompressionLoop =>
+                {
+                    switch (deflate.blockState)
+                    {
+                        .DynamicHuffman => |dyn|
+                        {
+                            try writer.print("dynamic {any}", .{ dyn.decompression });
+                        },
+                        .FixedHuffman => |fixed|
+                        {
+                            try writer.print("fixed: {any}", .{ fixed });
+                            if (deflate.lastSymbol) |ls|
+                            {
+                                try writer.print("\nlast symbol: {any}", .{ ls });
+                            }
+                        },
+                        else => try writer.print("{}", .{ deflate.blockState }),
+                    }
+                }
+            }
+        },
+        else => |x| try writer.print("{}", .{ x }),
+    }
 }
 
 pub fn getKnownDataChunkType(chunkType: ChunkType) KnownDataChunkType
@@ -688,7 +740,42 @@ pub fn parseTopLevelNode(context: *const Context) !bool
             const outputStream = std.io.getStdOut().writer();
             try printStepName(outputStream, context.state);
             const offset = context.sequence.getStartOffset();
-            try outputStream.print("Offset: {x}\n", .{offset});
+            try outputStream.print("Offset: {x}", .{offset});
+
+            {
+                const z = &context.state.imageData.zlib;
+                if (z.action == .CompressedData)
+                {
+                    try outputStream.print(", Data bit offset: {d}", .{z.decompressor.deflate.bitOffset});
+                }
+            }
+            try outputStream.print("\n", .{});
+
+            const maxBytesToPrint = 10;
+            const numBytesWillPrint = @min(context.sequence.len(), maxBytesToPrint);
+            const s = context.sequence.sliceToExclusive(context.sequence.getPosition(numBytesWillPrint));
+            if (s.len() > 0)
+            {
+                var iter = s.iterate().?;
+                while (true)
+                {
+                    for (iter.current()) |byte|
+                    {
+                        switch (byte)
+                        {
+                            // ' ' ... '~' => try outputStream.print("{c} ", .{ byte }),
+                            else => try outputStream.print("{x:02} ", .{ byte }),
+                        }
+                    }
+
+                    if (!iter.advance())
+                    {
+                        break;
+                    }
+                }
+                try outputStream.print("\n", .{});
+            }
+            try outputStream.print("\n", .{});
         }
 
         const isDone = try parseNextNode(context);
