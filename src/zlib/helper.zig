@@ -145,7 +145,7 @@ pub fn peekNBits(context: PeekNBitsContext) !PeekNBitsResult(u32)
 const BitsTestContext = struct
 {
     allocator: std.mem.Allocator,
-    buffer: pipelines.Buffer,
+    buffer: pipelines.BufferManager,
     sequence: pipelines.Sequence = undefined,
     state: @import("deflate.zig").State = .{},
     common: CommonContext = undefined,
@@ -229,7 +229,6 @@ test "Peek bits test"
         r.apply(context);
 
         try expectEqual(0, testContext.sequence.start().offset);
-        try expectEqual(0, testContext.sequence.start().segment);
         try expectEqual(4, testContext.state.bitOffset);
     }
 

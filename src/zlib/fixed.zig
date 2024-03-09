@@ -243,7 +243,7 @@ pub fn decompressSymbol(
 
             state.* = .{ .Code9Value = code };
             return error.DisallowedDeflateCodeValue;
-        },
+       },
         .Length => |l|
         {
             const lengthBitCount = getLengthBitCount(l.codeRemapped);
