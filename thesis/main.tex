@@ -626,6 +626,11 @@ De fapt, așa idee se folosește și în biblioteca \texttt{System.IO.Pipelines}
 însă la implementarea inițială nu era clar de ce ar fi necesară această abordare.
 După ce s-a întâlnit problema care se rezolvă folosind această idee, s-a clarificat și sensul ei.
 
+% The nodes will probably have to store the data separately from the locations.
+% So the node will be location + pointer to data so that we can make multiple nodes
+% with different locations be looking at the same data.
+% At least for the zlib nodes from the image data chunk.
+
 % Probabil, am să schimb implementarea atunci când încep cu arborele.
 
 \chapterConclusionSection{implementation_chater_title}
