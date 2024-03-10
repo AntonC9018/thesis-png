@@ -1,18 +1,19 @@
 const std = @import("std");
 const pipelines = @import("pipelines.zig");
+const zlib = @import("zlib/zlib.zig");
 
 // What is the next expected type?
-pub const ParserAction = enum(u8) 
+pub const Action = enum(u8) 
 {
     Signature = 0,
     StartChunk,
     Chunk,
 };
 
-pub const ParserState = struct
+pub const State = struct
 {
-    chunk: ChunkParserState,
-    action: ParserAction = .Signature,
+    chunk: ChunkState,
+    action: Action = .Signature,
 
     imageHeader: ?IHDR = null,
     // True after the IEND chunk has been parsed.
@@ -20,27 +21,29 @@ pub const ParserState = struct
     // True after the first IDAT chunk data start being parsed.
     isData: bool = false,
     paletteLength: ?u32 = null,
+
+    imageData: ImageData = .{},
 };
 
-pub fn isParserStateTerminal(state: *const ParserState) bool 
+pub fn isParserStateTerminal(state: *const State) bool 
 {
     return state.action == .StartChunk;
 }
 
-pub const ParserSettings = struct
+pub const Settings = struct
 {
     logChunkStart: bool,
 };
 
-pub const ParserContext = struct
+pub const Context = struct
 {
-    state: *ParserState,
+    state: *State,
     sequence: *pipelines.Sequence,
     allocator: std.mem.Allocator,
-    settings: *const ParserSettings,
+    settings: *const Settings,
 };
 
-pub const ChunkParserStateKey = enum 
+pub const ChunkAction = enum 
 {
     // Length of the data field.
     Length,
@@ -85,7 +88,64 @@ pub const ChunkDataNode = struct
         gamma: Gamma,
         primaryChroms: PrimaryChroms,
         renderingIntent: RenderingIntent,
+        iccProfile: ICCProfile,
+        text: TextData,
     },
+};
+
+pub const CarryOverSegment = struct
+{
+    array: std.ArrayListUnmanaged(u8) = .{},
+    bytePosition: usize = 0,
+    offset: u32 = 0,
+
+    pub fn len(self: *const CarryOverSegment) u32
+    {
+        return @intCast(self.array.items.len - self.offset);
+    }
+
+    pub fn segment(self: *const CarryOverSegment, next: *pipelines.Segment) pipelines.Segment
+    {
+        return .{
+            .data = .{
+                .items = self.array.items,
+                .capacity = self.array.capacity,
+                .bytePosition = self.bytePosition,
+            },
+            .nextSegment = next,
+        };
+    }
+
+    pub fn isActive(self: *const CarryOverSegment) bool
+    {
+        return self.array.items.len > 0;
+    }
+
+    pub fn setInactive(self: *CarryOverSegment) void
+    {
+        self.array.clearRetainingCapacity();
+    }
+};
+
+// Of course, this will need to be reworked once I do the tree range optimizations
+pub const ImageData = struct
+{
+    // Just read the raw bytes for now
+    bytes: std.ArrayListUnmanaged(u8) = .{},
+    zlib: zlib.State = .{},
+    carryOverData: CarryOverSegment = .{},
+};
+
+pub const TextData = struct
+{
+    keyword: std.ArrayListUnmanaged(u8) = .{},
+    text: std.ArrayListUnmanaged(u8) = .{},
+};
+
+pub const ICCProfile = struct
+{
+    name: std.ArrayListUnmanaged(u8) = .{},
+    decompressedProfile: std.ArrayListUnmanaged(u8) = .{},
 };
 
 pub const IHDR = struct
@@ -371,9 +431,9 @@ pub const TopLevelNode = union(enum)
     }
 };
 
-pub const ChunkParserState = struct
+pub const ChunkState = struct
 {
-    key: ChunkParserStateKey = .Length,
+    key: ChunkAction = .Length,
     node: ChunkNode,
     dataNode: DataNodeParserState,
 };
@@ -386,6 +446,57 @@ pub const DataNodeParserState = union
     none: void,
     transparency: TransparencyState,
     primaryChrom: PrimaryChromState,
+    iccProfile: ICCProfileState,
+    text: TextState,
+    compressedText: CompressedTextState,
+    imageData: ImageDataState,
+};
+
+pub const ImageDataState = struct
+{
+    // TODO: Unite this logic, making the sequence automatically cut.
+    bytesRead: u32 = 0,
+};
+
+pub const CompressedTextAction = enum
+{
+    Keyword,
+    CompressionMethod,
+    Text,
+};
+
+pub const CompressedTextState = struct
+{
+    bytesRead: u32 = 0,
+    action: CompressedTextAction = .Keyword,
+    zlib: zlib.State,
+};
+
+pub const TextAction = enum
+{
+    Keyword,
+    Text,
+};
+
+pub const TextState = struct
+{
+    bytesRead: u32 = 0,
+    action: TextAction = .Keyword,
+    text: std.ArrayListUnmanaged(u8) = .{},
+};
+
+pub const ICCProfileAction = enum
+{
+    ProfileName,
+    CompressionMethod,
+    CompressedData,
+};
+
+pub const ICCProfileState = struct
+{
+    action: ICCProfileAction = .ProfileName,
+    bytes: std.ArrayListUnmanaged(u8) = .{},
+    zlib: zlib.State,
 };
 
 pub const TransparencyState = union
@@ -418,7 +529,6 @@ pub const PrimaryChromState = struct
 
 pub const IHDRParserStateKey = enum(u32)
 {
-    const Initial = .Width;
     Width,
     Height,
     BitDepth,
@@ -427,6 +537,8 @@ pub const IHDRParserStateKey = enum(u32)
     FilterMethod,
     InterlaceMethod,
     Done,
+
+    pub const Initial = .Width;
 };
 
 pub const PLTEState = struct
@@ -539,7 +651,7 @@ pub const KnownDataChunkType = enum(u32)
     }
 };
 
-pub fn printStepName(writer: anytype, parserState: *const ParserState) !void
+pub fn printStepName(writer: anytype, parserState: *const State) !void
 {
     switch (parserState.action)
     {
@@ -584,6 +696,11 @@ pub fn printStepName(writer: anytype, parserState: *const ParserState) !void
                                 chunk.dataNode.plte.rgb,
                             });
                         },
+                        .ImageData =>
+                        {
+                            const z = &parserState.imageData.zlib;
+                            try printZlibState(z, writer);
+                        },
                         else => |x| try writer.print("{any}", .{ x }),
                         // _ => try writer.print("?", .{}),
                     }
@@ -597,12 +714,59 @@ pub fn printStepName(writer: anytype, parserState: *const ParserState) !void
     try writer.print("\n", .{});
 }
 
+fn printZlibState(z: *const zlib.State, writer: anytype) !void
+{
+    switch (z.action)
+    {
+        .CompressedData =>
+        {
+            const deflate = &z.decompressor.deflate;
+            try writer.print("CompressedData {} ", .{ deflate.action });
+            switch (deflate.action)
+            {
+                else => {},
+                .BlockInit =>
+                {
+                    switch (deflate.blockState)
+                    {
+                        .DynamicHuffman => |dyn|
+                        {
+                            try writer.print("{any}", .{ dyn.codeDecoding });
+                        },
+                        else => {},
+                    }
+                },
+                .DecompressionLoop =>
+                {
+                    switch (deflate.blockState)
+                    {
+                        .DynamicHuffman => |dyn|
+                        {
+                            try writer.print("dynamic {any}", .{ dyn.decompression });
+                        },
+                        .FixedHuffman => |fixed|
+                        {
+                            try writer.print("fixed: {any}", .{ fixed });
+                            if (deflate.lastSymbol) |ls|
+                            {
+                                try writer.print("\nlast symbol: {any}", .{ ls });
+                            }
+                        },
+                        else => try writer.print("{}", .{ deflate.blockState }),
+                    }
+                }
+            }
+        },
+        else => |x| try writer.print("{}", .{ x }),
+    }
+}
+
 pub fn getKnownDataChunkType(chunkType: ChunkType) KnownDataChunkType
 {
     return @enumFromInt(chunkType.value);
 }
 
-pub fn parseTopLevelNode(context: *ParserContext) !bool
+pub fn parseTopLevelNode(context: *const Context) !bool
 {
     while (true)
     {
@@ -610,8 +774,43 @@ pub fn parseTopLevelNode(context: *ParserContext) !bool
         {
             const outputStream = std.io.getStdOut().writer();
             try printStepName(outputStream, context.state);
-            const offset = context.sequence.getStartOffset();
-            try outputStream.print("Offset: {x}\n", .{offset});
+            const offset = context.sequence.getStartBytePosition();
+            try outputStream.print("Offset: {x}", .{ offset });
+
+            {
+                const z = &context.state.imageData.zlib;
+                if (z.action == .CompressedData)
+                {
+                    try outputStream.print(", Data bit offset: {d}", .{z.decompressor.deflate.bitOffset});
+                }
+            }
+            try outputStream.print("\n", .{});
+
+            const maxBytesToPrint = 10;
+            const numBytesWillPrint = @min(context.sequence.len(), maxBytesToPrint);
+            const s = context.sequence.sliceToExclusive(context.sequence.getPosition(numBytesWillPrint));
+            if (s.len() > 0)
+            {
+                var iter = s.iterate().?;
+                while (true)
+                {
+                    for (iter.current()) |byte|
+                    {
+                        switch (byte)
+                        {
+                            // ' ' ... '~' => try outputStream.print("{c} ", .{ byte }),
+                            else => try outputStream.print("{X:0<2} ", .{ byte }),
+                        }
+                    }
+
+                    if (!iter.advance())
+                    {
+                        break;
+                    }
+                }
+                try outputStream.print("\n", .{});
+            }
+            try outputStream.print("\n", .{});
         }
 
         const isDone = try parseNextNode(context);
@@ -622,7 +821,7 @@ pub fn parseTopLevelNode(context: *ParserContext) !bool
     }
 }
 
-pub fn parseNextNode(context: *ParserContext) !bool
+pub fn parseNextNode(context: *const Context) !bool
 {
     switch (context.state.action)
     {
@@ -639,7 +838,7 @@ pub fn parseNextNode(context: *ParserContext) !bool
             }
             else
             {
-                const offset = context.sequence.getStartOffset();
+                const offset = context.sequence.getStartBytePosition();
                 context.state.chunk = createChunkParserState(offset);
                 context.state.action = .Chunk;
             }
@@ -680,7 +879,7 @@ fn readPngU32Dimension(sequence: *pipelines.Sequence) !u32
     return value;
 }
 
-pub fn parseChunkItem(context: *ParserContext) !bool
+pub fn parseChunkItem(context: *const Context) !bool
 {
     var chunk = &context.state.chunk;
     switch (chunk.key)
@@ -715,7 +914,7 @@ pub fn parseChunkItem(context: *ParserContext) !bool
             chunk.key = .Data;
 
             chunk.node.dataNode.base = .{
-                .startPositionInFile = o.right.getStartOffset(),
+                .startPositionInFile = o.right.getStartBytePosition(),
                 .length = chunk.node.byteLength,
             };
 
@@ -742,7 +941,11 @@ pub fn parseChunkItem(context: *ParserContext) !bool
 }
 
 
-fn initChunkDataNode(context: *ParserContext, chunkType: ChunkType) !void
+// TODO:
+// Check if the size specified matches the expected size.
+// If the size of the chunk is dynamic, resize
+// the sequence appropriately and reinterpret error.NotEnoughBytes.
+fn initChunkDataNode(context: *const Context, chunkType: ChunkType) !void
 {
     const knownChunkType = getKnownDataChunkType(chunkType);
     if (context.state.imageHeader == null
@@ -761,13 +964,13 @@ fn initChunkDataNode(context: *ParserContext, chunkType: ChunkType) !void
     const chunk = &context.state.chunk;
     const h = struct
     {
-        fn skipChunkBytes(chunk_: *ChunkParserState) void
+        fn skipChunkBytes(chunk_: *ChunkState) void
         {
             chunk_.dataNode = .{ .bytesSkipped = 0 };
             chunk_.node.dataNode.data = .{ .none = {} };
         }
 
-        fn setTransparencyData(chunk_: *ChunkParserState, data: TransparencyData) void
+        fn setTransparencyData(chunk_: *ChunkState, data: TransparencyData) void
         {
             chunk_.node.dataNode.data = .{
                 .transparency = data,
@@ -822,8 +1025,11 @@ fn initChunkDataNode(context: *ParserContext, chunkType: ChunkType) !void
         },
         .ImageData =>
         {
-            context.state.isData = true;
-            h.skipChunkBytes(chunk);
+            if (!context.state.isData)
+            {
+                context.state.isData = true;
+            }
+            chunk.dataNode = .{ .imageData = .{} };
         },
         .Transparency =>
         {
@@ -895,11 +1101,40 @@ fn initChunkDataNode(context: *ParserContext, chunkType: ChunkType) !void
             chunk.dataNode = .{ .none = {} };
             chunk.node.dataNode.data = .{ .renderingIntent = std.mem.zeroes(RenderingIntent) };
         },
+        .ICCProfile =>
+        {
+            chunk.dataNode = .{
+                .iccProfile = .{
+                    .zlib = .{},
+                },
+            };
+            chunk.node.dataNode.data = .{ .iccProfile = .{} };
+        },
+        .Text =>
+        {
+            chunk.dataNode = .{
+                .text = .{},
+            };
+            chunk.node.dataNode.data = .{
+                .text = .{},
+            };
+        },
+        .CompressedText =>
+        {
+            chunk.dataNode = .{
+                .compressedText = .{
+                    .zlib = .{},
+                },
+            };
+            chunk.node.dataNode.data = .{
+                .text = .{},
+            };
+        },
         else => h.skipChunkBytes(chunk),
     }
 }
 
-fn skipBytes(context: *ParserContext, chunk: *ChunkParserState) !bool
+fn skipBytes(context: *const Context, chunk: *ChunkState) !bool
 {
     const bytesSkipped = &chunk.dataNode.bytesSkipped;
     const totalBytes = chunk.node.dataNode.base.length;
@@ -924,7 +1159,7 @@ fn skipBytes(context: *ParserContext, chunk: *ChunkParserState) !bool
 }
 
 fn removeAndProcessAsManyBytesAsAvailable(
-    context: *ParserContext,
+    context: *const Context,
     bytesRead: *u32,
     // Must have a function each that takes in the byte.
     // Can have an optional function init that takes the count.
@@ -984,7 +1219,7 @@ fn removeAndProcessAsManyBytesAsAvailable(
 
 const PlteBytesProcessor = struct
 {
-    context: *ParserContext,
+    context: *const Context,
     plteState: *PLTEState,
     plteNode: *PLTE,
 
@@ -1031,7 +1266,214 @@ const TransparencyBytesProcessor = struct
     }
 };
 
-fn parseChunkData(context: *ParserContext) !bool
+const TextBytesProcessor = struct
+{
+    text: *std.ArrayListUnmanaged(u8),
+    allocator: std.mem.Allocator,
+
+    pub fn initCount(self: *const TextBytesProcessor, count: u32) !void
+    {
+        try self.text.ensureTotalCapacity(self.allocator, count);
+    }
+
+    pub fn sequence(self: *const TextBytesProcessor, seq: pipelines.Sequence) !void
+    {
+        const len = seq.len();
+        const newItems = try self.text.addManyAsSlice(self.allocator, len);
+        seq.copyTo(newItems);
+    }
+};
+
+fn readNullTerminatedText(
+    context: *const Context,
+    output: *std.ArrayListUnmanaged(u8),
+    maxLenExcludingNull: usize) !void
+{
+    const sequence = context.sequence;
+
+    if (output.items.len == maxLenExcludingNull)
+    {
+        return;
+    }
+
+    var iter = sequence.iterate() orelse return error.NotEnoughBytes;
+
+    while (true)
+    {
+        const slice = iter.current();
+        const bytesLeftToRead = maxLenExcludingNull - output.items.len;
+        const maxBytesWillRead = @min(slice.len, bytesLeftToRead);
+
+        const nullBytePos = n:
+        {
+            // +1 because the null termination might be outside the bytes of the string.
+            for (0 .. maxBytesWillRead + 1) |i|
+            {
+                const byte = slice[i];
+                if (byte == 0)
+                {
+                    break :n i;
+                }
+            }
+            break :n null;
+        };
+
+        if (nullBytePos == null)
+        {
+            // Just this is fine by itself if the null byte is in the next segment.
+            if (maxBytesWillRead == bytesLeftToRead
+                and maxBytesWillRead < slice.len)
+            {
+                // TODO: Should we consume the bytes still in case of error?
+                return error.ExpectedNullByteAtEndOfString;
+            }
+
+            // We were only looking for the last null byte on this iteration,
+            // but didn't find it.
+            if (maxBytesWillRead == 0)
+            {
+                return error.ExpectedNullByteAtEndOfString;
+            }
+        }
+
+        const copyUntilPos = nullBytePos orelse maxBytesWillRead;
+        const sourceSlice = slice[0 .. copyUntilPos];
+
+        const containsConsecutiveOrLeadingSpaces = sp:
+        {
+            if (copyUntilPos == 0)
+            {
+                break :sp false;
+            }
+
+            if (output.items.len == 0)
+            {
+                if (slice[0] == ' ')
+                {
+                    break :sp true;
+                }
+            }
+            else
+            {
+                var isPreviousSpace = output.items[output.items.len - 1] == ' ';
+                for (sourceSlice) |byte|
+                {
+                    const isSpace = byte == ' ';
+                    if (isSpace and isPreviousSpace)
+                    {
+                        break :sp true;
+                    }
+                    isPreviousSpace = isSpace;
+                }
+            }
+
+            break :sp false;
+        };
+        const nonPrintableCharacterIndex = ch:
+        {
+            for (0 .., sourceSlice) |i, byte|
+            {
+                switch (byte)
+                {
+                    ' ' ... '~' => {},
+                    161 ... 255 => {},
+                    else => break :ch i,
+                }
+            }
+            break :ch null;
+        };
+
+        const anyError = containsConsecutiveOrLeadingSpaces or nonPrintableCharacterIndex != null;
+        if (anyError)
+        {
+            const offset = offset:
+            {
+                if (containsConsecutiveOrLeadingSpaces)
+                {
+                    break :offset 0;
+                }
+                if (nonPrintableCharacterIndex) |i|
+                {
+                    break :offset i;
+                }
+                unreachable;
+            };
+
+            const newStart = iter.getCurrentPosition().add(@intCast(offset));
+            sequence.* = sequence.sliceFrom(newStart);
+
+            if (containsConsecutiveOrLeadingSpaces)
+            {
+                return error.ContainsConsecutiveOrLeadingSpaces;
+            }
+            if (nonPrintableCharacterIndex != null)
+            {
+                return error.NonPrintableCharacter;
+            }
+        }
+
+        if (copyUntilPos > 0)
+        {
+            const destinationSlice = try output.addManyAsSlice(context.allocator, copyUntilPos);
+            @memcpy(destinationSlice, sourceSlice);
+        }
+
+        if (nullBytePos) |readUntilPos|
+        {
+            // We want to consume the null termination as well.
+            const newStart = iter.getCurrentPosition().add(@intCast(readUntilPos + 1));
+            // Update the sequence to this position.
+            sequence.* = sequence.sliceFrom(newStart);
+            return;
+        }
+
+        if (!iter.advance())
+        {
+            sequence.* = sequence.sliceFrom(sequence.end());
+            return error.NotEnoughBytes;
+        }
+    }
+}
+
+fn readZlibData(
+    context: anytype,
+    state: *zlib.State,
+    output: *std.ArrayListUnmanaged(u8)) !bool
+{
+    var outputBuffer = zlib.OutputBuffer
+    {
+        .allocator = context.allocator,
+        .array = output,
+        .windowSize = &state.windowSize,
+    };
+    const common = zlib.CommonContext
+    {
+        .allocator = context.allocator,
+        .output = &outputBuffer,
+        .sequence = context.sequence,
+    };
+    const zlibContext = zlib.Context
+    {
+        .common = &common,
+        .state = state,
+    };
+    const isDone = try zlib.decode(&zlibContext);
+    if (isDone)
+    {
+        return true;
+    }
+    return false;
+}
+
+fn readKeywordText(context: *const Context, keyword: *std.ArrayListUnmanaged(u8), bytesRead: *u32) !void
+{
+    const maxLen = 80;
+    try readNullTerminatedText(context, keyword, maxLen);
+    // TODO: This is kind of dumb. It should be kept track of at a higher level.
+    bytesRead.* = @intCast(keyword.items.len + 1);
+}
+
+fn parseChunkData(context: *const Context) !bool
 {
     const chunk = &context.state.chunk;
     const knownChunkType = getKnownDataChunkType(chunk.node.chunkType);
@@ -1153,7 +1595,121 @@ fn parseChunkData(context: *ParserContext) !bool
         },
         .ImageData =>
         {
-            return try skipBytes(context, chunk);
+            const imageData = &context.state.imageData;
+            const bytesRead = &chunk.dataNode.imageData.bytesRead;
+            const bytesLeftToRead = chunk.node.byteLength - bytesRead.*;
+
+            var sequence = context.sequence.*;
+            const newLen = @min(sequence.len(), bytesLeftToRead);
+            sequence = sequence.sliceToExclusive(sequence.getPosition(newLen));
+
+            const carryOverData = &imageData.carryOverData;
+            const usesCarryOverSegment = carryOverData.isActive();
+
+            // TODO: Think of a better solution to this hijacking, it's just dirty.
+            var carryOverFirstSegment: pipelines.Segment = undefined;
+            // Start segment with updated slice and byte positions.
+            var hijackedStartSegment: pipelines.Segment = undefined;
+            if (usesCarryOverSegment)
+            {
+                carryOverFirstSegment = carryOverData.segment(@constCast(sequence.start().segment));
+
+                const oldStart = sequence.start();
+                hijackedStartSegment = oldStart.segment.*;
+                hijackedStartSegment.data.bytePosition += oldStart.offset;
+                // This is the key hijacking thing that I kind of hate.
+                hijackedStartSegment.data.items = hijackedStartSegment.data.items[oldStart.offset ..];
+
+                sequence.range.start = .{
+                    .segment = &carryOverFirstSegment,
+                    .offset = carryOverData.offset,
+                };
+                sequence.range.len += carryOverData.len();
+            }
+
+            defer
+            {
+                const maybeNewStart: ?pipelines.SequencePosition = newStart:
+                {
+                    if (!usesCarryOverSegment)
+                    {
+                        break :newStart sequence.start();
+                    }
+
+                    const notFullyReadCarryOverSegment = sequence.start().segment == &carryOverFirstSegment;
+                    // Can only happen if we get an error, but we still have to update it.
+                    if (notFullyReadCarryOverSegment)
+                    {
+                        carryOverData.offset = sequence.start().offset;
+                        std.debug.assert(carryOverData.offset < carryOverFirstSegment.len());
+                        break :newStart null;
+                    }
+                    else
+                    {
+                        carryOverData.setInactive();
+                    }
+
+                    if (sequence.start().segment != &hijackedStartSegment)
+                    {
+                        break :newStart sequence.start();
+                    }
+
+                    var oldStart = context.sequence.start();
+                    // The offset on the hijacked segment is always zero, because it can't be the first.
+                    // This has been mitigated by slicing the items.
+                    // So the actual offset is the slice len difference + the new offset.
+                    const arrayWasShiftedBy = oldStart.segment.len() - hijackedStartSegment.len();
+                    oldStart.offset = sequence.start().offset + arrayWasShiftedBy;
+                    std.debug.assert(oldStart.offset < oldStart.segment.len());
+                    break :newStart oldStart;
+                };
+
+                if (maybeNewStart) |newStart|
+                {
+                    const lenChange = newLen - sequence.len();
+                    bytesRead.* += @intCast(lenChange);
+                    context.sequence.* = context.sequence.sliceFrom(newStart);
+                }
+            }
+
+            const readContext = .{
+                .allocator = context.allocator,
+                .sequence = &sequence,
+            };
+
+            _ = readZlibData(readContext, &imageData.zlib, &imageData.bytes)
+                catch |err|
+                {
+                    if (err != error.NotEnoughBytes)
+                    {
+                        return err;
+                    }
+
+                    const isLastLoopForChunk = newLen == bytesLeftToRead;
+                    if (isLastLoopForChunk)
+                    {
+                        // Not implemented yet.
+                        std.debug.assert(!usesCarryOverSegment);
+
+                        if (sequence.len() == 0)
+                        {
+                            return true;
+                        }
+
+                        // Go over the remaining bytes and save them to the carry-over segment.
+                        // Techincally, multiple separate carry-over segments are possible,
+                        // but I'll ignore that possibility for now.
+                        const carryOverBuffer = try carryOverData.array
+                            .addManyAsSlice(context.allocator, sequence.len());
+                        sequence.copyTo(carryOverBuffer);
+                        carryOverData.offset = 0;
+                        carryOverData.bytePosition = sequence.getStartBytePosition();
+                        return true;
+                    }
+
+                    return error.NotEnoughBytes;
+                };
+            return sequence.len() == 0;
         },
         .Transparency =>
         {
@@ -1222,15 +1778,103 @@ fn parseChunkData(context: *ParserContext) !bool
             }
             return true;
         },
+        .ICCProfile =>
+        {
+            const state = &chunk.dataNode.iccProfile;
+            const node = &dataNode.data.iccProfile;
+
+            switch (state.action)
+            {
+                .ProfileName =>
+                {
+                    const maxNameLen = 80;
+                    try readNullTerminatedText(context, &node.name, maxNameLen);
+                    state.action = .CompressionMethod;
+                    return false;
+                },
+                .CompressionMethod =>
+                {
+                    const compressionMethod = try pipelines.removeFirst(context.sequence);
+                    if (compressionMethod != 0)
+                    {
+                        return error.InvalidCompressionMethod;
+                    }
+                    state.action = .CompressedData;
+                    return false;
+                },
+                .CompressedData =>
+                {
+                    const isDone = try readZlibData(context, &state.zlib, &node.decompressedProfile);
+                    return isDone;
+                },
+            }
+        },
+        .Text =>
+        {
+            const state = &chunk.dataNode.text;
+            const node = &dataNode.data.text;
+            switch (state.action)
+            {
+                .Keyword =>
+                {
+                    try readKeywordText(context, &node.keyword, &state.bytesRead);
+                    state.action = .Text;
+                    return false;
+                },
+                .Text =>
+                {
+                    const bytesRead = &state.bytesRead;
+                    const functor = TextBytesProcessor
+                    {
+                        .text = &state.text,
+                        .allocator = context.allocator,
+                    };
+
+                    const done = try removeAndProcessAsManyBytesAsAvailable(context, bytesRead, functor);
+                    return done;
+                },
+            }
+        },
+        .CompressedText =>
+        {
+            const state = &chunk.dataNode.compressedText;
+            const node = &dataNode.data.text;
+            switch (state.action)
+            {
+                .Keyword =>
+                {
+                    try readKeywordText(context, &node.keyword, &state.bytesRead);
+                    state.action = .CompressionMethod;
+                    return false;
+                },
+                .CompressionMethod =>
+                {
+                    const value = try pipelines.removeFirst(context.sequence);
+                    // Maybe store it?
+                    if (value != 0)
+                    {
+                        return error.UnsupportedCompressionMethod;
+                    }
+                    state.action = .Text;
+                    return false;
+                },
+                .Text =>
+                {
+                    const isDone = try readZlibData(context, &state.zlib, &node.text);
+                    return isDone;
+                },
+            }
+
+        },
         // Let's just skip for now.
         else => return try skipBytes(context, chunk),
     }
 }
 
-pub fn createParserState() ParserState
+pub fn createParserState() State
 {
     return .{
-        .chunk = std.mem.zeroInit(ChunkParserState, .{
+        .chunk = std.mem.zeroInit(ChunkState, .{
             .dataNode = .{ .none = {} },
             .node = std.mem.zeroInit(ChunkNode, .{
                 .dataNode = std.mem.zeroInit(ChunkDataNode, .{
@@ -1241,9 +1885,9 @@ pub fn createParserState() ParserState
     };
 }
 
-fn createChunkParserState(startOffset: usize) ChunkParserState
+fn createChunkParserState(startOffset: usize) ChunkState
 {
-    return std.mem.zeroInit(ChunkParserState, .{
+    return std.mem.zeroInit(ChunkState, .{
         .node = std.mem.zeroInit(ChunkNode, .{
             .base = NodeBase
             {
