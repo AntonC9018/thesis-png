@@ -50,11 +50,16 @@ fn bytesEqual(a: anytype, b: @TypeOf(a)) bool
     return true;
 }
 
+pub const SegmentData = struct
+{
+    items: []const u8,
+    capacity: usize,
+    bytePosition: usize,
+};
+
 pub const Segment = struct 
 {
-    array: []const u8,
-    len: u32,
-    bytePosition: usize,
+    data: SegmentData,
     // The next segment is not necesserily going to be stored in the array.
     // We want the flexibility of being able to hijack the sequence without
     // storing the data in the buffer manager.
@@ -65,15 +70,30 @@ pub const Segment = struct
 
     // So this should also have some tag to indicate where it's from?
     // origin: *anyopaque,
+    pub fn underlyingArray(self: *const Segment) []const u8
+    {
+        const d = &self.data;
+        return d.items.ptr[0 .. d.capacity];
+    }
+
+    pub fn len(self: *const Segment) u32
+    {
+        return @intCast(self.data.items.len);
+    }
+
+    pub fn bytePosition(self: *const Segment) usize
+    {
+        return self.data.bytePosition;
+    }
 
     pub fn getSlice(self: *const Segment) []const u8
     {
-        return self.array[0 .. self.len];
+        return self.data.items;
     }
 
     pub fn getBytePosition(self: *const Segment) usize
     {
-        return self.bytePosition;
+        return self.bytePosition();
     }
 };
 
@@ -114,7 +134,7 @@ pub const BufferManager = struct
         allocator: std.mem.Allocator) !void
     {
         try self.segments.append(allocator, segment);
-        self.totalBytes += segment.len;
+        self.totalBytes += segment.len();
 
         // Let's update the list here for now.
         const s_ = self.segments.items;
@@ -187,13 +207,13 @@ pub const SequenceRange = struct
             // Could also make this potentially more optimal
             // by walking from the old start to the new start,
             // and then from the old end to the new end.
-            var lenAccum = start_.segment.len - start_.offset;
+            var lenAccum = start_.segment.len() - start_.offset;
             if (start_.segment.nextSegment) |secondSegment|
             {
                 var current = secondSegment;
                 while (current != end_.segment)
                 {
-                    lenAccum += current.len;
+                    lenAccum += current.len();
                     current = current.nextSegment.?;
                 }
             }
@@ -246,10 +266,10 @@ pub const Sequence = struct
         const lastSegment_ = &segments_[segments_.len - 1];
         const end_ = SequencePosition
         {
-            .offset = lastSegment_.len,
+            .offset = lastSegment_.len(),
             .segment = lastSegment_,
         };
-        const totalLength = lastSegment_.bytePosition + lastSegment_.len - segments_[0].bytePosition;
+        const totalLength = lastSegment_.bytePosition() + lastSegment_.len() - segments_[0].bytePosition();
         return .{
             .range = .{
                 .start = start_,
@@ -294,7 +314,7 @@ pub const Sequence = struct
         // let's just linearly search for now.
         while (true)
         {
-            const willMoveAmount = @min(leftToMove, current.len - offset_);
+            const willMoveAmount = @min(leftToMove, current.len() - offset_);
             leftToMove -= willMoveAmount;
 
             if (leftToMove == 0)
@@ -327,7 +347,7 @@ pub const Sequence = struct
             counter += 1;
             current = current.nextSegment.?;
         }
-        if (end_.segment.len == end_.offset)
+        if (end_.segment.len() == end_.offset)
         {
             counter += 1;
         }
@@ -409,11 +429,11 @@ pub const Sequence = struct
 
             // The position has to overlap exactly with the end position.
             const endSegment = range_.end.segment;
-            std.debug.assert(range_.end.offset == endSegment.len);
+            std.debug.assert(range_.end.offset == endSegment.len());
 
             range_.start.segment = range_.end.segment;
             // Empty segment that starts and ends at the end of the single segment.
-            range_.start.offset = @intCast(endSegment.len);
+            range_.start.offset = @intCast(endSegment.len());
         }
 
         // Need to normalize the slice.
@@ -426,7 +446,7 @@ pub const Sequence = struct
         if (range_.end.segment != range_.start.segment)
         {
             const startSegment = range_.start.segment;
-            const startWillBeMoved = range_.start.offset == startSegment.len;
+            const startWillBeMoved = range_.start.offset == startSegment.len();
             const areInSameSegment = range_.end.segment == startSegment.nextSegment;
             const dontMoveStart = areInSameSegment and willMoveEnd;
 
@@ -620,12 +640,14 @@ pub fn Reader(comptime ReaderType: type) type
 
             const s = Segment
             {
-                .array = newBuffer,
-                .len = @intCast(readCount),
-                .bytePosition = self._buffer.allByteCount(),
+                .data = .{
+                    .items = newBuffer[0 .. readCount],
+                    .capacity = newBuffer.len,
+                    .bytePosition = self._buffer.allByteCount(),
+                },
                 .nextSegment = null,
             };
-            if (s.len < s.array.len)
+            if (newBuffer.len > readCount)
             {
                 self._eofState = .Reached;
             }
@@ -672,7 +694,7 @@ pub fn Reader(comptime ReaderType: type) type
 
                 for (0 .. removedSegmentsCount) |i|
                 {
-                    self.allocator.free(segments.*[i].array);
+                    self.allocator.free(segments.*[i].underlyingArray());
                 }
                 for (removedSegmentsCount .. segments.len) |i|
                 {
@@ -690,7 +712,7 @@ pub fn Reader(comptime ReaderType: type) type
             if (self._eofState == .NotReached)
             {
                 const newSegment = try self.readOneMoreSegment();
-                errdefer self.allocator.free(newSegment.array);
+                errdefer self.allocator.free(newSegment.underlyingArray());
 
                 // You should only call advance once you've scanned all of the input.
                 // Or you know you need more.
@@ -712,7 +734,7 @@ pub fn Reader(comptime ReaderType: type) type
             if (self._eofState == .FirstRead)
             {
                 const newSegment = try self.readOneMoreSegment();
-                errdefer self.allocator.free(newSegment.array);
+                errdefer self.allocator.free(newSegment.underlyingArray());
 
                 try buffer_.appendSegment(newSegment, self.allocator);
             }
@@ -770,10 +792,13 @@ pub fn createTestBufferFromData(
     var length: usize = 0;
     for (data, segments.items) |data_, *s|
     {
-        s.* = .{
-            .array = data_,
-            .len = @intCast(data_.len),
-            .bytePosition = length,
+        s.* = Segment
+        {
+            .data = .{
+                .items = data_,
+                .capacity = data_.len,
+                .bytePosition = length,
+            },
             .nextSegment = null,
         };
         length += data_.len;
