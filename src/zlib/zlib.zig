@@ -471,6 +471,6 @@ fn doTest(file: anytype, allocator: std.mem.Allocator)
     return .{
         .err = resultError,
         .state = state,
-        .filePosition = sequence.getStartOffset(),
+        .filePosition = sequence.getStartBytePosition(),
     };
 }
