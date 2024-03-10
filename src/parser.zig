@@ -93,12 +93,47 @@ pub const ChunkDataNode = struct
     },
 };
 
+pub const CarryOverSegment = struct
+{
+    bytePosition: usize,
+    array: std.ArrayListUnmanaged(u8),
+    offset: u32,
+
+    pub fn len(self: *const CarryOverSegment) u32
+    {
+        return @intCast(self.array.items.len - self.offset);
+    }
+
+    pub fn segment(self: *const CarryOverSegment, next: *const pipelines.Segment) pipelines.Segment
+    {
+        return .{
+            .data = .{
+                .items = self.array.items,
+                .capacity = self.array.capacity,
+                .bytePosition = self.bytePosition,
+            },
+            .nextSegment = next,
+        };
+    }
+
+    pub fn isActive(self: *const CarryOverSegment) bool
+    {
+        return self.array.items.len > 0;
+    }
+
+    pub fn setInactive(self: *const CarryOverSegment) void
+    {
+        self.array.clearRetainingCapacity();
+    }
+};
+
 // Of course, this will need to be reworked once I do the tree range optimizations
 pub const ImageData = struct
 {
     // Just read the raw bytes for now
     bytes: std.ArrayListUnmanaged(u8) = .{},
     zlib: zlib.State = .{},
+    carryOverData: CarryOverSegment,
 };
 
 pub const TextData = struct
@@ -1568,12 +1603,73 @@ fn parseChunkData(context: *const Context) !bool
             const newLen = @min(sequence.len(), bytesLeftToRead);
             sequence = sequence.sliceToExclusive(sequence.getPosition(newLen));
 
+            const carryOverData = &imageData.carryOverData;
+            const usesCarryOverSegment = carryOverData.isActive();
+
+            // TODO: Think of a better solution to this hijacking, it's just dirty.
+            var carryOverFirstSegment: pipelines.Segment = undefined;
+            // Start segment with updated slice and byte positions.
+            var hijackedStartSegment: pipelines.Segment = undefined;
+            if (usesCarryOverSegment)
+            {
+                carryOverFirstSegment = carryOverData.segment(sequence.start().segment);
+
+                const oldStart = sequence.start();
+                hijackedStartSegment = oldStart.segment.*;
+                hijackedStartSegment.data.bytePosition += oldStart.offset;
+                // This is the key hijacking thing that I kind of hate.
+                hijackedStartSegment.data.items = hijackedStartSegment.data.items[oldStart.offset ..];
+
+                sequence.range.start = .{
+                    .segment = &carryOverFirstSegment,
+                    .offset = carryOverData.offset,
+                };
+                sequence.range.len += carryOverData.len();
+            }
+
             defer
             {
-                const lenChange = newLen - sequence.len();
-                bytesRead.* += @intCast(lenChange);
+                const maybeNewStart: ?pipelines.SequencePosition = newStart:
+                {
+                    if (!usesCarryOverSegment)
+                    {
+                        break :newStart sequence.start();
+                    }
 
-                context.sequence.* = context.sequence.sliceFrom(sequence.start());
+                    const notFullyReadCarryOverSegment = sequence.start().segment == &carryOverFirstSegment;
+                    // Can only happen if we get an error, but we still have to update it.
+                    if (notFullyReadCarryOverSegment)
+                    {
+                        carryOverData.offset = sequence.start().offset;
+                        std.debug.assert(carryOverData.offset < carryOverFirstSegment.len());
+                        break :newStart null;
+                    }
+                    else
+                    {
+                        carryOverData.setInactive();
+                    }
+
+                    if (sequence.start().segment != &hijackedStartSegment)
+                    {
+                        break :newStart sequence.start();
+                    }
+
+                    var oldStart = context.sequence.start();
+                    // The offset on the hijacked segment is always zero, because it can't be the first.
+                    // This has been mitigated by slicing the items.
+                    // So the actual offset is the slice len difference + the new offset.
+                    const arrayWasShiftedBy = oldStart.segment.len() - hijackedStartSegment.len();
+                    oldStart.offset = sequence.start().offset + arrayWasShiftedBy;
+                    std.debug.assert(oldStart.offset < oldStart.segment.len());
+                    break :newStart oldStart;
+                };
+
+                if (maybeNewStart) |newStart|
+                {
+                    const lenChange = newLen - sequence.len();
+                    bytesRead.* += @intCast(lenChange);
+                    context.sequence.* = context.sequence.sliceFrom(newStart);
+                }
             }
 
             const readContext = .{
@@ -1594,6 +1690,9 @@ fn parseChunkData(context: *const Context) !bool
 
                     if (newLen == bytesLeftToRead and sequence.len() == 0)
                     {
+                        // Go over the remaining bytes and save them to the carry over segment.
+                        // Techincally, chunks of any size are possible, so it technically 
+
                         return true;
                     }
 

@@ -50,10 +50,15 @@ fn bytesEqual(a: anytype, b: @TypeOf(a)) bool
     return true;
 }
 
+// pub const BufferSegment = struct
+// {
+// };
+
 pub const SegmentData = struct
 {
     items: []const u8,
-    capacity: usize,
+    // TODO: This shouldn't be here.
+    capacity: usize = 0,
     bytePosition: usize,
 };
 
@@ -70,6 +75,7 @@ pub const Segment = struct
 
     // So this should also have some tag to indicate where it's from?
     // origin: *anyopaque,
+
     pub fn underlyingArray(self: *const Segment) []const u8
     {
         const d = &self.data;
@@ -622,7 +628,7 @@ pub fn Reader(comptime ReaderType: type) type
         {
             for (self._buffer.segments.items) |*s|
             {
-                self.allocator.free(s.array);
+                self.allocator.free(s.underlyingArray());
             }
         }
 
@@ -647,6 +653,11 @@ pub fn Reader(comptime ReaderType: type) type
                 },
                 .nextSegment = null,
             };
+            // TODO:
+            // I think it is possible to get an empty segment this way.
+            // We have to signal whether we are done from the data provider.
+            // That should be possible with files.
+            // Or we have to be careful with empty chunks at the end, to not have things break.
             if (newBuffer.len > readCount)
             {
                 self._eofState = .Reached;

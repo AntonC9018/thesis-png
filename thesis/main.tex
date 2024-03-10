@@ -102,7 +102,7 @@ Decoderul va fi implementat în limbajul de programare Zig\cite{zig}
 după specificația \ac{PNG}, versiunea 1.2\cite{png_spec}.
 Interfața grafică va fi implementată folosind Raylib\cite{raylib}, tot în Zig.
 
-Pentru a facilita interacțiunea cu stream-uri de date și a crea o abstracție în acest sens,
+Pentru a facilita interacțiunea cu fluxuri de date și a crea o abstracție în acest sens,
 a fost dezvoltată o mică bibliotecă.
 Experiența anterioară cu biblioteca \texttt{System.IO.Pipelines}\cite{system_io_pipelines}
 din C\# a relevat mai multe avantaje în utilizarea unei astfel de abordări:
@@ -338,7 +338,7 @@ Din această cauză, s-a decis să se realizeze implementarea unui decoder Zlib 
 Structura parserului folosită până acum poate fi aplicată și pentru formatul Zlib.
 Singura diferență este că formatul Zlib este bazat pe biți, dar nu pe octeți.
 Însă deoarece poziția pe biți absolut nu ține de gestionarea buferilor,
-componenta \texttt{pipelines} care realizează stream-ul de date nu va trebui să fie modificată.
+componenta \texttt{pipelines} care realizează fluxul de date nu va trebui să fie modificată.
 Starea parserului Zlib poate să țină cont de poziția pe biți ca o variabilă privată, deoarece
 acest concept nu se revarsă la procesarea \ac{PNG}.
 Însă, poziția pe biți ar trebuie să fie utilă pentru vizualizare a formatului.
@@ -472,14 +472,14 @@ pub fn impl(context: *Context) !void
             // Read the int, but do not consume the stream
             const number = try pipelines.peekInt(context.sequence);
 
+            // Save the context
+            context.state.number = number.value;
+
             // Validate
             if (number.value == 256)
             {
                 return error.CannotBe256;
             }
-
-            // Save the context
-            context.state.number = number.value;
 
             // Consume the read bytes if the result is valid.
             number.apply(context);
@@ -490,7 +490,9 @@ pub fn impl(context: *Context) !void
 }
 \end{minted}
 
-Se mai poate afișa eroarea într-un mod diferit.
+Se mai poate transmite eroarea într-un mod diferit.
+Următoarea abordare permite înregistrarea mai multor erori.
+Pentru moment, așa ceva nu se folosește, însă tot este o abordare validă.
 
 \begin{minted}{zig}
 pub fn impl(context: *Context) !void
@@ -506,13 +508,21 @@ pub fn impl(context: *Context) !void
             // Read the int, modify the stream
             const number = try pipelines.readInt(context.sequence);
 
-            // Save the context
-            context.state.number = number;
-
             // Validate
             if (number == 256)
             {
-                return error.CannotBe256;
+                context.state.addError(.{
+                    .err = error.CannotBe256,
+                    .context = number,
+                });
+            }
+            else
+            {
+                // Can use the type system to semantically indicate validity.
+                context.state.number = ValidNumber
+                {
+                    .value = number,
+                };
             }
         },
 
@@ -522,37 +532,103 @@ pub fn impl(context: *Context) !void
 
 pub fn callSite()
 {
-    // ...
+    // ... 
 
-    impl(&context)
+    const errorScope = context.state.errorScope();
+
+    impl(&context);
     catch |err|
     {
-        switch (err)
-        {
-            error.CannotBe256 =>
-            {
-                // If multiple states can result in this error,
-                // need to check which state we're in.
-                switch (context.state.action)
-                {
-                    // ...
-
-                    .Number =>
-                    {
-                        std.debug.print("The number {} is invalid while parsing Number\n", .{
-                            context.state.number
-                        });
-                    },
-
-                    // ...
-                }
-
-                return error.ParsingFailed;
-            },
-        }
+        // Here, only memory allocation related errors and the NotEnoughBytes error is possible.
+        // ...
     };
+
+    if (errorScope.errorsHappened()) |errors|
+    {
+        for (errors) |e|
+        {
+            switch (e.err)
+            {
+                // ...
+
+                case error.CannotBe256 =>
+                {
+                    const numberActuallyRead = try coerce(u32, e.context);
+                    std.debug.assert(numberActuallyRead == 256);
+                },
+            }
+        }
+    }
 }
 \end{minted}
+
+
+\section{Complicațiile asociate cu citirea chunk-ului \texttt{IDAT}}
+
+Posibilitatea de a putea păstra informațiile despre originea fiecărui "nod",
+adică poziția a acestuia absolută din fișier,
+precum și posibilitatea de a trata fluxul de date ca unul linear nu sunt direct compatibile
+atunci când fluxul de date poate "sări", adică atunci când pozițiile absolute
+între diferitele segmente nu sunt consecutive.
+Deoarece unul singur nod poate să se afle la marginea a două segmente (potențial mai mult ca două),
+ideea că locația fiecărui nod poate fi descrisă de locația lui absolută în fișier și
+lungimea lui deja nu se va aplica.
+
+Cu toate că pentru noduri regulare din formatul PNG așa ceva nu este posibil,
+chunk-ul \texttt{IDAT} este special în acest sens.
+Toate chunk-urile acestea conțin unul singur stream Zlib partajat,
+iar parserul PNG se consideră incorect dacă nu realizează corect
+orice distribuție a fluxului Zlib între chunk-uri.
+Adică parserul PNG nu poate presupune de exemplu că blocul Zlib va termina de fiecare dată
+împreună cu chunk-ul \texttt{IDAT} în care se află.
+De fapt, este posibilă situația că biții ultimului bit au rămas necitite până la capăt
+în primul chunk \texttt{IDAT}, continuându-se în următorul chunk.
+
+Deoarece arborele Huffman din specificația Zlib permit lungimea maximă de 16 biți pentru coduri,
+iar programul trebuie să considere aceste coduri ca noduri separate,
+și acestea pot să se afle la offset-uri de biți nealiniate cu granițele octeților,
+în cel mai rău caz se poate întâmpla ca unul singur nod să se afle în 3 chunk-uri în același timp.
+De exemplu, primul bit poate să se afle la sfârșitul primului chunk,
+următoarele 8 biți pot să se afle în întregul următorul chunk, dacă acesta are lungimea 1, ce este posibil,
+și atunci se va termina la începutul celui de-al treilea chunk.
+
+Pentru a putea păstra ideea de a putea procesa datele folosind secvențele,
+de părca acestea erau consecutive, ar trebui să se include acele părți trecute necitite până la capăt
+la începutul secvenței, când se realizează procesarea fluxului Zlib.
+
+Prima problema era că secvența trebuia să se includă doar segmentele din manager de bufer principal,
+folosind de către cititor.
+De fapt, segmentele erau păstrate ca index-urile în tabloul de segmente, cu un offset de bază.
+Ca să devină posibil de inclus niște segmente dinafara buferilor principali la începutul secvenței,
+modul acesta de adresare a fost schimbat la o listă înlănțuită.
+Astfel, este posibil să seteze segmentul adăugator ca primul segment din secvență, urmându-l cu
+primul segment din secvența inițială, pentru a crea secvența nouă.
+
+Următoarea problema era că implementarea inițială a secvențelor din modulul \texttt{pipelines} presupunea
+că toate segmentele care se află între primul și ultimul segment se includ în secvența în întregime.
+Însă, secvența poate avea ca prima poziție segmentul inițial la un offset.
+Deoarece el este predestinat să devină al doilea segment după adăugare a primului segment adăugător,
+trebuie s-a hotărât să-i miște buferul de început, aplicând offset-ul.
+
+Această soluție nu se simte curată.
+Sunt alte abordări puțin mai complicate, dar care potențial vor face implementarea arborelui mai ușoară.
+Deoarece acele segmente de început pentru moment sunt temporare,
+nodurile din arbore nu pot să se refere la acestea, iar pozițiile din acestea pot să nu existe în buferi la momentul curent.
+
+Poate o abordare mai bună ar fi ca acele segmente veche să se păstreze în lista buferilor,
+pentru a putea să se adreseze la acestea în secvențe,
+și ca segmentele din secvențe să-și poată specifica offset-uri,
+cu însele date păstrate separat, doar în buferi principali.
+Atunci ar trebui să se adauge și un fel de "comsumed position hint" la cititorul,
+ca el să păstreze segmentele care încă nu s-au citit până la capăt.
+
+De fapt, așa idee se folosește și în biblioteca \texttt{System.IO.Pipelines} din C\#,
+însă la implementarea inițială nu era clar de ce ar fi necesară această abordare.
+După ce s-a întâlnit problema care se rezolvă folosind această idee, s-a clarificat și sensul ei.
+
+
+
+
 
 
 
