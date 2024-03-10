@@ -766,52 +766,58 @@ pub fn getKnownDataChunkType(chunkType: ChunkType) KnownDataChunkType
     return @enumFromInt(chunkType.value);
 }
 
+pub fn debugPrintInfo(context: *const Context) !void
+{
+    if (!context.settings.logChunkStart)
+    {
+        return;
+    }
+    const outputStream = std.io.getStdOut().writer();
+    try printStepName(outputStream, context.state);
+    const offset = context.sequence.getStartBytePosition();
+    try outputStream.print("Offset: {x}", .{ offset });
+
+    {
+        const z = &context.state.imageData.zlib;
+        if (z.action == .CompressedData)
+        {
+            try outputStream.print(", Data bit offset: {d}", .{z.decompressor.deflate.bitOffset});
+        }
+    }
+    try outputStream.print("\n", .{});
+
+    const maxBytesToPrint = 10;
+    const numBytesWillPrint = @min(context.sequence.len(), maxBytesToPrint);
+    const s = context.sequence.sliceToExclusive(context.sequence.getPosition(numBytesWillPrint));
+    if (s.len() > 0)
+    {
+        var iter = s.iterate().?;
+        while (true)
+        {
+            for (iter.current()) |byte|
+            {
+                switch (byte)
+                {
+                    // ' ' ... '~' => try outputStream.print("{c} ", .{ byte }),
+                    else => try outputStream.print("{X:0<2} ", .{ byte }),
+                }
+            }
+
+            if (!iter.advance())
+            {
+                break;
+            }
+        }
+        try outputStream.print("\n", .{});
+    }
+    try outputStream.print("\n", .{});
+}
+
 pub fn parseTopLevelNode(context: *const Context) !bool
 {
     while (true)
     {
-        if (context.settings.logChunkStart)
-        {
-            const outputStream = std.io.getStdOut().writer();
-            try printStepName(outputStream, context.state);
-            const offset = context.sequence.getStartBytePosition();
-            try outputStream.print("Offset: {x}", .{ offset });
-
-            {
-                const z = &context.state.imageData.zlib;
-                if (z.action == .CompressedData)
-                {
-                    try outputStream.print(", Data bit offset: {d}", .{z.decompressor.deflate.bitOffset});
-                }
-            }
-            try outputStream.print("\n", .{});
-
-            const maxBytesToPrint = 10;
-            const numBytesWillPrint = @min(context.sequence.len(), maxBytesToPrint);
-            const s = context.sequence.sliceToExclusive(context.sequence.getPosition(numBytesWillPrint));
-            if (s.len() > 0)
-            {
-                var iter = s.iterate().?;
-                while (true)
-                {
-                    for (iter.current()) |byte|
-                    {
-                        switch (byte)
-                        {
-                            // ' ' ... '~' => try outputStream.print("{c} ", .{ byte }),
-                            else => try outputStream.print("{X:0<2} ", .{ byte }),
-                        }
-                    }
-
-                    if (!iter.advance())
-                    {
-                        break;
-                    }
-                }
-                try outputStream.print("\n", .{});
-            }
-            try outputStream.print("\n", .{});
-        }
+        try debugPrintInfo(context);
 
         const isDone = try parseNextNode(context);
         if (isDone)
@@ -1601,6 +1607,7 @@ fn parseChunkData(context: *const Context) !bool
 
             var sequence = context.sequence.*;
             const newLen = @min(sequence.len(), bytesLeftToRead);
+            const isLastLoopForChunk = newLen == bytesLeftToRead;
             sequence = sequence.sliceToExclusive(sequence.getPosition(newLen));
 
             const carryOverData = &imageData.carryOverData;
@@ -1685,7 +1692,6 @@ fn parseChunkData(context: *const Context) !bool
                         return err;
                     }
 
-                    const isLastLoopForChunk = newLen == bytesLeftToRead;
                     if (isLastLoopForChunk)
                     {
                         // Not implemented yet.
@@ -1709,7 +1715,7 @@ fn parseChunkData(context: *const Context) !bool
 
                     return error.NotEnoughBytes;
                 };
-            return sequence.len() == 0;
+            return isLastLoopForChunk and sequence.len() == 0;
         },
         .Transparency =>
         {
