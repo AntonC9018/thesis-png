@@ -297,10 +297,11 @@ pub const Sequence = struct
 
     pub fn len(self: *const Sequence) usize
     {
+        // Has to be O(N), so it's cached in the range.
         return self.range.len;
     }
 
-    pub fn getStartOffset(self: *const Sequence) usize
+    pub fn getStartBytePosition(self: *const Sequence) usize
     {
         return self.start().getBytePosition();
     }
@@ -1112,12 +1113,12 @@ test "removeFirst works"
     {
         const ch = try removeFirst(&r.sequence);
         try t.expectEqual('0', ch);
-        try t.expectEqual(1, r.sequence.getStartOffset());
+        try t.expectEqual(1, r.sequence.getStartBytePosition());
     }
     {
         const ch = try removeFirst(&r.sequence);
         try t.expectEqual('1', ch);
-        try t.expectEqual(2, r.sequence.getStartOffset());
+        try t.expectEqual(2, r.sequence.getStartBytePosition());
     }
 }
 

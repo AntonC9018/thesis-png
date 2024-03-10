@@ -95,16 +95,16 @@ pub const ChunkDataNode = struct
 
 pub const CarryOverSegment = struct
 {
-    bytePosition: usize,
-    array: std.ArrayListUnmanaged(u8),
-    offset: u32,
+    array: std.ArrayListUnmanaged(u8) = .{},
+    bytePosition: usize = 0,
+    offset: u32 = 0,
 
     pub fn len(self: *const CarryOverSegment) u32
     {
         return @intCast(self.array.items.len - self.offset);
     }
 
-    pub fn segment(self: *const CarryOverSegment, next: *const pipelines.Segment) pipelines.Segment
+    pub fn segment(self: *const CarryOverSegment, next: *pipelines.Segment) pipelines.Segment
     {
         return .{
             .data = .{
@@ -121,7 +121,7 @@ pub const CarryOverSegment = struct
         return self.array.items.len > 0;
     }
 
-    pub fn setInactive(self: *const CarryOverSegment) void
+    pub fn setInactive(self: *CarryOverSegment) void
     {
         self.array.clearRetainingCapacity();
     }
@@ -133,7 +133,7 @@ pub const ImageData = struct
     // Just read the raw bytes for now
     bytes: std.ArrayListUnmanaged(u8) = .{},
     zlib: zlib.State = .{},
-    carryOverData: CarryOverSegment,
+    carryOverData: CarryOverSegment = .{},
 };
 
 pub const TextData = struct
@@ -774,7 +774,7 @@ pub fn parseTopLevelNode(context: *const Context) !bool
         {
             const outputStream = std.io.getStdOut().writer();
             try printStepName(outputStream, context.state);
-            const offset = context.sequence.getStartOffset();
+            const offset = context.sequence.getStartBytePosition();
             try outputStream.print("Offset: {x}", .{ offset });
 
             {
@@ -838,7 +838,7 @@ pub fn parseNextNode(context: *const Context) !bool
             }
             else
             {
-                const offset = context.sequence.getStartOffset();
+                const offset = context.sequence.getStartBytePosition();
                 context.state.chunk = createChunkParserState(offset);
                 context.state.action = .Chunk;
             }
@@ -914,7 +914,7 @@ pub fn parseChunkItem(context: *const Context) !bool
             chunk.key = .Data;
 
             chunk.node.dataNode.base = .{
-                .startPositionInFile = o.right.getStartOffset(),
+                .startPositionInFile = o.right.getStartBytePosition(),
                 .length = chunk.node.byteLength,
             };
 
@@ -1612,7 +1612,7 @@ fn parseChunkData(context: *const Context) !bool
             var hijackedStartSegment: pipelines.Segment = undefined;
             if (usesCarryOverSegment)
             {
-                carryOverFirstSegment = carryOverData.segment(sequence.start().segment);
+                carryOverFirstSegment = carryOverData.segment(@constCast(sequence.start().segment));
 
                 const oldStart = sequence.start();
                 hijackedStartSegment = oldStart.segment.*;
@@ -1677,9 +1677,6 @@ fn parseChunkData(context: *const Context) !bool
                 .sequence = &sequence,
             };
 
-            // This is actually a bit wrong, because the datastream can wrap at any point,
-            // we have to handle chunk boundaries with a second level of wrapping.
-            // Might have to hijack the pipeline abstractions.
             _ = readZlibData(readContext, &imageData.zlib, &imageData.bytes)
                 catch |err|
                 {
@@ -1688,11 +1685,25 @@ fn parseChunkData(context: *const Context) !bool
                         return err;
                     }
 
-                    if (newLen == bytesLeftToRead and sequence.len() == 0)
+                    const isLastLoopForChunk = newLen == bytesLeftToRead;
+                    if (isLastLoopForChunk)
                     {
-                        // Go over the remaining bytes and save them to the carry over segment.
-                        // Techincally, chunks of any size are possible, so it technically 
+                        // Not implemented yet.
+                        std.debug.assert(!usesCarryOverSegment);
 
+                        if (sequence.len() == 0)
+                        {
+                            return true;
+                        }
+
+                        // Go over the remaining bytes and save them to the carry-over segment.
+                        // Techincally, multiple separate carry-over segments are possible,
+                        // but I'll ignore that possibility for now.
+                        const carryOverBuffer = try carryOverData.array
+                            .addManyAsSlice(context.allocator, sequence.len());
+                        sequence.copyTo(carryOverBuffer);
+                        carryOverData.offset = 0;
+                        carryOverData.bytePosition = sequence.getStartBytePosition();
                         return true;
                     }
 
