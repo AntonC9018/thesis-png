@@ -114,11 +114,6 @@ pub fn main() !void
     // NOTE: Textures/Fonts MUST be loaded after Window initialization (OpenGL context is required)
     var fontSize: f32 = 16;
     const fonts = try createFonts(@intFromFloat(fontSize));
-    defer 
-    {
-        raylib.UnloadFont(fonts.default);
-        raylib.UnloadFont(fonts.sdf);
-    }
 
     const shader = shader:
     {
@@ -128,7 +123,6 @@ pub fn main() !void
         const s = raylib.LoadShader(null, fragShaderName);
         break :shader s;
     };
-    defer raylib.UnloadShader(shader);
     raylib.SetTextureFilter(fonts.sdf.texture, .TEXTURE_FILTER_BILINEAR);
     raylib.SetTargetFPS(60);
 
@@ -209,6 +203,11 @@ pub fn main() !void
 
         }
     }
+
+    raylib.UnloadFont(fonts.default);
+    raylib.UnloadFont(fonts.sdf);
+
+    raylib.UnloadShader(shader);
 
     raylib.CloseWindow();
 }
