@@ -15,7 +15,12 @@ const resourcesDir = "raylib/raylib/examples/text/resources/";
 
 const ChildrenList = struct
 {
-    array: std.ArrayListUnmanaged(Node) = .{},
+    array: std.ArrayListUnmanaged(usize) = .{},
+
+    pub fn len(self: *const ChildrenList) usize
+    {
+        return self.array.items.len;
+    }
 };
 
 const NodeType = struct
@@ -34,12 +39,12 @@ const NodeData = struct
     },
 };
 
-const bitsInByte: u3 = 8;
+const bitsInByte = 8;
 
 const NodePositionOffset = struct
 {
-    byte: isize,
-    bit: isize,
+    byte: isize = 0,
+    bit: isize = 0,
 
     pub fn addBits(self: NodePositionOffset, bits: isize) NodePositionOffset
     {
@@ -78,8 +83,8 @@ const NodePositionOffset = struct
         else
         {
             return .{
-                .byte = self.byte + self.bit / bitsInByte,
-                .bit = self.bit % bitsInByte,
+                .byte = self.byte + @as(isize, @intCast(@as(usize, @intCast(self.bit)) / bitsInByte)),
+                .bit = @intCast(@as(usize, @intCast(self.bit)) % bitsInByte),
             };
         }
     }
@@ -96,7 +101,7 @@ const NodePosition = struct
     byte: usize,
     bit: u3,
 
-    pub fn compare(a: NodePosition, b: NodePosition) isize
+    pub fn compareTo(a: NodePosition, b: NodePosition) isize
     {
         const byteDiff = @as(isize, @intCast(a.byte)) - @as(isize, @intCast(b.byte));
         if (byteDiff != 0)
@@ -155,7 +160,7 @@ const NodeSpan = struct
 
     pub fn fromStartAndEndExclusive(startPos: NodePosition, endPosExclusive: NodePosition) NodeSpan
     {
-        const comparison = endPosExclusive.compare(startPos);
+        const comparison = endPosExclusive.compareTo(startPos);
         std.debug.assert(comparison > 0);
         const endInclusive_ = endPosExclusive.add(.{ .bit = -1 });
         return .{
@@ -203,15 +208,9 @@ const AST = struct
 pub fn createTestTree(allocator: std.mem.Allocator) !AST
 {
     var tree: AST = .{
-        .rootNodes = .{
-            .allocator = allocator,
-        },
-        .nodes = .{
-            .allocator = allocator,
-        },
-        .nodeData = .{
-            .allocator = allocator,
-        },
+        .rootNodes = std.ArrayList(usize).init(allocator),
+        .nodes = std.ArrayList(Node).init(allocator),
+        .nodeData = std.ArrayList(NodeData).init(allocator),
     };
     const data = try tree.nodeData.addManyAsArray(10);
     const defaultType = NodeType { .id = 0 };
@@ -259,11 +258,16 @@ pub fn createTestTree(allocator: std.mem.Allocator) !AST
     const parentNode = try tree.nodes.addOne();
 
     var children: ChildrenList = .{};
-    children.array.ensureTotalCapacity(childrenCount);
+    try children.array.ensureTotalCapacity(tree.childrenAllocator(), childrenCount);
 
     for (0 .. childrenCount) |i|
     {
-        const endPosition = position.add(.{ .byte = i, .bit = i * 6 });
+        const endPosition = position.add(.{
+            .byte = @intCast(i + 1),
+            .bit = @intCast(i * 6),
+        });
+        // std.debug.print("From: {d},{d}\n", .{ position.byte, position.bit });
+        // std.debug.print("To: {d},{d}\n", .{ endPosition.byte, endPosition.bit });
         const node = Node
         {
             .span = NodeSpan.fromStartAndEndExclusive(position, endPosition),
@@ -294,9 +298,8 @@ pub fn createTestTree(allocator: std.mem.Allocator) !AST
         };
     }
 
-    (try tree.rootNodes.addManyAsArray(2).*) = .{ 0, 1 };
-
-
+    (try tree.rootNodes.addManyAsArray(2)).* = .{ 0, 1 };
+    return tree;
 }
 
 pub fn main() !void
@@ -319,7 +322,86 @@ pub fn main() !void
         raylib.ClearBackground(raylib.BLACK);
         raylib.DrawFPS(10, 10);
 
-        raylib.DrawText("hello world!", 100, 100, 20, raylib.YELLOW);
+        const fontSize = 20;
+        const lineHeight = 30;
+        const Context = struct
+        {
+            currentPosition: raylib.Vector2i,
+            tree: AST,
+            allocator: std.mem.Allocator,
+
+            fn drawTextLine(context: *@This(), s: [:0]const u8) void
+            {
+                const p = &context.currentPosition;
+                raylib.DrawText(s, p.x, p.y, fontSize, raylib.WHITE);
+                p.y += lineHeight;
+            }
+        };
+        var context = Context
+        {
+            .currentPosition = .{ .x = 10, .y = 30 + 10 },
+            .tree = tree,
+            .allocator = allocator,
+        };
+
+        const draw = struct
+        {
+            fn f(nodeIndex: usize, context_: *Context) !void
+            {
+                const node: Node = context_.tree.nodes.items[nodeIndex];
+
+                var writerBuf = std.ArrayList(u8).init(context_.allocator);
+                defer writerBuf.clearAndFree();
+                const writer = writerBuf.writer();
+
+                {
+                    const start = node.span.start;
+                    const end = node.span.endInclusive;
+                    try writer.print(
+                        "Node {d}, Range [{d},{d}:{d},{d}]",
+                        .{
+                            nodeIndex,
+                            start.byte,
+                            start.bit,
+                            end.byte,
+                            end.bit,
+                        });
+                }
+
+                if (node.nodeData) |dataIndex|
+                {
+                    const data = context_.tree.nodeData.items[dataIndex];
+
+                    try writer.print(", Type: {d}, ", .{ data.type.id });
+                    _ = try writer.write("Value: ");
+                    try switch (data.value)
+                    {
+                        .string => |s| writer.print("{s}", .{ s }),
+                        .number => |n| writer.print("{d}", .{ n }),
+                    };
+                }
+                try writer.writeByte(0);
+
+                context_.drawTextLine(writerBuf.items[0 .. writerBuf.items.len - 1: 0]);
+
+                if (node.children.len() > 0)
+                {
+                    const offsetSize = 20;
+                    context_.currentPosition.x += offsetSize;
+                    defer context_.currentPosition.x -= offsetSize;
+
+                    for (node.children.array.items) |childNodeIndex|
+                    {
+                        try f(childNodeIndex, context_);
+                    }
+                }
+           }
+        }.f;
+
+        for (tree.rootNodes.items) |rootNodeIndex|
+        {
+            try draw(rootNodeIndex, &context);
+        }
     }
 }
 
