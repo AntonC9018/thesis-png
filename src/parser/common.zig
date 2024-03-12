@@ -23,7 +23,6 @@ pub const ChunkAction = enum
     Done,
 };
 
-
 pub const State = struct
 {
     chunk: ChunkState,
