@@ -72,22 +72,10 @@ const NodePositionOffset = struct
 
     pub fn normalized(self: NodePositionOffset) NodePositionOffset
     {
-        if (self.bit < 0)
-        {
-            const positiveBits: usize = @intCast(-self.bit);
-            return .{
-                .byte = self.byte - @as(isize, @intCast(positiveBits / bitsInByte)) - 1,
-                .bit = @intCast(bitsInByte - (positiveBits % bitsInByte)),
-            };
-        }
-        else
-        {
-            const positiveBits: usize = @intCast(self.bit);
-            return .{
-                .byte = self.byte + @as(isize, @intCast(positiveBits / bitsInByte)),
-                .bit = @intCast(positiveBits % bitsInByte),
-            };
-        }
+        return .{
+            .byte = self.byte + @divFloor(self.bit, bitsInByte),
+            .bit = @mod(self.bit, bitsInByte),
+        };
     }
 
     pub fn isLessThanOrEqualToZero(self: NodePositionOffset) bool
@@ -96,6 +84,29 @@ const NodePositionOffset = struct
         return n.byte <= 0 and n.byte == 0;
     }
 };
+
+
+test "Normalization"
+{
+    const doNodeOffsetNormalizationTest = struct
+    {
+        fn f(
+            before: NodePositionOffset,
+            after: NodePositionOffset) !void
+        {
+            const norm = before.normalized();
+            try std.testing.expectEqualDeep(after, norm);
+        }
+    }.f;
+
+    try doNodeOffsetNormalizationTest(
+        .{ .byte = 0, .bit = -17, },
+        .{ .byte = -3, .bit = 7, });
+
+    try doNodeOffsetNormalizationTest(
+        .{ .byte = 0, .bit = 17, },
+        .{ .byte = 2, .bit = 1, });
+}
 
 const NodePosition = struct
 {
