@@ -76,15 +76,16 @@ const NodePositionOffset = struct
         {
             const positiveBits: usize = @intCast(-self.bit);
             return .{
-                .byte = @intCast(self.byte - @as(isize, @intCast(positiveBits / bitsInByte))),
+                .byte = self.byte - @as(isize, @intCast(positiveBits / bitsInByte)) - 1,
                 .bit = @intCast(bitsInByte - (positiveBits % bitsInByte)),
             };
         }
         else
         {
+            const positiveBits: usize = @intCast(self.bit);
             return .{
-                .byte = self.byte + @as(isize, @intCast(@as(usize, @intCast(self.bit)) / bitsInByte)),
-                .bit = @intCast(@as(usize, @intCast(self.bit)) % bitsInByte),
+                .byte = self.byte + @as(isize, @intCast(positiveBits / bitsInByte)),
+                .bit = @intCast(positiveBits % bitsInByte),
             };
         }
     }
