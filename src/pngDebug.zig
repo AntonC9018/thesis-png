@@ -1,5 +1,5 @@
 const std = @import("std");
-const parser = @import("parser.zig");
+const parser = @import("parser/parser.zig");
 const pipelines = @import("pipelines.zig");
 
 pub fn readTestFile() !void
@@ -22,7 +22,7 @@ pub fn readTestFile() !void
     defer reader.deinit();
 
     var parserState = parser.createParserState();
-    var chunks = std.ArrayList(parser.ChunkNode).init(allocator);
+    var chunks = std.ArrayList(parser.Chunk).init(allocator);
     const settings = parser.Settings
     {
         .logChunkStart = true,
@@ -82,7 +82,7 @@ pub fn readTestFile() !void
                 std.debug.print("Not all input consumed. Remaining length: {}\n", .{remaining});
             }
 
-            if (!parser.isParserStateTerminal(context.state))
+            if (!parser.isStateTerminal(context.state))
             {
                 std.debug.print("Ended in a non-terminal state.\n", .{});
             }
@@ -96,33 +96,32 @@ pub fn readTestFile() !void
     for (chunks.items) |*chunk| 
     {
         std.debug.print("Chunk(Length: {d}, Type: {s}, CRC: {x})\n", .{
-            chunk.byteLength,
-            chunk.chunkType.bytes,
+            chunk.dataByteLen,
+            chunk.type.getString(),
             chunk.crc.value,
         });
 
-        const knownChunkType = parser.getKnownDataChunkType(chunk.chunkType);
-        switch (knownChunkType)
+        switch (chunk.type)
         {
             .ImageHeader =>
             {
-                std.debug.print("  {any}\n", .{ chunk.dataNode.data.ihdr });
+                std.debug.print("  {any}\n", .{ chunk.data.imageHeader });
             },
             .Palette =>
             {
-                std.debug.print("  {any}\n", .{ chunk.dataNode.data.plte.colors.items });
+                std.debug.print("  {any}\n", .{ chunk.data.palette.colors.items });
             },
             .Gamma =>
             {
-                std.debug.print("  {any}\n", .{ chunk.dataNode.data.gamma });
+                std.debug.print("  {any}\n", .{ chunk.data.gamma });
             },
             .Text =>
             {
-                std.debug.print("  {any}\n", .{ chunk.dataNode.data.text });
+                std.debug.print("  {any}\n", .{ chunk.data.text });
             },
             .Transparency =>
             {
-                std.debug.print("  {any}\n", .{ chunk.dataNode.data.transparency });
+                std.debug.print("  {any}\n", .{ chunk.data.transparency });
             },
             else => {},
         }
@@ -131,11 +130,11 @@ pub fn readTestFile() !void
 
 fn doMaximumAmountOfParsing(
     context: *parser.Context,
-    nodes: *std.ArrayList(parser.ChunkNode)) !void
+    nodes: *std.ArrayList(parser.Chunk)) !void
 {
     while (true)
     {
-        const isDone = try parser.parseTopLevelNode(context);
+        const isDone = try parser.parseTopLevelItem(context);
         if (!isDone)
         {
             continue;
@@ -150,7 +149,7 @@ fn doMaximumAmountOfParsing(
             .Chunk =>
             {
                 const newItem = try nodes.addOne();
-                newItem.* = context.state.chunk.node;
+                newItem.* = context.state.chunk.object;
             },
             .StartChunk => unreachable,
         }
