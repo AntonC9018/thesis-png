@@ -1,5 +1,8 @@
 const std = @import("std");
 const pipelines = @import("pipelines.zig");
+const parser = @import("parser/parser.zig");
+const zlib = @import("zlib/zlib.zig");
+const deflate = @import("zlib/deflate.zig");
 
 const raylib = @import("raylib");
 
@@ -23,9 +26,48 @@ const ChildrenList = struct
     }
 };
 
-const NodeType = struct
+pub const ChunkDataNodeType = parser.ChunkType;
+
+const chunks = parser.chunks;
+
+const NodeType = union(enum)
 {
-    id: usize,
+    TopLevel: parser.Action,
+    Chunk: parser.ChunkAction,
+    ChunkType: parser.ChunkType,
+
+    ChunkData: union(enum)
+    {
+        RGB: chunks.RGBAction,
+        ImageHeader: chunks.ImageHeaderAction,
+        PrimaryChrom: chunks.PrimaryChromState,
+        ICCProfile: chunks.ICCProfileAction,
+        TextAction: chunks.TextAction,
+        CompressedText: chunks.CompressedTextAction,
+    },
+
+    Zlib: zlib.Action,
+    Deflate: deflate.Action,
+    NoCompression: deflate.noCompression.InitStateAction,
+    FixedHuffman: deflate.fixed.SymbolDecompressionAction,
+    DynamicHuffman: union(enum)
+    {
+        decompression: deflate.dynamic.DecompressionAction,
+        codeDecoding: deflate.dynamic.CodeDecodingAction,
+        codeFrequency: deflate.dynamic.CodeFrequencyAction,
+    },
+
+    pub fn format(
+        self: NodeType,
+        comptime _: []const u8,
+        _: std.fmt.FormatOptions,
+        writer: anytype) !void
+    {
+        switch (self)
+        {
+            inline else => |v| try writer.print("{}", .{ v }),
+        }
+    }
 };
 
 const NodeData = struct
@@ -225,7 +267,7 @@ pub fn createTestTree(allocator: std.mem.Allocator) !AST
         .nodeData = std.ArrayList(NodeData).init(allocator),
     };
     const data = try tree.nodeData.addManyAsArray(10);
-    const defaultType = NodeType { .id = 0 };
+    const defaultType = NodeType { .TopLevel = .Chunk };
     data.*[0] = .{
         .type = defaultType,
         .value = .{
@@ -319,6 +361,7 @@ pub fn main() !void
     const allocator = std.heap.page_allocator;
     const tree = try createTestTree(allocator);
 
+    // try @import("pngDebug.zig").readTestFile();
 
     raylib.SetConfigFlags(raylib.ConfigFlags{ .FLAG_WINDOW_RESIZABLE = true });
     raylib.InitWindow(800, 800, "hello world!");
@@ -384,7 +427,7 @@ pub fn main() !void
                 {
                     const data = context_.tree.nodeData.items[dataIndex];
 
-                    try writer.print(", Type: {d}, ", .{ data.type.id });
+                    try writer.print(", Type: {}, ", .{ data.type });
                     _ = try writer.write("Value: ");
                     try switch (data.value)
                     {

@@ -184,6 +184,27 @@ pub fn readZlibData(
     return false;
 }
 
+pub fn removeAndProcessNextByte(
+    context: *const common.Context,
+    bytesRead: *u32,
+    functor: anytype) !bool
+{
+    const totalBytes = context.state.chunk.object.dataByteLen;
+    std.debug.assert(bytesRead.* <= totalBytes);
+
+    if (bytesRead.* == totalBytes)
+    {
+        return true;
+    }
+
+    const front = try pipelines.removeFirst(context.sequence);
+    bytesRead.* += 1;
+
+    try functor.each(front);
+
+    return (bytesRead.* == totalBytes);
+}
+
 pub fn removeAndProcessAsManyBytesAsAvailable(
     context: *const common.Context,
     bytesRead: *u32,

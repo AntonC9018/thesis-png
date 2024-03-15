@@ -278,7 +278,7 @@ pub const ChunkDataParserState = union
     none: void,
     imageHeader: ImageHeaderAction,
     bytesSkipped: u32,
-    palette: PaletteState, 
+    palette: PaletteState,
     transparency: TransparencyState,
     primaryChrom: PrimaryChromState,
     iccProfile: ICCProfileState,
@@ -336,8 +336,13 @@ pub const ICCProfileState = struct
 
 pub const TransparencyState = union
 {
+    rgbAction: RGBAction,
     bytesRead: u32,
-    rgbIndex: u2,
+
+    pub fn action(self: *const TransparencyState) u2
+    {
+        return self.rgbIndex;
+    }
 };
 
 pub const PrimaryChromState = struct
@@ -352,9 +357,9 @@ pub const PrimaryChromState = struct
     {
         return self.value % 2;
     }
-    pub fn notDone(self: PrimaryChromState) bool
+    pub fn done(self: PrimaryChromState) bool
     {
-        return self.value < 8;
+        return self.value == 8;
     }
     pub fn advance(self: *PrimaryChromState) void
     {
@@ -371,7 +376,6 @@ pub const ImageHeaderAction = enum(u32)
     CompressionMethod,
     FilterMethod,
     InterlaceMethod,
-    Done,
 
     pub const Initial = .Width;
 };
@@ -379,20 +383,24 @@ pub const ImageHeaderAction = enum(u32)
 pub const PaletteState = struct
 {
     bytesRead: u32,
-    rgb: RGBState,
+    action: common.ActionState(RGBAction) = .{ .key = .R },
 };
 
-pub const RGBState = enum
+pub const RGBAction = enum
 {
-    None,
     R,
     G,
     B,
 
-    const FirstColor = .R;
+    pub const FirstColor: RGBAction = .R;
 
-    fn next(self: RGBState) RGBState
+    pub fn next(self: RGBAction) ?RGBAction
     {
+        if (self == .B)
+        {
+            return null;
+        }
+
         return @enumFromInt(@intFromEnum(self) + 1);
     }
 };
@@ -483,19 +491,6 @@ pub const ChunkType = enum(u32)
 // the sequence appropriately and reinterpret error.NotEnoughBytes.
 pub fn initChunkDataNode(context: *const common.Context, chunkType: ChunkType) !void
 {
-    if (context.state.imageHeader == null
-        and chunkType != .ImageHeader)
-    {
-        return error.IHDRChunkNotFirst;
-    }
-
-    if (context.state.isData 
-        and chunkType != .ImageEnd
-        and chunkType != .ImageData)
-    {
-        return error.OnlyEndOrDataAllowedAfterIDAT;
-    }
-
     const chunk = &context.state.chunk;
     const h = struct
     {
@@ -612,7 +607,11 @@ pub fn initChunkDataNode(context: *const common.Context, chunkType: ChunkType) !
                     }
                     h.setTransparencyData(chunk, .{ .rgb = std.mem.zeroes(RGB16) });
 
-                    chunk.dataState = .{ .transparency = .{ .rgbIndex = 0 } };
+                    chunk.dataState = .{ 
+                        .transparency = .{ 
+                            .rgbAction = RGBAction.FirstColor,
+                        },
+                    };
                 },
                 else =>
                 {
@@ -696,31 +695,43 @@ const PlteBytesProcessor = struct
 
     pub fn each(self: *const PlteBytesProcessor, byte: u8) !void
     {
+        const action = &self.plteState.action;
         const color = color:
         {
-            if (self.plteState.rgb != .None)
+            if (!action.initialized)
             {
-                self.plteState.rgb = RGBState.FirstColor;
+                defer action.initialized = true;
                 // We're gonna have a memory leak if we don't move the list.
                 break :color try self.plteNode.colors.addOne(self.context.allocator);
             }
+
             const items = self.plteNode.colors.items;
             break :color &items[items.len - 1];
         };
 
         const colorByte = colorByte:
         {
-            switch (self.plteState.rgb)
+            switch (action.key)
             {
                 .R => break :colorByte &color.r,
                 .G => break :colorByte &color.g,
                 .B => break :colorByte &color.b,
-                .None => unreachable,
             }
         };
         colorByte.* = byte; 
 
-        self.plteState.rgb = self.plteState.rgb.next();
+        // Advance state
+        {
+            if (action.key.next()) |next|
+            {
+                action.key = next;
+            }
+            else
+            {
+                action.key = RGBAction.FirstColor;
+                action.initialized = false;
+            }
+        }
     }
 };
 
@@ -734,6 +745,11 @@ const TransparencyBytesProcessor = struct
         const len = seq.len();
         const newItems = try self.alphaValues.addManyAsSlice(self.allocator, len);
         seq.copyTo(newItems);
+    }
+
+    pub fn each(self: *const TransparencyBytesProcessor, byte: u8) !void
+    {
+        try self.alphaValues.append(self.allocator, byte);
     }
 };
 
@@ -760,6 +776,8 @@ pub fn parseChunkData(context: *const common.Context) !bool
     const chunk = &context.state.chunk;
     const knownChunkType = chunk.object.type;
     const data = &chunk.object.data;
+
+    std.debug.assert(chunk.action.initialized);
 
     switch (knownChunkType)
     {
@@ -835,11 +853,9 @@ pub fn parseChunkData(context: *const common.Context) !bool
                         .None, .Adam7 => {},
                         _ => return error.InvalidInterlaceMethod,
                     }
-                    ihdrState.* = .Done;
                     context.state.imageHeader = ihdr.*;
                     return true;
                 },
-                .Done => unreachable,
             }
             return false;
         },
@@ -855,7 +871,7 @@ pub fn parseChunkData(context: *const common.Context) !bool
                 .plteNode = plteNode,
             };
 
-            const done = try utils.removeAndProcessAsManyBytesAsAvailable(
+            const done = try utils.removeAndProcessNextByte(
                 context,
                 &plteState.bytesRead,
                 functor);
@@ -1004,7 +1020,9 @@ pub fn parseChunkData(context: *const common.Context) !bool
                         .allocator = context.allocator,
                     };
 
-                    return try utils.removeAndProcessAsManyBytesAsAvailable(context, bytesRead, functor);
+                    // const result = try utils.removeAndProcessAsManyBytesAsAvailable(context, bytesRead, functor);
+                    const done = try utils.removeAndProcessNextByte(context, bytesRead, functor);
+                    return done;
                 },
                 .gray => |*gray|
                 {
@@ -1013,12 +1031,13 @@ pub fn parseChunkData(context: *const common.Context) !bool
                 },
                 .rgb => |*rgb|
                 {
-                    const rgbIndex = &chunk.dataState.transparency.rgbIndex;
-                    while (rgbIndex.* < 2)
+                    const rgbAction = &chunk.dataState.transparency.rgbAction;
+                    if (rgbAction.next()) |next|
                     {
                         const value = try pipelines.readNetworkUnsigned(context.sequence, u16);
-                        rgb.at(rgbIndex.*).* = value;
-                        rgbIndex.* += 1;
+                        rgb.at(@intFromEnum(next)).* = value;
+                        rgbAction.* = next;
+                        return false;
                     }
                     return true;
                 },
@@ -1034,18 +1053,17 @@ pub fn parseChunkData(context: *const common.Context) !bool
         {
             const chromState = &chunk.dataState.primaryChrom;
             const primaryChroms = &data.primaryChroms;
-            while (chromState.notDone())
-            {
-                const value = try pipelines.readNetworkUnsigned(context.sequence, u32);
+            const value = try pipelines.readNetworkUnsigned(context.sequence, u32);
 
-                const vector = chromState.vector();
-                const index = chromState.coord();
-                const targetPointer = &primaryChroms.values[vector].values[index];
-                targetPointer.* = value;
+            const vector = chromState.vector();
+            const index = chromState.coord();
+            const targetPointer = &primaryChroms.values[vector].values[index];
+            targetPointer.* = value;
 
-                chromState.advance();
-            }
-            return true;
+            chromState.advance();
+
+            const done = chromState.done();
+            return done;
         },
         .ColorSpace =>
         {

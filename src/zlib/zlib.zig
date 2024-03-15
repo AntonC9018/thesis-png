@@ -12,14 +12,13 @@ const Header = struct
     dictionaryId: u4,
 };
 
-const Action = enum
+pub const Action = enum
 {
     CompressionMethodAndFlags,
     Flags,
     PresetDictionary,
     CompressedData,
     Adler32Checksum,
-    Done,
 };
 
 const Adler32State = struct
@@ -259,7 +258,6 @@ pub fn decode(context: *const Context) !bool
 
             return true;
         },
-        .Done => unreachable,
     }
     return false;
 }

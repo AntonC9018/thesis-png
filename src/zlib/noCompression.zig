@@ -42,11 +42,10 @@ pub fn decompress(context: *const helper.DeflateContext, state: *DecompressionSt
     }
 }
 
-const InitStateAction = enum
+pub const InitStateAction = enum
 {
     Len,
     NLen,
-    Done,
 };
 
 pub const State = union
@@ -87,10 +86,7 @@ pub fn initState(context: *const helper.DeflateContext, state: *InitState) !bool
             {
                 return error.NLenNotOnesComplement;
             }
-
-            state.action = .Done;
             return true;
         },
-        .Done => unreachable,
     }
 }

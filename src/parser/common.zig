@@ -6,10 +6,9 @@ pub const utils = @import("utils.zig");
 
 
 // What is the next expected type?
-pub const Action = enum(u8) 
+pub const Action = enum
 {
-    Signature = 0,
-    StartChunk,
+    Signature,
     Chunk,
 };
 
@@ -20,13 +19,15 @@ pub const ChunkAction = enum
     ChunkType,
     Data,
     CyclicRedundancyCheck,
-    Done,
 };
 
 pub const State = struct
 {
     chunk: ChunkState,
-    action: Action = .Signature,
+    action: ActionState(Action) = .{ 
+        .key = .Signature,
+        .initialized = true,
+    },
 
     imageHeader: ?chunks.ImageHeader = null,
     // True after the IEND chunk has been parsed.
@@ -40,7 +41,8 @@ pub const State = struct
 
 pub fn isParserStateTerminal(state: *const State) bool 
 {
-    return state.action == .StartChunk;
+    return state.action.key == .Chunk 
+        and !state.action.initialized;
 }
 
 pub const Context = struct
@@ -50,7 +52,6 @@ pub const Context = struct
     allocator: std.mem.Allocator,
     settings: *const Settings,
 };
-
 
 pub const Settings = struct
 {
@@ -116,8 +117,41 @@ pub const Chunk = struct
 
 pub const ChunkState = struct
 {
-    key: ChunkAction = .Length,
+    action: ActionState(ChunkAction) = .{ 
+        .key = .Length,
+        .initialized = true,
+    },
     object: Chunk,
     dataState: chunks.ChunkDataParserState,
 };
+
+pub fn ActionState(ActionType: type) type
+{
+    return struct
+    {
+        key: ActionType,
+        initialized: bool = false,
+    };
+}
+
+pub fn initStateForAction(
+    context: *const Context,
+    action: anytype,
+// fn(*const Context, @TypeOf(action.key)) anyerror!void
+    initialize: anytype) !void
+{
+    if (@typeInfo(@TypeOf(action)) != .Pointer)
+    {
+        @compileLog("Action must be passed by reference");
+    }
+
+    if (action.initialized)
+    {
+        return;
+    }
+
+    try initialize(context, action.key);
+
+    action.initialized = true;
+}
 

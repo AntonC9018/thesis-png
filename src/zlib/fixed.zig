@@ -1,7 +1,18 @@
 const helper = @import("helper.zig");
 const std = helper.std;
 
-pub const SymbolDecompressionState = union(enum)
+pub const SymbolDecompressionAction = enum
+{
+    Code7,
+    Code8,
+    Code9,
+    Code9Value,
+    Length,
+    DistanceCode,
+    Distance,
+};
+
+pub const SymbolDecompressionState = union(SymbolDecompressionAction)
 {
     Code7: void,
     Code8: void,

@@ -61,7 +61,6 @@ pub const Action = enum
     BlockType,
     BlockInit,
     DecompressionLoop,
-    Done,
 
     pub const Initial: Action = .IsFinal;
 };
@@ -170,7 +169,7 @@ pub fn deflate(context: *const Context) !bool
                 {
                     // This reads as much as possible, because there's nothing interesting going on.
                     try noCompression.decompress(context, &s.decompression);
-                    state.action = .Done;
+                    return true;
                 },
                 .FixedHuffman => |*s|
                 {
@@ -189,9 +188,8 @@ pub fn deflate(context: *const Context) !bool
                 .Reserved => unreachable,
             }
         },
-        .Done => unreachable,
     }
-    return state.action == .Done;
+    return false;
 }
 
 pub fn skipToWholeByte(context: *const Context) void

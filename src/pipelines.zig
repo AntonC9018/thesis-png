@@ -301,6 +301,11 @@ pub const Sequence = struct
         return self.range.len;
     }
 
+    pub fn isEmpty(self: *const Sequence) bool
+    {
+        return self.len() == 0;
+    }
+
     pub fn getStartBytePosition(self: *const Sequence) usize
     {
         return self.start().getBytePosition();
@@ -336,11 +341,6 @@ pub const Sequence = struct
         }
 
         unreachable;
-    }
-
-    pub fn isEmpty(self: *const Sequence) bool
-    {
-        return self.len() == 0;
     }
 
     fn getWholeSegmentCount(self: *const Sequence) u32

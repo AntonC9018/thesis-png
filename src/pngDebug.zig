@@ -134,13 +134,14 @@ fn doMaximumAmountOfParsing(
 {
     while (true)
     {
+        const currentlyParsing = context.state.action.key;
         const isDone = try parser.parseTopLevelItem(context);
         if (!isDone)
         {
             continue;
         }
 
-        switch (context.state.action)
+        switch (currentlyParsing)
         {
             .Signature => 
             {
@@ -151,10 +152,8 @@ fn doMaximumAmountOfParsing(
                 const newItem = try nodes.addOne();
                 newItem.* = context.state.chunk.object;
             },
-            .StartChunk => unreachable,
         }
 
-        context.state.action = .StartChunk;
         if (context.state.isEnd)
         {
             return;

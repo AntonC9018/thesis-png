@@ -2,7 +2,7 @@ const helper = @import("helper.zig");
 const huffman = helper.huffman;
 const std = helper.std;
 
-const CodeDecodingAction = enum
+pub const CodeDecodingAction = enum
 {
     LiteralOrLenCodeCount,
     DistanceCodeCount,
@@ -10,14 +10,12 @@ const CodeDecodingAction = enum
     CodeLens,
     LiteralOrLenCodeLens,
     DistanceCodeLens,
-    Done,
 };
 
-const CodeFrequencyAction = enum
+pub const CodeFrequencyAction = enum
 {
     LiteralLen,
     RepeatCount,
-    Done,
 };
 
 const CodeFrequencyState = struct
@@ -97,7 +95,7 @@ pub const CodeDecodingState = struct
     }
 };
 
-const DecompressionAction = enum
+pub const DecompressionAction = enum
 {
     LiteralOrLen,
     Distance,
@@ -203,13 +201,11 @@ pub fn decodeCodes(
 
             if (readAllArray)
             {
-                state.action = .Done;
                 return true;
             }
 
             return false;
         },
-        .Done => unreachable,
     }
 }
 
@@ -244,7 +240,6 @@ fn readCodeLenEncodedFrequency(
                 return false;
             }
 
-            freqState.action = .Done;
             outputArray[readCount.*] = len;
             readCount.* += 1;
             return true;
@@ -269,10 +264,8 @@ fn readCodeLenEncodedFrequency(
                 outputArray[index] = repeatedLen;
             }
             readCount.* += repeatCount;
-            freqState.action = .Done;
             return true;
         },
-        .Done => unreachable,
     }
 }
 

@@ -542,7 +542,6 @@ pub fn writeSymbolToOutput(context: *const DeflateContext, symbol: ?Symbol) !boo
         const done = try writeSymbolToOutput_switch(context, s);
         if (done)
         {
-            context.state.action = .Done;
             return true;
         }
     }
