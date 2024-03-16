@@ -30,11 +30,13 @@ pub const ChunkDataNodeType = parser.ChunkType;
 
 const chunks = parser.chunks;
 
+const NodeIndex = usize;
+const NodeDataIndex = usize;
+
 const NodeType = union(enum)
 {
     TopLevel: parser.Action,
     Chunk: parser.ChunkAction,
-    ChunkType: parser.ChunkType,
 
     ChunkData: union(enum)
     {
@@ -52,9 +54,9 @@ const NodeType = union(enum)
     FixedHuffman: deflate.fixed.SymbolDecompressionAction,
     DynamicHuffman: union(enum)
     {
-        decompression: deflate.dynamic.DecompressionAction,
-        codeDecoding: deflate.dynamic.CodeDecodingAction,
-        codeFrequency: deflate.dynamic.CodeFrequencyAction,
+        Decompression: deflate.dynamic.DecompressionAction,
+        CodeDecoding: deflate.dynamic.CodeDecodingAction,
+        CodeFrequency: deflate.dynamic.CodeFrequencyAction,
     },
 
     pub fn format(
@@ -78,6 +80,7 @@ const NodeData = struct
     {
         string: []const u8,
         number: usize,
+        none: void,
     },
 };
 
@@ -243,13 +246,13 @@ const Node = struct
     // but it does allow you to gauge the edges.
     // If there are no children, it's just the range of the node.
     span: NodeSpan,
-    nodeData: ?usize,
+    nodeData: ?NodeDataIndex,
     children: ChildrenList,
 };
 
 const AST = struct
 {
-    rootNodes: std.ArrayList(usize),
+    rootNodes: std.ArrayList(NodeIndex),
     nodes: std.ArrayList(Node),
     nodeData: std.ArrayList(NodeData),
 
@@ -356,12 +359,321 @@ pub fn createTestTree(allocator: std.mem.Allocator) !AST
     return tree;
 }
 
+const debug = @import("pngDebug.zig");
+
+pub fn getBitPosition(state: *const parser.State) u3
+{
+    const getBitPositionFromZlib = struct
+    {
+        fn f(z: *const zlib.State) u3
+        {
+            return switch (z.action)
+            {
+                else => 0,
+                .CompressedData => z.decompressor.deflate.bitOffset,
+            };
+        }
+    }.f;
+
+    switch (state.action.key)
+    {
+        else => return 0,
+        .Chunk =>
+        {
+            const chunk = &state.chunk;
+            switch (chunk.action.key)
+            {
+                else => return 0,
+                .Data =>
+                {
+                    const data = &chunk.dataState;
+                    switch (chunk.object.type)
+                    {
+                        else => return 0,
+                        .CompressedText =>
+                        {
+                            return getBitPositionFromZlib(&data.compressedText.zlib);
+                        },
+                        .ImageData =>
+                        {
+                            // TODO:
+                            // Check if the carry over buffer has any bytes,
+                            // then the start will be in there.
+                            return getBitPositionFromZlib(&state.imageData.zlib);
+                        },
+                        .ICCProfile =>
+                        {
+                            return getBitPositionFromZlib(&data.iccProfile.zlib);
+                        },
+                        .InternationalText =>
+                        {
+                            // TODO: Unimplemented
+                            unreachable;
+                        }
+                    }
+                },
+            }
+        },
+    }
+}
+
+fn getCompletePosition(
+    state: *const parser.State,
+    sequence: *const pipelines.Sequence) NodePosition
+{
+    const byteOffset = sequence.getStartBytePosition();
+    const bitOffset = getBitPosition(state, sequence);
+    return .{
+        .byte = byteOffset,
+        .bit = bitOffset,
+    };
+}
+
+const NodeResult = struct 
+{
+    item: *Node,
+    index: NodeIndex,
+};
+
+const NodeDataResult = struct
+{
+    item: *NodeData,
+    index: NodeDataIndex,
+};
+
+const TreeConstructionContext = struct
+{
+    parserState: parser.State,
+    allocator: std.mem.Allocator,
+    nodePath: std.ArrayListUnmanaged(NodeIndex),
+    tree: AST,
+    
+    pub fn lastNode(self: *const TreeConstructionContext) ?NodeResult
+    {
+        const nodes = self.nodePath.items;
+        if (nodes.len == 0)
+        {
+            return null;
+        }
+        const index = nodes.len - 1;
+        return .{
+            .item = &nodes[index],
+            .index = index,
+        };
+    }
+
+    pub fn addUninitializedNodeAtPosition(
+        self: *TreeConstructionContext,
+        params: struct
+        {
+            startPosition: NodePosition,
+            parentNode: ?*Node,
+            data: ?NodeDataIndex = null,
+        }) !NodeResult
+    {
+        const nodes = &self.tree.nodes;
+        const index = nodes.items.len;
+        try nodes.addOne(std.mem.zeroInit(Node, .{
+            .span = std.mem.zeroInit(NodeSpan, .{
+                .start = params.startPosition,
+            }),
+        }));
+
+        if (params.parentNode) |parent|
+        {
+            // NOTE: the span has not yet been updated at this point.
+            try parent.children.array.addOne(self.tree.childrenAllocator(), index);
+        }
+        else
+        {
+            try self.tree.rootNodes.addOne(index);
+        }
+
+        return .{ 
+            .item = &nodes.items[index],
+            .index = index,
+        };
+    }
+
+    pub fn addNodeData(
+        self: *TreeConstructionContext,
+        params: struct
+        {
+            type: NodeType,
+        }) !NodeDataResult
+    {
+        const nodeDatas = &self.tree.nodeData;
+        const index = nodeDatas.items.len;
+        try nodeDatas.addOne(NodeData
+        {
+            .type = params.type,
+            .value = .{ .none = {} },
+        });
+
+        return .{
+            .item = &nodeDatas.items[index],
+            .index = index,
+        };
+    }
+};
+
+const AddChildToLastNodeResult = struct
+{
+    node: NodeResult,
+    data: NodeDataResult,
+};
+
+fn addChildToLastNode(
+    context: *TreeConstructionContext,
+    params: struct
+    {
+        position: NodePosition,
+        nodeType: NodeType,
+    })
+    !AddChildToLastNodeResult
+{
+    const data = try context.addNodeData(.{
+        .type = params.nodeType,
+    });
+    const lastNode = context.lastNode();
+    const node = try context.addUninitializedNodeAtPosition(.{
+        .startPosition = params.position,
+        .parentNode = if (lastNode) |n| n.index else null,
+        .dataNode = data.index,
+    });
+    return .{
+        .node = node,
+        .data = data,
+    };
+}
+
+fn getNodeType(action: anytype) NodeType
+{
+    const nodeTypeInfo = @typeInfo(NodeType);
+    for (nodeTypeInfo.Union.fields) |field|
+    {
+        const fieldTypeInfo = @typeInfo(field.type);
+        switch (fieldTypeInfo)
+        {
+            .Union => |u|
+            {
+                for (u.fields) |nestedField|
+                {
+                    if (@TypeOf(action) == nestedField.type)
+                    {
+                        return @unionInit(NodeType, field.name, 
+                            @unionInit(field.type, nestedField.name, action));
+                    }
+                }
+            },
+            .Struct, .Enum =>
+            {
+                if (@TypeOf(action) == field.type)
+                {
+                    return @unionInit(NodeType, field.name, action);
+                }
+            },
+            else => unreachable,
+        }
+    }
+
+    @compileError("Unhandled action type: " ++ @typeName(@TypeOf(action)));
+}
+
+fn maybeAddChildToLastNode(
+    context: *TreeConstructionContext,
+    action: anytype, // ActionState(Action)
+    position: NodePosition)
+    !?AddChildToLastNodeResult
+{
+    if (action.initialized)
+    {
+        return null;
+    }
+    const nodeType = getNodeType(action.key);
+    const result = try addChildToLastNode(context, .{
+        .position = position,
+        .nodeType = nodeType,
+    });
+    return result;
+}
+
+fn initNodesForCurrentAction(
+    context: *TreeConstructionContext,
+    sequence: *const pipelines.Sequence) !void
+{
+    const currentPosition = getCompletePosition(context.parserState, sequence);
+    const state = &context.parserState;
+    
+    if (try maybeAddChildToLastNode(context, state.action, currentPosition))
+    {
+        return;
+    }
+
+    switch (state.action.key)
+    {
+        .Signature => {},
+        .Chunk =>
+        {
+            const chunk = &state.chunk;
+            // The ways to figure out if the node has already been created:
+            // 1. Scan. Unreliable.
+            // 2. Check the length. Create if doesn't exist. Will work, but it's fragile.
+            // 3. Do the initialized field for every action. 
+            //    Reliable, easy to manage, but forces structure on the parser.
+            // 
+            // I think 3 is best.
+            if (try maybeAddChildToLastNode(context, chunk.action, currentPosition)) |n|
+            {
+                if (chunk.action.key == .Data)
+                {
+                    n.data.item = .{
+                        .ChunkType = chunk.object.type,
+                    };
+                }
+                return;
+            }
+
+            switch (chunk.action.key)
+            {
+                else => return,
+                .Data =>
+                {
+                    
+                },
+            }
+        },
+    }
+}
+
+fn parseIntoTree(allocator: std.mem.Allocator) !AST
+{
+    // Special case: filling in the data node of a previously created node for image data spread across chunks.
+    // Take bit offset into consideration.
+    var testContext = try debug.openTestReader(allocator);
+    defer testContext.deinit();
+
+    const reader = &testContext.reader;
+    var parserState = parser.createParserState();
+    const parserSettings = parser.Settings
+    {
+        .logChunkStart = true,
+    };
+
+
+    outerLoop: while (true)
+    {
+        const readResult = reader.read() catch unreachable;
+        const startPos = getCompletePosition(readResult.sequence);
+    }
+}
+
 pub fn main() !void
 {
     const allocator = std.heap.page_allocator;
     const tree = try createTestTree(allocator);
 
-    // try @import("pngDebug.zig").readTestFile();
+    // try .readTestFile();
 
     raylib.SetConfigFlags(raylib.ConfigFlags{ .FLAG_WINDOW_RESIZABLE = true });
     raylib.InitWindow(800, 800, "hello world!");

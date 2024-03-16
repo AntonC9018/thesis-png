@@ -777,8 +777,6 @@ pub fn parseChunkData(context: *const common.Context) !bool
     const knownChunkType = chunk.object.type;
     const data = &chunk.object.data;
 
-    std.debug.assert(chunk.action.initialized);
-
     switch (knownChunkType)
     {
         .ImageHeader =>

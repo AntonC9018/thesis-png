@@ -26,7 +26,6 @@ pub const State = struct
     chunk: ChunkState,
     action: ActionState(Action) = .{ 
         .key = .Signature,
-        .initialized = true,
     },
 
     imageHeader: ?chunks.ImageHeader = null,
@@ -56,6 +55,7 @@ pub const Context = struct
 pub const Settings = struct
 {
     logChunkStart: bool,
+    returnOnInit: bool = false,
 };
 
 
@@ -117,10 +117,7 @@ pub const Chunk = struct
 
 pub const ChunkState = struct
 {
-    action: ActionState(ChunkAction) = .{ 
-        .key = .Length,
-        .initialized = true,
-    },
+    action: ActionState(ChunkAction) = .{ .key = .Length },
     object: Chunk,
     dataState: chunks.ChunkDataParserState,
 };
@@ -137,7 +134,7 @@ pub fn ActionState(ActionType: type) type
 pub fn initStateForAction(
     context: *const Context,
     action: anytype,
-// fn(*const Context, @TypeOf(action.key)) anyerror!void
+    // fn(*const Context, @TypeOf(action.key)) anyerror!void
     initialize: anytype) !void
 {
     if (@typeInfo(@TypeOf(action)) != .Pointer)
@@ -153,5 +150,10 @@ pub fn initStateForAction(
     try initialize(context, action.key);
 
     action.initialized = true;
+
+    if (context.settings.returnOnInit)
+    {
+        return error.StateInitialized;
+    }
 }
 

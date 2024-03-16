@@ -2,24 +2,49 @@ const std = @import("std");
 const parser = @import("parser/parser.zig");
 const pipelines = @import("pipelines.zig");
 
-pub fn readTestFile() !void
+pub const TestReaderContext = struct
+{
+    directory: std.fs.Dir,
+    reader: pipelines.Reader(@TypeOf(std.fs.File.Reader)),
+
+    pub fn deinit(self: *TestReaderContext) void
+    {
+        const file = self.reader.dataProvider.context;
+        file.close();
+
+        self.directory.close();
+    }
+};
+
+pub fn openTestReader(allocator: std.mem.Allocator) !TestReaderContext
 {
     var cwd = std.fs.cwd();
 
     var testDir = try cwd.openDir("test_data", .{ .access_sub_paths = true, });
-    defer testDir.close();
+    errdefer testDir.close();
 
     var file = try testDir.openFile("test.png", .{ .mode = .read_only, });
-    defer file.close();
+    errdefer file.close();
 
-    const allocator = std.heap.page_allocator;
-    var reader = pipelines.Reader(@TypeOf(file.reader()))
+    const reader = pipelines.Reader(@TypeOf(file.reader()))
     {
         .dataProvider = file.reader(),
         .allocator = allocator,
         .preferredBufferSize = 4096, // TODO: Get optimal block size from OS.
     };
-    defer reader.deinit();
+    return .{
+        .directory = testDir,
+        .reader = reader,
+    };
+}
+
+pub fn readTestFile() !void
+{
+    const allocator = std.heap.page_allocator;
+    var readerContext = try openTestReader(allocator);
+    defer readerContext.deinit();
+
+    const reader = &readerContext.reader;
 
     var parserState = parser.createParserState();
     var chunks = std.ArrayList(parser.Chunk).init(allocator);

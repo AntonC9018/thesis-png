@@ -46,10 +46,11 @@ pub fn printStepName(writer: anytype, parserState: *const State) !void
                     // TODO:
                     // this probably needs some structure
                     // and I should solve this with reflection.
-                    if (!chunk.action.initialized)
+                    if (!chunk.action.firstEntry)
                     {
                         return;
                     }
+
                     switch (chunk.object.type)
                     {
                         .ImageHeader =>
@@ -231,7 +232,7 @@ pub fn parseNextItem(context: *const Context) !bool
             const isDone = try parseChunkItem(context);
             if (isDone)
             {
-                action.initialized = false;
+                action.firstEntry = false;
                 return true;
             }
         },
@@ -246,13 +247,11 @@ pub fn initChunkItem(
     const chunk = &context.state.chunk;
     switch (key)
     {
-        .Length => unreachable,
-        .ChunkType => unreachable,
+        else => {},
         .Data =>
         {
             try chunks.initChunkDataNode(context, chunk.object.type);
         },
-        .CyclicRedundancyCheck => unreachable,
     }
 }
 
@@ -261,7 +260,10 @@ pub fn parseChunkItem(context: *const Context) !bool
 {
     const chunk = &context.state.chunk;
 
-    try common.initStateForAction(context, &chunk.action, initChunkItem);
+    if (try common.initStateForAction(context, &chunk.action, initChunkItem))
+    {
+        return false;
+    }
 
     switch (chunk.action.key)
     {
@@ -274,7 +276,7 @@ pub fn parseChunkItem(context: *const Context) !bool
             };
 
             chunk.object.dataByteLen = len;
-            chunk.action.key = .ChunkType;
+            chunk.action = .{ .key = .ChunkType };
             return false;
         },
         .ChunkType =>
@@ -317,7 +319,7 @@ pub fn parseChunkItem(context: *const Context) !bool
             const done = try chunks.parseChunkData(context);
             if (done)
             {
-                chunk.action.key = .CyclicRedundancyCheck;
+                chunk.action = .{ .key = .CyclicRedundancyCheck };
             }
             return false;
         },
