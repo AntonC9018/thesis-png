@@ -46,7 +46,7 @@ pub fn printStepName(writer: anytype, parserState: *const State) !void
                     // TODO:
                     // this probably needs some structure
                     // and I should solve this with reflection.
-                    if (!chunk.action.firstEntry)
+                    if (!chunk.action.initialized)
                     {
                         return;
                     }
@@ -232,7 +232,7 @@ pub fn parseNextItem(context: *const Context) !bool
             const isDone = try parseChunkItem(context);
             if (isDone)
             {
-                action.firstEntry = false;
+                action.initialized = false;
                 return true;
             }
         },
@@ -260,10 +260,7 @@ pub fn parseChunkItem(context: *const Context) !bool
 {
     const chunk = &context.state.chunk;
 
-    if (try common.initStateForAction(context, &chunk.action, initChunkItem))
-    {
-        return false;
-    }
+    try common.initStateForAction(context, &chunk.action, initChunkItem);
 
     switch (chunk.action.key)
     {

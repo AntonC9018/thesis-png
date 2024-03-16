@@ -78,9 +78,10 @@ const NodeData = struct
     type: NodeType,
     value: union(enum)
     {
-        string: []const u8,
-        number: usize,
-        none: void,
+        String: []const u8,
+        Number: usize,
+        ChunkType: parser.ChunkType,
+        None: void,
     },
 };
 
@@ -627,7 +628,7 @@ fn initNodesForCurrentAction(
             {
                 if (chunk.action.key == .Data)
                 {
-                    n.data.item = .{
+                    n.data.item.value = .{
                         .ChunkType = chunk.object.type,
                     };
                 }
@@ -639,7 +640,9 @@ fn initNodesForCurrentAction(
                 else => return,
                 .Data =>
                 {
-                    
+                    switch (chunk.object.type)
+                    {
+                    }
                 },
             }
         },

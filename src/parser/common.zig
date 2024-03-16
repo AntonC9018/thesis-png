@@ -24,7 +24,7 @@ pub const ChunkAction = enum
 pub const State = struct
 {
     chunk: ChunkState,
-    action: ActionState(Action) = .{ 
+    action: Initiable(Action) = .{ 
         .key = .Signature,
     },
 
@@ -117,22 +117,67 @@ pub const Chunk = struct
 
 pub const ChunkState = struct
 {
-    action: ActionState(ChunkAction) = .{ .key = .Length },
+    action: Initiable(ChunkAction) = .{ .key = .Length },
     object: Chunk,
-    dataState: chunks.ChunkDataParserState,
+    dataState: chunks.ChunkDataState,
 };
 
-pub fn ActionState(ActionType: type) type
+fn MaybeConst(Self: type, Result: type) type
+{
+    const info = @typeInfo(Self);
+    if (info.Pointer.is_const)
+    {
+        return *const Result;
+    }
+    else
+    {
+        return *Result;
+    }
+}
+
+pub fn InitiableThroughPointer(ActionType: type) type
+{
+    return struct
+    {
+        key: *ActionType,
+        initialized: *bool,
+
+        const Self = @This();
+
+        pub fn keyPointer(self: anytype) MaybeConst(@TypeOf(self), ActionType)
+        {
+            return self.key;
+        }
+        pub fn initializedPointer(self: anytype) MaybeConst(@TypeOf(self), bool)
+        {
+            return self.initialized;
+        }
+    };
+}
+
+pub fn Initiable(ActionType: type) type
 {
     return struct
     {
         key: ActionType,
         initialized: bool = false,
+
+        const Self = @This();
+
+        pub fn keyPointer(self: anytype) MaybeConst(@TypeOf(self), ActionType)
+        {
+            return &self.key;
+        }
+        pub fn initializedPointer(self: anytype) MaybeConst(@TypeOf(self), bool)
+        {
+            return &self.initialized;
+        }
     };
 }
 
 pub fn initStateForAction(
     context: *const Context,
+    // see common.Initiable
     action: anytype,
     // fn(*const Context, @TypeOf(action.key)) anyerror!void
     initialize: anytype) !void
@@ -142,14 +187,22 @@ pub fn initStateForAction(
         @compileLog("Action must be passed by reference");
     }
 
-    if (action.initialized)
+    if (action.initializedPointer().*)
     {
         return;
     }
 
-    try initialize(context, action.key);
+    if (@hasDecl(@TypeOf(initialize), "execute"))
+    {
+        try initialize.execute();
+    }
 
-    action.initialized = true;
+    else if (@TypeOf(initialize) != void)
+    {
+        try initialize(context, action.keyPointer().*);
+    }
+
+    action.initializedPointer().* = true;
 
     if (context.settings.returnOnInit)
     {

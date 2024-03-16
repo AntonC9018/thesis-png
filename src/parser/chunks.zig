@@ -273,18 +273,148 @@ fn contains(arr: []const u8, value: u8) bool
     return false;
 }
 
-pub const ChunkDataParserState = union
+pub const ChunkDataState = struct
 {
+    action: common.Initiable(ChunkDataAction),
+    value: union
+    {
+        none: void,
+        bytesSkipped: u32,
+        palette: PaletteState,
+        transparency: TransparencyState,
+        primaryChrom: PrimaryChromState,
+        iccProfile: ICCProfileState,
+        text: TextState,
+        compressedText: CompressedTextState,
+        imageData: ImageDataState,
+    },
+};
+
+pub const TaggedChunkDataAction = union(ChunkType)
+{
+    ImageHeader: *ImageHeaderAction,
+    Palette: void, // Only RGB
+    ImageData: void, // Only Zlib
+    ImageEnd: void, // No bytes
+
+    Transparency: *TransparencyAction, // Only RGB
+    Gamma: void, // Only value
+    PrimaryChrom: void, // TODO: I don't remember what it does
+    ColorSpace: void, // Only rendering intent
+    ICCProfile: *ICCProfileAction,
+
+    Text: *TextAction,
+    CompressedText: *CompressedTextAction,
+    InternationalText: void, // TODO:
+
+    // TODO:
+    Background: void,
+    PhysicalPixelDimensions: void,
+    SignificantBits: void,
+    SuggestedPalette: void,
+    PaletteHistogram: void,
+    LastModificationTime: void,
+
+    _: void,
+};
+
+pub const ChunkDataAction: type = b:
+{
+    var info = @typeInfo(TaggedChunkDataAction);
+    info.Union.tag_type = null;
+    for (info.Union.fields) |*f|
+    {
+        f.type = newType:
+        {
+            const pointerOrVoid = f.type;
+            if (pointerOrVoid == void)
+            {
+                break :newType void;
+            }
+            const pointerInfo = @typeInfo(pointerOrVoid);
+            break :newType pointerInfo.Pointer.child;
+        };
+    }
+    break :b @Type(info);
+};
+
+pub const TaggedChunkDataStatePointer = union(ChunkType)
+{
+    ImageHeader: void,
+    Palette: *PaletteState,
+    ImageData: *ImageDataState,
+    ImageEnd: void,
+
+    Transparency: *TransparencyState,
+    Gamma: void,
+    PrimaryChrom: *PrimaryChromState,
+    ColorSpace: void,
+    ICCProfile: *ICCProfileState,
+
+    Text: *TextState,
+    CompressedText: *CompressedTextState,
+    InternationalText: void,
+
+    Background: void,
+    PhysicalPixelDimensions: void,
+    SignificantBits: void,
+    SuggestedPalette: void,
+    PaletteHistogram: void,
+    LastModificationTime: void,
+    _: void,
+};
+
+pub fn ActionAndState(Action: type, State: type) type
+{
+    return struct
+    {
+        action: common.InitiableThroughPointer(Action),
+        state: *State,
+
+        pub fn actionKey(self: *const @This()) Action
+        {
+            return self.action.keyPointer().*;
+        }
+
+        pub fn resetAction(self: *@This(), newAction: Action) void
+        {
+            self.action.keyPointer().* = newAction;
+            self.action.initializedPointer().* = false;
+        }
+    };
+}
+
+const TransparencyAction = union(enum)
+{
+    RGB: RGBAction,
     none: void,
-    imageHeader: ImageHeaderAction,
-    bytesSkipped: u32,
-    palette: PaletteState,
-    transparency: TransparencyState,
-    primaryChrom: PrimaryChromState,
-    iccProfile: ICCProfileState,
-    text: TextState,
-    compressedText: CompressedTextState,
-    imageData: ImageDataState,
+};
+
+// Not generated with reflection, for better LSP experience.
+const TaggedNodeDataActionAndState = union(enum)
+{
+    ImageHeader: ActionAndState(ImageHeaderAction, void),
+    Palette: ActionAndState(void, PaletteState), // Only RGB
+    ImageData: ActionAndState(void, ImageDataState), // Only Zlib
+    ImageEnd: ActionAndState(void, void), // No bytes
+
+    Transparency: ActionAndState(TransparencyAction, TransparencyState), // Only RGB
+    Gamma: ActionAndState(void, void), // Only value
+    PrimaryChrom: ActionAndState(void, PrimaryChromState), // TODO: I don't remember what it does
+    ColorSpace: ActionAndState(void, void), // Only rendering intent
+    ICCProfile: ActionAndState(ICCProfileAction, ICCProfileState),
+
+    Text: ActionAndState(TextAction, TextState),
+    CompressedText: ActionAndState(CompressedTextAction, CompressedTextState),
+    InternationalText: ActionAndState(void, void), // TODO:
+
+    // TODO:
+    Background: ActionAndState(void, void),
+    PhysicalPixelDimensions: ActionAndState(void, void),
+    SignificantBits: ActionAndState(void, void),
+    SuggestedPalette: ActionAndState(void, void),
+    PaletteHistogram: ActionAndState(void, void),
+    LastModificationTime: ActionAndState(void, void),
 };
 
 pub const ImageDataState = struct
@@ -303,7 +433,6 @@ pub const CompressedTextAction = enum
 pub const CompressedTextState = struct
 {
     bytesRead: u32 = 0,
-    action: CompressedTextAction = .Keyword,
     zlib: zlib.State,
 };
 
@@ -316,7 +445,6 @@ pub const TextAction = enum
 pub const TextState = struct
 {
     bytesRead: u32 = 0,
-    action: TextAction = .Keyword,
     text: std.ArrayListUnmanaged(u8) = .{},
 };
 
@@ -329,20 +457,14 @@ pub const ICCProfileAction = enum
 
 pub const ICCProfileState = struct
 {
-    action: ICCProfileAction = .ProfileName,
     bytes: std.ArrayListUnmanaged(u8) = .{},
     zlib: zlib.State,
 };
 
-pub const TransparencyState = union
-{
-    rgbAction: RGBAction,
-    bytesRead: u32,
 
-    pub fn action(self: *const TransparencyState) u2
-    {
-        return self.rgbIndex;
-    }
+pub const TransparencyState = struct
+{
+    bytesRead: u32,
 };
 
 pub const PrimaryChromState = struct
@@ -383,7 +505,7 @@ pub const ImageHeaderAction = enum(u32)
 pub const PaletteState = struct
 {
     bytesRead: u32,
-    action: common.ActionState(RGBAction) = .{ .key = .R },
+    rgbAction: common.Initiable(RGBAction) = .{ .key = .R },
 };
 
 pub const RGBAction = enum
@@ -687,25 +809,36 @@ pub const DataNodeParserState = union
     imageData: ImageDataState,
 };
 
-const PlteBytesProcessor = struct
+const PaletteBytesProcessor = struct
 {
     context: *const common.Context,
-    plteState: *PaletteState,
-    plteNode: *Palette,
+    state: *PaletteState,
+    data: *Palette,
 
-    pub fn each(self: *const PlteBytesProcessor, byte: u8) !void
+    const InitStateForAction = struct
     {
-        const action = &self.plteState.action;
+        colors: *std.ArrayListUnmanaged(RGB),
+        allocator: std.mem.Allocator,
+
+        fn execute(self: *InitStateForAction) !void
+        {
+            // We're gonna have a memory leak if we don't move the list.
+            _ = self.colors.addOne(self.allocator);
+        }
+    };
+
+    pub fn each(self: *const PaletteBytesProcessor, byte: u8) !void
+    {
+        const action = &self.state.rgbAction;
         const color = color:
         {
-            if (!action.initialized)
+            try common.initStateForAction(self.context, action, InitStateForAction
             {
-                defer action.initialized = true;
-                // We're gonna have a memory leak if we don't move the list.
-                break :color try self.plteNode.colors.addOne(self.context.allocator);
-            }
+                .colors = &self.data.colors,
+                .allocator = self.context.allocator,
+            });
 
-            const items = self.plteNode.colors.items;
+            const items = self.data.colors.items;
             break :color &items[items.len - 1];
         };
 
@@ -771,31 +904,109 @@ const TextBytesProcessor = struct
     }
 };
 
+pub fn getActiveDataAction(state: *const common.ChunkState) TaggedChunkDataAction
+{
+    switch (state.object.type)
+    {
+        inline else => |k|
+        {
+            const resultInfo = @typeInfo(TaggedChunkDataAction);
+            for (resultInfo.Union.fields) |f|
+            {
+                if (@field(ChunkType, f.name) == k)
+                {
+                    return @unionInit(TaggedChunkDataAction, f.name,
+                        &@field(state.dataState.action.key, f.name));
+                }
+            }
+        }
+    }
+}
+
+pub fn getActiveChunkDataActionAndState(state: *const common.ChunkState) TaggedNodeDataActionAndState
+{
+    const action = getActiveDataAction(state);
+    const state_ = getActiveChunkDataState(state);
+    switch (state.object.type)
+    {
+        inline else => |k|
+        {
+            const resultInfo = @typeInfo(ActionAndState);
+            for (resultInfo.Union.fields) |f|
+            {
+                if (@field(ChunkType, f.name) == k)
+                {
+                    return @unionInit(ActionAndState, f.name, &.{
+                        .action = @field(action, f.name),
+                        .state = @field(state_, f.name),
+                    });
+                }
+            }
+        }
+    }
+}
+
+pub fn getActiveChunkDataState(state: *const common.ChunkState) TaggedChunkDataStatePointer
+{
+    const chunkStateInfo = @typeInfo(@TypeOf(ChunkDataState.value));
+    const taggedPointerInfo = @typeInfo(TaggedChunkDataStatePointer);
+    for (taggedPointerInfo.Union.fields) |pointerField|
+    {
+        const pointerFieldInfo = @typeInfo(pointerField.type);
+        const fieldType = pointerFieldInfo.Pointer.child;
+
+        const found = found:
+        {
+            for (chunkStateInfo.Union.fields) |chunkStateField|
+            {
+                if (chunkStateField.type == fieldType)
+                {
+                    if (state.object.type == @field(ChunkType, pointerField.name))
+                    {
+                        const pointer = &@field(state.dataState, chunkStateField.name);
+                        return @unionInit(TaggedChunkDataStatePointer, pointerField, pointer);
+                    }
+                    break :found true;
+                }
+            }
+            break :found false;
+        };
+
+        if (!found)
+        {
+            return @unionInit(TaggedChunkDataStatePointer, pointerField, {});
+        }
+    }
+
+    unreachable;
+}
+
 pub fn parseChunkData(context: *const common.Context) !bool
 {
     const chunk = &context.state.chunk;
-    const knownChunkType = chunk.object.type;
     const data = &chunk.object.data;
+    const action = &chunk.dataState.action;
 
-    switch (knownChunkType)
+    try common.initStateForAction(context, {}, action);
+
+    switch (getActiveChunkDataActionAndState(chunk))
     {
-        .ImageHeader =>
+        .ImageHeader => |t|
         {
-            const ihdrState = &chunk.dataState.imageHeader;
             const ihdr = &data.imageHeader;
-            switch (ihdrState.*)
+            switch (t.actionKey())
             {
                 .Width => 
                 {
                     const value = try utils.readPngU32Dimension(context.sequence);
                     ihdr.width = value;
-                    ihdrState.* = .Height;
+                    t.resetAction(.Height);
                 },
                 .Height =>
                 {
                     const value = try utils.readPngU32Dimension(context.sequence);
                     ihdr.height = value;
-                    ihdrState.* = .BitDepth;
+                    t.resetAction(.BitDepth);
                 },
                 .BitDepth =>
                 {
@@ -805,7 +1016,7 @@ pub fn parseChunkData(context: *const common.Context) !bool
                     {
                         return error.InvalidBitDepth;
                     }
-                    ihdrState.* = .ColorType;
+                    t.resetAction(.ColorType);
                 },
                 .ColorType =>
                 {
@@ -819,7 +1030,7 @@ pub fn parseChunkData(context: *const common.Context) !bool
                     {
                         return error.ColorTypeNotAllowedForBitDepth;
                     }
-                    ihdrState.* = .CompressionMethod;
+                    t.resetAction(.CompressionMethod);
                 },
                 .CompressionMethod =>
                 {
@@ -829,7 +1040,7 @@ pub fn parseChunkData(context: *const common.Context) !bool
                     {
                         return error.InvalidCompressionMethod;
                     }
-                    ihdrState.* = .FilterMethod;
+                    t.resetAction(.FilterMethod);
                 },
                 .FilterMethod =>
                 {
@@ -839,7 +1050,7 @@ pub fn parseChunkData(context: *const common.Context) !bool
                     {
                         return error.InvalidFilterMethod;
                     }
-                    ihdrState.* = .InterlaceMethod;
+                    t.resetAction(.InterlaceMethod);
                 },
                 .InterlaceMethod =>
                 {
@@ -857,21 +1068,20 @@ pub fn parseChunkData(context: *const common.Context) !bool
             }
             return false;
         },
-        .Palette =>
+        .Palette => |t|
         {
             const plteNode = &data.palette;
-            const plteState = &chunk.dataState.palette;
 
-            const functor = PlteBytesProcessor
+            const functor = PaletteBytesProcessor
             {
                 .context = context,
-                .plteState = plteState,
+                .plteState = t.state,
                 .plteNode = plteNode,
             };
 
             const done = try utils.removeAndProcessNextByte(
                 context,
-                &plteState.bytesRead,
+                &t.state.bytesRead,
                 functor);
 
             if (done)
@@ -887,10 +1097,10 @@ pub fn parseChunkData(context: *const common.Context) !bool
             std.debug.assert(chunk.object.dataByteLen == 0);
             return true;
         },
-        .ImageData =>
+        .ImageData => |t|
         {
             const imageData = &context.state.imageData;
-            const bytesRead = &chunk.dataState.imageData.bytesRead;
+            const bytesRead = &t.state.bytesRead;
             const bytesLeftToRead = chunk.object.dataByteLen - bytesRead.*;
 
             var sequence = context.sequence.*;
@@ -1005,13 +1215,13 @@ pub fn parseChunkData(context: *const common.Context) !bool
                 };
             return isLastLoopForChunk and sequence.len() == 0;
         },
-        .Transparency =>
+        .Transparency => |*t|
         {
             switch (chunk.object.data.transparency)
             {
                 .paletteEntryAlphaValues => |*alphaValues|
                 {
-                    const bytesRead = &chunk.dataState.transparency.bytesRead;
+                    const bytesRead = &t.state.bytesRead;
                     const functor = TransparencyBytesProcessor
                     {
                         .alphaValues = alphaValues,
@@ -1029,12 +1239,16 @@ pub fn parseChunkData(context: *const common.Context) !bool
                 },
                 .rgb => |*rgb|
                 {
-                    const rgbAction = &chunk.dataState.transparency.rgbAction;
-                    if (rgbAction.next()) |next|
+                    const rgbIndex = t.actionKey().RGB;
+
+                    const value = try pipelines.readNetworkUnsigned(context.sequence, u16);
+                    rgb.at(@intFromEnum(rgbIndex)).* = value;
+
+                    if (rgbIndex.next()) |next|
                     {
-                        const value = try pipelines.readNetworkUnsigned(context.sequence, u16);
-                        rgb.at(@intFromEnum(next)).* = value;
-                        rgbAction.* = next;
+                        t.resetAction(.{
+                            .RGB = next,
+                        });
                         return false;
                     }
                     return true;
@@ -1047,9 +1261,8 @@ pub fn parseChunkData(context: *const common.Context) !bool
             data.gamma = try pipelines.readNetworkUnsigned(context.sequence, u32);
             return true;
         },
-        .PrimaryChrom =>
+        .PrimaryChrom => |chromState|
         {
-            const chromState = &chunk.dataState.primaryChrom;
             const primaryChroms = &data.primaryChroms;
             const value = try pipelines.readNetworkUnsigned(context.sequence, u32);
 
@@ -1074,12 +1287,11 @@ pub fn parseChunkData(context: *const common.Context) !bool
             }
             return true;
         },
-        .ICCProfile =>
+        .ICCProfile => |state|
         {
-            const state = &chunk.dataState.iccProfile;
             const node = &data.iccProfile;
 
-            switch (state.action)
+            switch (state.action.key)
             {
                 .ProfileName =>
                 {
@@ -1105,9 +1317,8 @@ pub fn parseChunkData(context: *const common.Context) !bool
                 },
             }
         },
-        .Text =>
+        .Text => |state|
         {
-            const state = &chunk.dataState.text;
             const node = &data.text;
             switch (state.action)
             {
@@ -1131,9 +1342,8 @@ pub fn parseChunkData(context: *const common.Context) !bool
                 },
             }
         },
-        .CompressedText =>
+        .CompressedText => |state|
         {
-            const state = &chunk.dataState.compressedText;
             const node = &data.text;
             switch (state.action)
             {
