@@ -66,7 +66,7 @@ test "Adler32"
 
 pub const State = struct
 {
-    action: Action = .CompressionMethodAndFlags,
+    action: helper.Initiable(Action) = .{ .key = .CompressionMethodAndFlags },
     windowSize: usize = 0,
     adler32: Adler32State = .{},
 
@@ -150,18 +150,7 @@ pub fn decode(context: *const Context) !bool
 {
     const state = context.state;
 
-    if (false)
-    {
-        const sequenceBefore = context.sequence().*;
-        // We don't need to 
-        const shouldComputeChecksum = state.action != .Adler32Checksum;
-        defer if (shouldComputeChecksum)
-        {
-            const newSequenceStart = context.sequence().start();
-            const readSequence = sequenceBefore.sliceToExclusive(newSequenceStart);
-            context.state.adler32.update(&readSequence);
-        };
-    }
+    try helper.initForStateAction(context, &state.action, {});
 
     switch (state.action)
     {
@@ -182,7 +171,7 @@ pub fn decode(context: *const Context) !bool
                     state.decompressor = .{
                         .deflate = .{},
                     };
-                    state.action = Action.Flags;
+                    state.action.reset(Action.Flags);
                 },
                 else => return error.UnsupportedCompressionMethod,
             }
@@ -199,19 +188,19 @@ pub fn decode(context: *const Context) !bool
 
             if (flags.presetDictionary)
             {
-                state.action = .PresetDictionary;
+                state.action.reset(.PresetDictionary);
                 return error.PresetDictionaryNotSupported;
             }
             else
             {
-                state.action = .CompressedData;
+                state.action.reset(.CompressedData);
             }
         },
         .PresetDictionary =>
         {
             const value = try pipelines.readNetworkUnsigned(context.sequence(), u32);
             state.data = .{ .dictionaryId = value };
-            state.action = .CompressedData;
+            state.action.reset(.CompressedData);
         },
         .CompressedData =>
         {
@@ -234,18 +223,16 @@ pub fn decode(context: *const Context) !bool
             const doneWithBlock = try deflate.deflate(&deflateContext);
             if (doneWithBlock and decompressor.isFinal)
             {
-                state.action = .Adler32Checksum;
+                state.action.reset(.Adler32Checksum);
                 deflate.skipToWholeByte(&deflateContext);
             }
             if (doneWithBlock)
             {
-                decompressor.action = deflate.Action.Initial;
+                decompressor.action.reset(deflate.Action.Initial);
             }
         },
         .Adler32Checksum =>
         {
-            std.debug.print("Decoded count: {}\n", .{context.output().buffer().len});
-
             const checksum = try pipelines.readNetworkUnsigned(context.sequence(), u32);
             state.checksum = checksum;
             std.debug.print("Checksum expected: {x:0>16}, Computed: {x:0>16}\n", .{checksum, state.adler32.getChecksum()});
@@ -294,7 +281,10 @@ test "failing tests"
     // The examples are gzip, not zlib.
     // We don't parse gzip.
     if (true)
+    {
         return;
+    }
+
     const examplesDirectoryPath = "references/uzlib/tests/decomp-bad-inputs";
 
     const cwd = std.fs.cwd();
@@ -386,6 +376,7 @@ fn doTest(file: anytype, allocator: std.mem.Allocator)
     var state = State{};
     var resultError: ?anyerror = null;
     var sequence: pipelines.Sequence = undefined;
+    var settings: helper.Settings = .{};
 
     outerLoop: while (true)
     {
@@ -397,6 +388,7 @@ fn doTest(file: anytype, allocator: std.mem.Allocator)
             .sequence = &sequence,
             .output = &outputBuffer,
             .allocator = allocator,
+            .settings = &settings,
         };
 
         const context = Context

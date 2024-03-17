@@ -59,6 +59,9 @@ const NodeType = union(enum)
         CodeFrequency: deflate.dynamic.CodeFrequencyAction,
     },
 
+    // Data from some nodes is skipped.
+    Skipped: void,
+
     pub fn format(
         self: NodeType,
         comptime _: []const u8,
@@ -388,12 +391,16 @@ pub fn getBitPosition(state: *const parser.State) u3
                 .Data =>
                 {
                     const data = &chunk.dataState;
-                    switch (chunk.object.type)
+                    if (!data.action.initializedPointer().*)
+                    {
+                        return 0;
+                    }
+                    switch (chunks.getActiveChunkDataState(chunk))
                     {
                         else => return 0,
-                        .CompressedText =>
+                        .CompressedText => |compressedText|
                         {
-                            return getBitPositionFromZlib(&data.compressedText.zlib);
+                            return getBitPositionFromZlib(&compressedText.zlib);
                         },
                         .ImageData =>
                         {
@@ -402,9 +409,9 @@ pub fn getBitPosition(state: *const parser.State) u3
                             // then the start will be in there.
                             return getBitPositionFromZlib(&state.imageData.zlib);
                         },
-                        .ICCProfile =>
+                        .ICCProfile => |iccProfile|
                         {
-                            return getBitPositionFromZlib(&data.iccProfile.zlib);
+                            return getBitPositionFromZlib(iccProfile.zlib);
                         },
                         .InternationalText =>
                         {
@@ -550,6 +557,13 @@ fn addChildToLastNode(
 
 fn getNodeType(action: anytype) NodeType
 {
+    if (@TypeOf(action) == void)
+    {
+        return .{
+            .Skipped = void,
+        };
+    }
+
     const nodeTypeInfo = @typeInfo(NodeType);
     for (nodeTypeInfo.Union.fields) |field|
     {
@@ -583,7 +597,7 @@ fn getNodeType(action: anytype) NodeType
 
 fn maybeAddChildToLastNode(
     context: *TreeConstructionContext,
-    action: anytype, // ActionState(Action)
+    action: anytype, // Initiable(Action)
     position: NodePosition)
     !?AddChildToLastNodeResult
 {
@@ -591,7 +605,7 @@ fn maybeAddChildToLastNode(
     {
         return null;
     }
-    const nodeType = getNodeType(action.key);
+    const nodeType = getNodeType(action.keyPointer().*);
     const result = try addChildToLastNode(context, .{
         .position = position,
         .nodeType = nodeType,
@@ -640,8 +654,14 @@ fn initNodesForCurrentAction(
                 else => return,
                 .Data =>
                 {
-                    switch (chunk.object.type)
+                    const actionAndState = chunks.getActiveChunkDataActionAndState(chunk);
+                    switch (actionAndState)
                     {
+                        inline else => |*t|
+                        {
+                            try maybeAddChildToLastNode(context, t.action, currentPosition);
+                            return;
+                        }
                     }
                 },
             }

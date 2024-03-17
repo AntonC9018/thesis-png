@@ -20,7 +20,7 @@ pub const CodeFrequencyAction = enum
 
 const CodeFrequencyState = struct
 {
-    action: CodeFrequencyAction,
+    action: helper.Initiable(CodeFrequencyAction) = .{ .key = .LiteralLen },
 
     tree: huffman.Tree,
     currentBitCount: u5,
@@ -56,10 +56,11 @@ pub const State = union
 
 pub const CodeDecodingState = struct
 {
-    action: CodeDecodingAction,
+    action: helper.Initiable(CodeDecodingAction) = .{ .key = .LiteralOrLenCodeCount },
 
     // Reset as it's being read.
     readListItemCount: usize,
+    arrayElementInitialized: bool,
     codeFrequencyState: CodeFrequencyState,
 
     literalOrLenCodeCount: u5,
@@ -71,6 +72,11 @@ pub const CodeDecodingState = struct
     distanceCodeLens: []u8,
 
     const Self = @This();
+
+    pub fn initArrayElement(context: *const helper.DeflateContext, self: *CodeDecodingState) !void
+    {
+        try helper.initState(context, &self.arrayElementInitialized);
+    }
 
     pub fn getLiteralOrLenCodeCount(self: *const Self) usize
     {
@@ -115,7 +121,9 @@ pub fn decodeCodes(
     context: *const helper.DeflateContext,
     state: *CodeDecodingState) !bool
 {
-    switch (state.action)
+    try helper.initForStateAction(context, &state.action, {});
+
+    switch (state.action.key)
     {
         // TODO:
         // Maybe actually really try using async here?
@@ -124,78 +132,85 @@ pub fn decodeCodes(
         {
             const count = try helper.readBits(.{ .context = context }, u5);
             state.literalOrLenCodeCount = count;
-            state.action = .DistanceCodeCount;
+            state.action.reset(.DistanceCodeCount);
             return false;
         },
         .DistanceCodeCount =>
         {
             const count = try helper.readBits(.{ .context = context }, u5);
             state.distanceCodeCount = count;
-            state.action = .CodeLenCount;
+            state.action.reset(.CodeLenCount);
             return false;
         },
         .CodeLenCount =>
         {
             const count = try helper.readBits(.{ .context = context }, u4);
             state.codeLenCodeCount = count;
-            state.action = .CodeLens;
+            state.action.reset(.CodeLens);
 
             return false;
         },
         .CodeLens =>
         {
+            try state.initArrayElement(context);
+
             const readAllArray = try helper.readArrayElement(
                 context,
                 state.codeLenCodeLens[0 .. state.getLenCodeCount()],
                 &state.readListItemCount,
                 3);
             
-            if (readAllArray)
+            if (!readAllArray)
             {
-                state.action = .LiteralOrLenCodeLens;
-                state.literalOrLenCodeLens = try context.allocator()
-                    .alloc(u8, state.getLiteralOrLenCodeCount());
-
-                const copy = state.codeLenCodeLens;
-                for (0 .. state.getLenCodeCount()) |i|
-                {
-                    const orderArray = &[_]u5{
-                        16, 17, 18, 0, 8,
-                        7, 9, 6, 10, 5,
-                        11, 4, 12, 3, 13,
-                        2, 14, 1, 15,
-                    };
-                    const remappedIndex = orderArray[i];
-                    state.codeLenCodeLens[remappedIndex] = copy[i];
-
-                    const tree = try huffman.createTree(
-                        @ptrCast(&state.codeLenCodeLens),
-                        context.allocator());
-                    state.codeFrequencyState = std.mem.zeroInit(CodeFrequencyState, .{
-                        .action = .LiteralLen,
-                        .tree = tree,
-                    });
-                }
+                return false;
             }
-            return false;
+
+            state.action.reset(.LiteralOrLenCodeLens);
+            state.literalOrLenCodeLens = try context.allocator()
+                .alloc(u8, state.getLiteralOrLenCodeCount());
+
+            const copy = state.codeLenCodeLens;
+            for (0 .. state.getLenCodeCount()) |i|
+            {
+                const orderArray = &[_]u5{
+                    16, 17, 18, 0, 8,
+                    7, 9, 6, 10, 5,
+                    11, 4, 12, 3, 13,
+                    2, 14, 1, 15,
+                };
+                const remappedIndex = orderArray[i];
+                state.codeLenCodeLens[remappedIndex] = copy[i];
+
+                const tree = try huffman.createTree(
+                    @ptrCast(&state.codeLenCodeLens),
+                    context.allocator());
+                state.codeFrequencyState = std.mem.zeroInit(CodeFrequencyState, .{
+                    .action = .LiteralLen,
+                    .tree = tree,
+                });
+            }
         },
         .LiteralOrLenCodeLens =>
         {
+            try state.initArrayElement(context);
+
             const array = state.literalOrLenCodeLens;
             const readAllArray = try fullyReadCodeLenEncodedFrequency(context, state, array);
 
-            if (readAllArray)
+            if (!readAllArray)
             {
-                state.action = .DistanceCodeLens;
-                state.distanceCodeLens = try context.allocator()
-                    .alloc(u8, state.getDistanceCodeCount());
-                state.readListItemCount = 0;
+                return false;
             }
 
-            return false;
+            state.action.reset(.DistanceCodeLens);
+            state.distanceCodeLens = try context.allocator()
+                .alloc(u8, state.getDistanceCodeCount());
+            state.readListItemCount = 0;
         },
         .DistanceCodeLens =>
         {
+            try state.initArrayElement(context);
+
             const array = state.distanceCodeLens;
             const readAllArray = try fullyReadCodeLenEncodedFrequency(context, state, array);
 
@@ -217,7 +232,9 @@ fn readCodeLenEncodedFrequency(
     const readCount = &state.readListItemCount;
     const freqState = &state.codeFrequencyState;
 
-    switch (freqState.action)
+    try helper.initForStateAction(context, &freqState.action, {});
+
+    switch (freqState.action.key)
     {
         .LiteralLen =>
         {
@@ -230,7 +247,7 @@ fn readCodeLenEncodedFrequency(
             // Value above 16 means the bits that follow are the repeat count.
             if (len >= 16)
             {
-                freqState.action = .RepeatCount;
+                freqState.action.reset(.RepeatCount);
 
                 if (readCount.* == 0)
                 {
@@ -276,6 +293,7 @@ fn fullyReadCodeLenEncodedFrequency(
 {
     const readCount = &state.readListItemCount;
     const freqState = &state.codeFrequencyState;
+
     if (readCount.* < outputArray.len)
     {
         while (true)
@@ -283,7 +301,8 @@ fn fullyReadCodeLenEncodedFrequency(
             const done = try readCodeLenEncodedFrequency(context, state, outputArray);
             if (done)
             {
-                freqState.action = .LiteralLen;
+                freqState.action.reset(.LiteralLen);
+                state.arrayElementInitialized = false;
                 break;
             }
         }

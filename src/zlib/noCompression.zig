@@ -56,7 +56,7 @@ pub const State = union
 
 pub const InitState = struct
 {
-    action: InitStateAction,
+    action: helper.Initiable(InitStateAction) = .{ .key = .Len },
     len: u16,
     nlen: u16,
 };
@@ -68,13 +68,15 @@ pub const DecompressionState = struct
 
 pub fn initState(context: *const helper.DeflateContext, state: *InitState) !bool
 {
-    switch (state.action)
+    try helper.initForStateAction(context, state.action, {});
+
+    switch (state.action.key)
     {
         .Len =>
         {
             const len = try pipelines.readNetworkUnsigned(context.sequence(), u16);
             state.len = len;
-            state.action = .NLen;
+            state.action = .{ .key = .NLen };
             return false;
         },
         .NLen =>

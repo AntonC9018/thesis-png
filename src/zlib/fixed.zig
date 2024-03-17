@@ -3,36 +3,29 @@ const std = helper.std;
 
 pub const SymbolDecompressionAction = enum
 {
-    Code7,
-    Code8,
-    Code9,
-    Code9Value,
+    Code,
+    InvalidCode,
     Length,
     DistanceCode,
     Distance,
 };
 
-pub const SymbolDecompressionState = union(SymbolDecompressionAction)
-{
-    Code7: void,
-    Code8: void,
-    Code9: void,
-    Code9Value: u9,
-    Length: struct
-    {
-        codeRemapped: u8,
-    },
-    DistanceCode: struct
-    {
-        len: u8,
-    },
-    Distance: struct
-    {
-        len: u8,
-        distanceCode: u5,
-    },
+pub const CodeState = 7 || 8 || 9;
 
-    pub const Initial: SymbolDecompressionState = .{ .Code7 = {} };
+pub const SymbolDecompressionState = struct
+{
+    action: helper.Initiable(SymbolDecompressionAction) = .{ .key = .Code },
+    codeLen: CodeState = 7,
+    lenCode: u9,
+    len: u8,
+    distanceCode: u5,
+    distance: u16,
+
+    fn resetAction(state: *SymbolDecompressionState) void
+    {
+        state.action = .{ .key = .Code };
+        state.codeLen = 7;
+    }
 };
 
 const lengthCodeStart = 257;
@@ -168,6 +161,8 @@ pub fn decompressSymbol(
     context: *const helper.DeflateContext,
     state: *SymbolDecompressionState) !?helper.Symbol
 {
+    try helper.initForStateAction(context, &state.action, {});
+
     const lengthCodeUpperLimit = 0b001_0111;
 
     const literalLowerLimit = 0b0011_0000;
@@ -184,131 +179,123 @@ pub fn decompressSymbol(
         .reverse = true,
     };
 
-    switch (state.*)
+    switch (state.action.key)
     {
-        .Code7 =>
+        .Code =>
         {
-            const code = try helper.peekBits(readCodeBitsContext, u7);
-            if (code.bits == 0)
+            while (true)
             {
-                code.apply(context);
-                return .{ .EndBlock = {} };
-            }
+                const code = try helper.peekNBits(.{
+                    .context = context,
+                    .bitsCount = state.codeLen,
+                    .reverse = true,
+                });
 
-            if (code.bits <= lengthCodeUpperLimit)
-            {
-                code.apply(context);
-                state.* = .{
-                    .Length = .{ 
-                        .codeRemapped = code.bits - 1,
-                    },
-                };
-                return null;
-            }
-
-            state.* = .{ .Code8 = {} };
-        },
-        .Code8 =>
-        {
-            const code = try helper.peekBits(readCodeBitsContext, u8);
-
-            if (code.bits >= literalLowerLimit and code.bits <= literalUpperLimit)
-            {
-                code.apply(context);
-
-                const value = code.bits - literalLowerLimit;
-                state.* = SymbolDecompressionState.Initial;
-                return .{ .LiteralValue = value };
-            }
-
-            if (code.bits >= lengthLowerLimit2 and code.bits <= lengthUpperLimit2)
-            {
-                code.apply(context);
-
-                const codeRemapped = code.bits - lengthLowerLimit2 + lengthCodeUpperLimit;
-                state.* = .{ 
-                    .Length = .{ 
-                        .codeRemapped = codeRemapped,
-                    }
-                };
-                if (codeRemapped >= adjustStart(286))
+                switch (state.codeLen)
                 {
-                    return error.LengthCodeTooLarge;
+                    7 =>
+                    {
+                        if (code.bits == 0)
+                        {
+                            code.apply(context);
+                            return .{ .EndBlock = {} };
+                        }
+
+                        if (code.bits <= lengthCodeUpperLimit)
+                        {
+                            code.apply(context);
+                            state.action = .{ .key = .Length };
+                            state.lenCode = code.bits - 1;
+                            return null;
+                        }
+                    },
+                    8 =>
+                    {
+                        if (code.bits >= literalLowerLimit and code.bits <= literalUpperLimit)
+                        {
+                            code.apply(context);
+
+                            const value = code.bits - literalLowerLimit;
+                            state.resetAction();
+                            return .{ .LiteralValue = value };
+                        }
+
+                        if (code.bits >= lengthLowerLimit2 and code.bits <= lengthUpperLimit2)
+                        {
+                            code.apply(context);
+
+                            const codeRemapped = code.bits - lengthLowerLimit2 + lengthCodeUpperLimit;
+                            state.action = .{ .key = .Length };
+                            state.lenCode = codeRemapped;
+                            if (codeRemapped >= adjustStart(286))
+                            {
+                                return error.LengthCodeTooLarge;
+                            }
+                            return null;
+                        }
+                    },
+                    9 =>
+                    {
+                        code.apply(context);
+
+                        if (code >= literalLowerLimit2)
+                        {
+                            const literalOffset2 = 144;
+                            const value = code - literalLowerLimit2 + literalOffset2;
+                            state.resetAction();
+                            return .{ .LiteralValue = @intCast(value) };
+                        }
+
+                        return error.DisallowedDeflateCodeValue;
+                    },
                 }
-
-                return null;
+                state.codeLen += 1;
             }
-
-            state.* = .{ .Code9 = {} };
         },
-        .Code9 =>
+        .Length =>
         {
-            const code = try helper.readBits(readCodeBitsContext, u9);
-            if (code >= literalLowerLimit2)
-            {
-                const literalOffset2 = 144;
-                const value = code - literalLowerLimit2 + literalOffset2;
-                state.* = SymbolDecompressionState.Initial;
-                return .{ .LiteralValue = @intCast(value) };
-            }
-
-            state.* = .{ .Code9Value = code };
-            return error.DisallowedDeflateCodeValue;
-       },
-        .Length => |l|
-        {
-            const lengthBitCount = getLengthBitCount(l.codeRemapped);
+            const lengthBitCount = getLengthBitCount(state.codeRemapped);
             const extraBits = if (lengthBitCount == 0)
                     0
                 else
                     try helper.readNBits(context, lengthBitCount);
 
-            const baseLength = getBaseLength(l.codeRemapped);
+            const baseLength = getBaseLength(state.codeRemapped);
             const len = baseLength + extraBits;
-            state.* = .{ 
-                .DistanceCode = .{
-                    .len = @intCast(len),
-                },
-            };
+            state.len = @intCast(len);
+            state.action = .{ .key = .DistanceCode };
         },
-        .DistanceCode => |d|
+        .DistanceCode =>
         {
             const distanceCode = try helper.readBits(readCodeBitsContext, u5);
-            state.* = .{
-                .Distance = .{
-                    .len = d.len,
-                    .distanceCode = distanceCode,
-                },
-            };
+            state.action = .{ .key = .Distance };
+            state.distanceCode = distanceCode;
 
             if (distanceCode >= 30)
             {
                 return error.InvalidDistanceCode;
             }
         },
-        .Distance => |d|
+        .Distance =>
         {
-            const distanceBitCount = getDistanceBitCount(d.distanceCode);
+            const distanceBitCount = getDistanceBitCount(state.distanceCode);
             const extraBits = if (distanceBitCount == 0)
                     0
                 else
                     try helper.readNBits(context, distanceBitCount);
 
-            const baseDistance = getBaseDistance(d.distanceCode);
-            std.debug.print("Distance code: {}\n", .{d.distanceCode});
-            std.debug.print("Extra bits: {}\n", .{extraBits});
-            std.debug.print("Base distance: {}\n", .{baseDistance});
+            const baseDistance = getBaseDistance(state.distanceCode);
             const distance = baseDistance + extraBits;
 
-            state.* = SymbolDecompressionState.Initial;
+            state.resetAction();
+            state.distance = distance;
             return .{
                 .BackReference = .{
                     .distance = @intCast(distance + 1),
-                    .len = @as(u16, d.len) + 3,
+                    .len = @as(u16, state.len) + 3,
                 },
             };
         },
-        .Code9Value => unreachable,
     }
 
     return null;

@@ -3,7 +3,23 @@ pub const pipelines = @import("../pipelines.zig");
 pub const zlib = @import("../zlib/zlib.zig");
 pub const chunks = @import("chunks.zig");
 pub const utils = @import("utils.zig");
+pub const Settings = @import("../shared/Settings.zig");
 
+pub const act = @import("../shared/action.zig");
+pub const Initiable = act.Initiable;
+pub const InitiableThroughPointer = act.InitiableThroughPointer;
+
+pub fn initForStateAction(
+    context: *const Context,
+    action: anytype,
+    initialize: anytype) !void
+{
+    return act.initStateForAction(
+        context,
+        context.settings.returnOnInit,
+        action,
+        initialize);
+}
 
 // What is the next expected type?
 pub const Action = enum
@@ -52,11 +68,6 @@ pub const Context = struct
     settings: *const Settings,
 };
 
-pub const Settings = struct
-{
-    logChunkStart: bool,
-    returnOnInit: bool = false,
-};
 
 
 pub const CarryOverSegment = struct
@@ -122,91 +133,4 @@ pub const ChunkState = struct
     dataState: chunks.ChunkDataState,
 };
 
-fn MaybeConst(Self: type, Result: type) type
-{
-    const info = @typeInfo(Self);
-    if (info.Pointer.is_const)
-    {
-        return *const Result;
-    }
-    else
-    {
-        return *Result;
-    }
-}
-
-pub fn InitiableThroughPointer(ActionType: type) type
-{
-    return struct
-    {
-        key: *ActionType,
-        initialized: *bool,
-
-        const Self = @This();
-
-        pub fn keyPointer(self: anytype) MaybeConst(@TypeOf(self), ActionType)
-        {
-            return self.key;
-        }
-        pub fn initializedPointer(self: anytype) MaybeConst(@TypeOf(self), bool)
-        {
-            return self.initialized;
-        }
-    };
-}
-
-pub fn Initiable(ActionType: type) type
-{
-    return struct
-    {
-        key: ActionType,
-        initialized: bool = false,
-
-        const Self = @This();
-
-        pub fn keyPointer(self: anytype) MaybeConst(@TypeOf(self), ActionType)
-        {
-            return &self.key;
-        }
-        pub fn initializedPointer(self: anytype) MaybeConst(@TypeOf(self), bool)
-        {
-            return &self.initialized;
-        }
-    };
-}
-
-pub fn initStateForAction(
-    context: *const Context,
-    // see common.Initiable
-    action: anytype,
-    // fn(*const Context, @TypeOf(action.key)) anyerror!void
-    initialize: anytype) !void
-{
-    if (@typeInfo(@TypeOf(action)) != .Pointer)
-    {
-        @compileLog("Action must be passed by reference");
-    }
-
-    if (action.initializedPointer().*)
-    {
-        return;
-    }
-
-    if (@hasDecl(@TypeOf(initialize), "execute"))
-    {
-        try initialize.execute();
-    }
-
-    else if (@TypeOf(initialize) != void)
-    {
-        try initialize(context, action.keyPointer().*);
-    }
-
-    action.initializedPointer().* = true;
-
-    if (context.settings.returnOnInit)
-    {
-        return error.StateInitialized;
-    }
-}
 

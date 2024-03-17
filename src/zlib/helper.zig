@@ -3,6 +3,31 @@ pub const DeflateContext = @import("deflate.zig").Context;
 pub const std = @import("std");
 pub const huffman = @import("huffmanTree.zig");
 
+const act = @import("../shared/action.zig");
+pub const Initiable = act.Initiable;
+pub const InitiableThroughPointer = act.InitiableThroughPointer;
+pub const Settings = @import("../shared/Settings.zig");
+
+pub fn initForStateAction(
+    context: anytype,
+    action: anytype,
+    initialize: anytype) !void
+{
+    return act.initStateForAction(
+        context,
+        context.common.settings.returnOnInit,
+        action,
+        initialize);
+}
+
+pub fn initState(
+    context: anytype,
+    initialized: *bool) !void
+{
+    return act.initState(context.common.settings.returnOnInit, initialized);
+}
+
+
 pub const PeekApplyHelper = struct
 {
     nextBitOffset: u3,
@@ -149,6 +174,7 @@ const BitsTestContext = struct
     sequence: pipelines.Sequence = undefined,
     state: @import("deflate.zig").State = .{},
     common: CommonContext = undefined,
+    settings: Settings,
 
     pub fn reset(self: *BitsTestContext) void
     {
@@ -460,6 +486,7 @@ pub const CommonContext = struct
     sequence: *pipelines.Sequence,
     allocator: std.mem.Allocator,
     output: *OutputBuffer,
+    settings: *Settings,
 };
 
 

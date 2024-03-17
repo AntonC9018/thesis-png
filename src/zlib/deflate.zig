@@ -37,19 +37,23 @@ pub const Context = struct
 
 pub const State = struct
 {
-    action: Action = .IsFinal,
+    action: helper.Initiable(Action) = .{ .key = Action.Initial },
     bitOffset: u3 = 0,
 
     isFinal: bool = false,
     len: u16 = 0,
 
     dataBytesRead: u16 = 0,
+
+    /// Never used internally.
+    /// Useful for debugging and for insight into the decompression state.
     lastSymbol: ?helper.Symbol = null,
+    symbolDecompressionInitialized: bool,
 
     blockState: union(BlockType)
     {
         NoCompression: noCompression.State,
-        FixedHuffman: fixed.SymbolDecompressionState,
+        FixedHuffman: helper.Initiable(fixed.SymbolDecompressionState),
         DynamicHuffman: dynamic.State,
         Reserved: void,
     } = .{ .Reserved = {} },
@@ -173,13 +177,14 @@ pub fn deflate(context: *const Context) !bool
                 },
                 .FixedHuffman => |*s|
                 {
-                    const symbol = try fixed.decompressSymbol(context, s);
+                    const symbol = try fixed.decompressSymbol(context, s.key);
                     state.lastSymbol = symbol;
                     const done = try helper.writeSymbolToOutput(context, symbol);
                     return done;
                 },
                 .DynamicHuffman => |*s|
                 {
+                    try helper.initForStateAction(context, s, {});
                     const symbol = try dynamic.decompressSymbol(context, &s.decompression);
                     state.lastSymbol = symbol;
                     const done = try helper.writeSymbolToOutput(context, symbol);
