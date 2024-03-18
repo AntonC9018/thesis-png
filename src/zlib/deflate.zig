@@ -37,7 +37,7 @@ pub const Context = struct
 
 pub const State = struct
 {
-    action: helper.Initiable(Action) = .{ .key = Action.Initial },
+Action = Action.Initial,
     bitOffset: u3 = 0,
 
     isFinal: bool = false,

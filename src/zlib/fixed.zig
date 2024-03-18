@@ -14,7 +14,7 @@ pub const CodeState = 7 || 8 || 9;
 
 pub const SymbolDecompressionState = struct
 {
-    action: helper.Initiable(SymbolDecompressionAction) = .{ .key = .Code },
+SymbolDecompressionAction = .Code,
     codeLen: CodeState = 7,
     lenCode: u9,
     len: u8,
@@ -179,7 +179,7 @@ pub fn decompressSymbol(
         .reverse = true,
     };
 
-    switch (state.action.key)
+    switch (state.action)
     {
         .Code =>
         {

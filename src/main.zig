@@ -379,13 +379,13 @@ pub fn getBitPosition(state: *const parser.State) u3
         }
     }.f;
 
-    switch (state.action.key)
+    switch (state.action)
     {
         else => return 0,
         .Chunk =>
         {
             const chunk = &state.chunk;
-            switch (chunk.action.key)
+            switch (chunk.action)
             {
                 else => return 0,
                 .Data =>
@@ -525,7 +525,7 @@ const TreeConstructionContext = struct
     }
 };
 
-const AddChildToLastNodeResult = struct
+const AddChildNodeResult = struct
 {
     node: NodeResult,
     data: NodeDataResult,
@@ -538,7 +538,7 @@ fn addChildToLastNode(
         position: NodePosition,
         nodeType: NodeType,
     })
-    !AddChildToLastNodeResult
+    !AddChildNodeResult
 {
     const data = try context.addNodeData(.{
         .type = params.nodeType,
@@ -599,7 +599,7 @@ fn maybeAddChildToLastNode(
     context: *TreeConstructionContext,
     action: anytype, // Initiable(Action)
     position: NodePosition)
-    !?AddChildToLastNodeResult
+    !?AddChildNodeResult
 {
     if (action.initialized)
     {
@@ -613,11 +613,81 @@ fn maybeAddChildToLastNode(
     return result;
 }
 
+const TerminationContext = struct
+{
+    context: *TreeConstructionContext,
+    pathIndex: usize = 0,
+    terminatedPathIndex: ?usize = null,
+    currentPosition: NodePosition,
+
+    fn unconditionalTermination(self: *TerminationContext) bool
+    {
+        return !(self.terminatedPathIndex == null);
+    }
+
+    fn maybeTerminate(
+        self: *TerminationContext,
+        // Initiable
+        action: anytype) 
+        ?struct
+        {
+            node: NodeResult,
+            data: ?NodeDataResult,
+        }
+    {
+        defer self.pathIndex += 1;
+
+        if (!action.initializedPointer().*)
+        {
+            self.terminatedPathIndex = self.pathIndex;
+        }
+        if (self.unconditionalTermination())
+        {
+            const nodeIndex = self.context.nodePath.items[self.pathIndex];
+            const node = &self.context.tree.nodes.items[nodeIndex];
+            node.span.endInclusive = self.currentPosition.add(.{ .bit = -1 });
+            return .{
+                .node = .{
+                    .item = node,
+                    .index = nodeIndex,
+                },
+                .data = if (node.nodeData) |d| NodeDataResult
+                {
+                    .item = &self.context.tree.nodeData[d],
+                    .index = node.nodeData,
+                } else null,
+            };
+        }
+    }
+
+    pub fn complete(self: *TerminationContext) void
+    {
+        if (self.terminatedPathIndex) |i|
+        {
+            self.context.nodePath.items.len = i;
+        }
+    }
+};
+
+fn finalizeNodesForCurrentAction(
+    context: *TreeConstructionContext,
+    currentPosition: NodePosition) !void
+{
+    var terminationContext = TerminationContext
+    {
+        .context = context,
+        .currentPosition = currentPosition,
+    };
+    const state = &context.parserState;
+    if (terminationContext.maybeTerminate(state.action)) |_|
+    {
+    }
+}
+
 fn initNodesForCurrentAction(
     context: *TreeConstructionContext,
-    sequence: *const pipelines.Sequence) !void
+    currentPosition: NodePosition) !void
 {
-    const currentPosition = getCompletePosition(context.parserState, sequence);
     const state = &context.parserState;
     
     if (try maybeAddChildToLastNode(context, state.action, currentPosition))
@@ -625,7 +695,7 @@ fn initNodesForCurrentAction(
         return;
     }
 
-    switch (state.action.key)
+    switch (state.action)
     {
         .Signature => {},
         .Chunk =>
@@ -649,7 +719,7 @@ fn initNodesForCurrentAction(
                 return;
             }
 
-            switch (chunk.action.key)
+            switch (chunk.action)
             {
                 else => return,
                 .Data =>

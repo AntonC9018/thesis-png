@@ -29,14 +29,14 @@ fn validateSignature(slice: *pipelines.Sequence) !void
 
 pub fn printStepName(writer: anytype, parserState: *const State) !void
 {
-    switch (parserState.action.key)
+    switch (parserState.action)
     {
         .Signature => try writer.print("Signature", .{}),
         .Chunk =>
         {
             const chunk = &parserState.chunk;
             try writer.print("Chunk ", .{});
-            switch (chunk.action.key)
+            switch (chunk.action)
             {
                 .Length => try writer.print("Length", .{}),
                 .ChunkType => try writer.print("Type", .{}),
@@ -217,14 +217,16 @@ pub fn parseNextItem(context: *const Context) !bool
     }.f;
 
     const action = &context.state.action;
-    try common.initStateForAction(context, action, initTopLevel);
 
-    switch (action.key)
+    context.level.push();
+    defer context.level.pop();
+
+    switch (action)
     {
         .Signature =>
         {
             try validateSignature(context.sequence);
-            action.* = .{ .key = .Chunk };
+            common.advanceAction(context, action, .Chunk);
             return true;
         },
         .Chunk =>
@@ -232,7 +234,7 @@ pub fn parseNextItem(context: *const Context) !bool
             const isDone = try parseChunkItem(context);
             if (isDone)
             {
-                action.initialized = false;
+                common.deinitCurrentLevel(context);
                 return true;
             }
         },
@@ -260,9 +262,10 @@ pub fn parseChunkItem(context: *const Context) !bool
 {
     const chunk = &context.state.chunk;
 
-    try common.initStateForAction(context, &chunk.action, initChunkItem);
+    context.level.push();
+    defer context.level.pop();
 
-    switch (chunk.action.key)
+    switch (chunk.action)
     {
         .Length => 
         {

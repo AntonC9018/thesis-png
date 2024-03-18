@@ -20,7 +20,7 @@ pub const CodeFrequencyAction = enum
 
 const CodeFrequencyState = struct
 {
-    action: helper.Initiable(CodeFrequencyAction) = .{ .key = .LiteralLen },
+CodeFrequencyAction = .LiteralLen,
 
     tree: huffman.Tree,
     currentBitCount: u5,
@@ -56,7 +56,7 @@ pub const State = union
 
 pub const CodeDecodingState = struct
 {
-    action: helper.Initiable(CodeDecodingAction) = .{ .key = .LiteralOrLenCodeCount },
+CodeDecodingAction = .LiteralOrLenCodeCount,
 
     // Reset as it's being read.
     readListItemCount: usize,
@@ -123,7 +123,7 @@ pub fn decodeCodes(
 {
     try helper.initForStateAction(context, &state.action, {});
 
-    switch (state.action.key)
+    switch (state.action)
     {
         // TODO:
         // Maybe actually really try using async here?
@@ -234,7 +234,7 @@ fn readCodeLenEncodedFrequency(
 
     try helper.initForStateAction(context, &freqState.action, {});
 
-    switch (freqState.action.key)
+    switch (freqState.action)
     {
         .LiteralLen =>
         {

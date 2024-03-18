@@ -56,7 +56,7 @@ pub const State = union
 
 pub const InitState = struct
 {
-    action: helper.Initiable(InitStateAction) = .{ .key = .Len },
+InitStateAction = .Len,
     len: u16,
     nlen: u16,
 };
@@ -70,7 +70,7 @@ pub fn initState(context: *const helper.DeflateContext, state: *InitState) !bool
 {
     try helper.initForStateAction(context, state.action, {});
 
-    switch (state.action.key)
+    switch (state.action)
     {
         .Len =>
         {

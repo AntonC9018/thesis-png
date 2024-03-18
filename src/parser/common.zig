@@ -5,22 +5,6 @@ pub const chunks = @import("chunks.zig");
 pub const utils = @import("utils.zig");
 pub const Settings = @import("../shared/Settings.zig");
 
-pub const act = @import("../shared/action.zig");
-pub const Initiable = act.Initiable;
-pub const InitiableThroughPointer = act.InitiableThroughPointer;
-
-pub fn initForStateAction(
-    context: *const Context,
-    action: anytype,
-    initialize: anytype) !void
-{
-    return act.initStateForAction(
-        context,
-        context.settings.returnOnInit,
-        action,
-        initialize);
-}
-
 // What is the next expected type?
 pub const Action = enum
 {
@@ -39,10 +23,9 @@ pub const ChunkAction = enum
 
 pub const State = struct
 {
+    levelInitMask: LevelInitMask,
     chunk: ChunkState,
-    action: Initiable(Action) = .{ 
-        .key = .Signature,
-    },
+    action: Action = .Signature,
 
     imageHeader: ?chunks.ImageHeader = null,
     // True after the IEND chunk has been parsed.
@@ -56,8 +39,8 @@ pub const State = struct
 
 pub fn isParserStateTerminal(state: *const State) bool 
 {
-    return state.action.key == .Chunk 
-        and !state.action.initialized;
+    return state.action == .Chunk 
+        and !state.levelInitMask.isInitedAtLevel(0);
 }
 
 pub const Context = struct
@@ -66,9 +49,8 @@ pub const Context = struct
     sequence: *pipelines.Sequence,
     allocator: std.mem.Allocator,
     settings: *const Settings,
+    level: LevelContext,
 };
-
-
 
 pub const CarryOverSegment = struct
 {
@@ -128,9 +110,66 @@ pub const Chunk = struct
 
 pub const ChunkState = struct
 {
-    action: Initiable(ChunkAction) = .{ .key = .Length },
+    action: ChunkAction = .Length,
     object: Chunk,
     dataState: chunks.ChunkDataState,
 };
 
+pub const LevelInitMask = struct
+{
+    mask: std.bit_set.IntegerBitSet(32) = .{ .mask = ~@as(0, u32) },
 
+    pub fn setDeinitedAtLevel(self: *LevelInitMask, level: u5) void
+    {
+        self.mask.unset(level);
+    }
+
+    pub fn isInitedAtLevel(self: *const LevelInitMask, level: u5) void
+    {
+        return self.mask.isSet(level);
+    }
+};
+
+pub const LevelContext = struct
+{
+    current: u5,
+    max: u5,
+
+    pub fn push(self: *LevelContext) void
+    {
+        self.current += 1;
+        self.max = @max(self.current, self.max);
+    }
+
+    pub fn pop(self: *LevelContext) void
+    {
+        self.current -= 1;
+    }
+
+    pub fn assertPopped(self: *const LevelContext) void
+    {
+        std.debug.assert(self.current == 0);
+    }
+};
+
+fn PointedToType(t: type) type
+{
+    const info = @typeInfo(t);
+    return info.Pointer.child;
+}
+
+pub fn deinitCurrentLevel(context: *const Context) void
+{
+    const level = context.level.current;
+    context.state.levelInitMask.setDeinitedAtLevel(level);
+}
+
+pub fn advanceAction(
+    context: *const Context,
+    action: anytype,
+    value: PointedToType(@TypeOf(action))) void
+{
+    const level = context.level.current;
+    context.state.levelInitMask.setDeinitedAtLevel(level);
+    action.* = value;
+}

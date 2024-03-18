@@ -66,7 +66,7 @@ test "Adler32"
 
 pub const State = struct
 {
-    action: helper.Initiable(Action) = .{ .key = .CompressionMethodAndFlags },
+Action = .CompressionMethodAndFlags,
     windowSize: usize = 0,
     adler32: Adler32State = .{},
 

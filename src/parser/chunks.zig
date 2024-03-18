@@ -505,7 +505,7 @@ pub const ImageHeaderAction = enum(u32)
 pub const PaletteState = struct
 {
     bytesRead: u32,
-    rgbAction: common.Initiable(RGBAction) = .{ .key = .R },
+RGBAction = .R,
 };
 
 pub const RGBAction = enum
@@ -844,7 +844,7 @@ const PaletteBytesProcessor = struct
 
         const colorByte = colorByte:
         {
-            switch (action.key)
+            switch (action)
             {
                 .R => break :colorByte &color.r,
                 .G => break :colorByte &color.g,
@@ -1291,7 +1291,7 @@ pub fn parseChunkData(context: *const common.Context) !bool
         {
             const node = &data.iccProfile;
 
-            switch (state.action.key)
+            switch (state.action)
             {
                 .ProfileName =>
                 {
