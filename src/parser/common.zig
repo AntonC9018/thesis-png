@@ -5,6 +5,9 @@ pub const chunks = @import("chunks.zig");
 pub const utils = @import("utils.zig");
 pub const Settings = @import("../shared/Settings.zig");
 
+pub const levels = @import("../shared/level.zig");
+usingnamespace levels;
+
 // What is the next expected type?
 pub const Action = enum
 {
@@ -23,7 +26,6 @@ pub const ChunkAction = enum
 
 pub const State = struct
 {
-    levelInitMask: LevelInitMask,
     chunk: ChunkState,
     action: Action = .Signature,
 
@@ -37,19 +39,34 @@ pub const State = struct
     imageData: ImageData = .{},
 };
 
-pub fn isParserStateTerminal(state: *const State) bool 
+// TODO: Only works assuming PNG is the top level of the tree.
+pub fn isParserStateTerminal(context: *const Context) bool 
 {
-    return state.action == .Chunk 
-        and !state.levelInitMask.isInitedAtLevel(0);
+    return context.state.action == .Chunk
+        and !context.level().initMask.isInitedAtLevel(0);
 }
 
 pub const Context = struct
 {
+    common: @import("../shared/CommonContext.zig"),
     state: *State,
-    sequence: *pipelines.Sequence,
-    allocator: std.mem.Allocator,
-    settings: *const Settings,
-    level: LevelContext,
+
+    pub fn level(self: *Context) *levels.LevelContext
+    {
+        return &self.common.level;
+    }
+    pub fn sequence(self: *Context) *pipelines.Sequence
+    {
+        return &self.common.sequence;
+    }
+    pub fn settings(self: *Context) *Settings
+    {
+        return &self.common.settings;
+    }
+    pub fn allocator(self: *Context) std.mem.Allocator
+    {
+        return self.common.allocator;
+    }
 };
 
 pub const CarryOverSegment = struct
@@ -115,61 +132,3 @@ pub const ChunkState = struct
     dataState: chunks.ChunkDataState,
 };
 
-pub const LevelInitMask = struct
-{
-    mask: std.bit_set.IntegerBitSet(32) = .{ .mask = ~@as(0, u32) },
-
-    pub fn setDeinitedAtLevel(self: *LevelInitMask, level: u5) void
-    {
-        self.mask.unset(level);
-    }
-
-    pub fn isInitedAtLevel(self: *const LevelInitMask, level: u5) void
-    {
-        return self.mask.isSet(level);
-    }
-};
-
-pub const LevelContext = struct
-{
-    current: u5,
-    max: u5,
-
-    pub fn push(self: *LevelContext) void
-    {
-        self.current += 1;
-        self.max = @max(self.current, self.max);
-    }
-
-    pub fn pop(self: *LevelContext) void
-    {
-        self.current -= 1;
-    }
-
-    pub fn assertPopped(self: *const LevelContext) void
-    {
-        std.debug.assert(self.current == 0);
-    }
-};
-
-fn PointedToType(t: type) type
-{
-    const info = @typeInfo(t);
-    return info.Pointer.child;
-}
-
-pub fn deinitCurrentLevel(context: *const Context) void
-{
-    const level = context.level.current;
-    context.state.levelInitMask.setDeinitedAtLevel(level);
-}
-
-pub fn advanceAction(
-    context: *const Context,
-    action: anytype,
-    value: PointedToType(@TypeOf(action))) void
-{
-    const level = context.level.current;
-    context.state.levelInitMask.setDeinitedAtLevel(level);
-    action.* = value;
-}

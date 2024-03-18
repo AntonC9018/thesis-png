@@ -19,11 +19,11 @@ fn validateSignature(slice: *pipelines.Sequence) !void
 {
     var copy = slice.*;
     pipelines.removeFront(&copy, pngFileSignature)
-    catch |err| switch (err)
-    {
-        error.NoMatch => return error.SignatureMismatch,
-        else => return err,
-    };
+        catch |err| switch (err)
+        {
+            error.NoMatch => return error.SignatureMismatch,
+            else => return err,
+        };
     slice.* = copy;
 }
 
@@ -138,7 +138,7 @@ fn printZlibState(z: *const zlib.State, writer: anytype) !void
     }
 }
 
-fn debugPrintInfo(context: *const Context) !void
+fn debugPrintInfo(context: *Context) !void
 {
     if (!context.settings.logChunkStart)
     {
@@ -146,7 +146,7 @@ fn debugPrintInfo(context: *const Context) !void
     }
     const outputStream = std.io.getStdOut().writer();
     try printStepName(outputStream, context.state);
-    const offset = context.sequence.getStartBytePosition();
+    const offset = context.sequence().getStartBytePosition();
     try outputStream.print("Offset: {x}", .{ offset });
 
     {
@@ -159,8 +159,8 @@ fn debugPrintInfo(context: *const Context) !void
     try outputStream.print("\n", .{});
 
     const maxBytesToPrint = 10;
-    const numBytesWillPrint = @min(context.sequence.len(), maxBytesToPrint);
-    const s = context.sequence.sliceToExclusive(context.sequence.getPosition(numBytesWillPrint));
+    const numBytesWillPrint = @min(context.sequence().len(), maxBytesToPrint);
+    const s = context.sequence().sliceToExclusive(context.sequence().getPosition(numBytesWillPrint));
     if (s.len() > 0)
     {
         var iter = s.iterate().?;
@@ -185,7 +185,7 @@ fn debugPrintInfo(context: *const Context) !void
     try outputStream.print("\n", .{});
 }
 
-pub fn parseTopLevelItem(context: *const Context) !bool
+pub fn parseTopLevelItem(context: *Context) !bool
 {
     while (true)
     {
@@ -199,33 +199,35 @@ pub fn parseTopLevelItem(context: *const Context) !bool
     }
 }
 
-pub fn parseNextItem(context: *const Context) !bool
+pub fn parseNextItem(context: *Context) !bool
 {
-    const initTopLevel = struct
+    // NOTE: we don't need to push since we're on the 0-th level here.
+    try context.level().initCurrent(context, struct
     {
-        fn f(context_: *const Context, key: Action) !void
+        state: *State,
+
+        fn execute(self: *@This()) !void
         {
-            switch (key)
+            switch (self.state.action)
             {
                 .Signature => unreachable,
                 .Chunk =>
                 {
-                    context_.state.chunk = createChunkParserState();
+                    self.state.chunk = createChunkParserState();
                 },
             }
         }
-    }.f;
+    }{
+        .state = context.state,
+    });
+    defer context.level().pop();
 
     const action = &context.state.action;
-
-    context.level.push();
-    defer context.level.pop();
-
     switch (action)
     {
         .Signature =>
         {
-            try validateSignature(context.sequence);
+            try validateSignature(context.sequence());
             common.advanceAction(context, action, .Chunk);
             return true;
         },
@@ -234,7 +236,7 @@ pub fn parseNextItem(context: *const Context) !bool
             const isDone = try parseChunkItem(context);
             if (isDone)
             {
-                common.deinitCurrentLevel(context);
+                context.level().deinitCurrent();
                 return true;
             }
         },
@@ -243,7 +245,7 @@ pub fn parseNextItem(context: *const Context) !bool
 }
 
 pub fn initChunkItem(
-    context: *const Context,
+    context: *Context,
     key: ChunkAction) !void
 {
     const chunk = &context.state.chunk;
@@ -258,30 +260,30 @@ pub fn initChunkItem(
 }
 
 
-pub fn parseChunkItem(context: *const Context) !bool
+pub fn parseChunkItem(context: *Context) !bool
 {
     const chunk = &context.state.chunk;
 
-    context.level.push();
-    defer context.level.pop();
+    context.level().push();
+    defer context.level().pop();
 
     switch (chunk.action)
     {
         .Length => 
         {
-            const len = utils.readPngU32(context.sequence)
-            catch
-            {
-                return error.LengthValueTooLarge;
-            };
+            const len = utils.readPngU32(context.sequence())
+                catch
+                {
+                    return error.LengthValueTooLarge;
+                };
 
             chunk.object.dataByteLen = len;
-            chunk.action = .{ .key = .ChunkType };
+            common.advanceAction(context, &chunk.action, .ChunkType);
             return false;
         },
         .ChunkType =>
         {
-            if (context.sequence.len() < 4)
+            if (context.sequence().len() < 4)
             {
                 return error.NotEnoughBytes;
             }
@@ -311,7 +313,7 @@ pub fn parseChunkItem(context: *const Context) !bool
                 return error.OnlyEndOrDataAllowedAfterIDAT;
             }
 
-            chunk.action = .{ .key = .Data };
+            common.advanceAction(context, &chunk.action, .Data);
             return false;
         },
         .Data =>
@@ -319,7 +321,7 @@ pub fn parseChunkItem(context: *const Context) !bool
             const done = try chunks.parseChunkData(context);
             if (done)
             {
-                chunk.action = .{ .key = .CyclicRedundancyCheck };
+                common.advanceAction(context, &chunk.action, .CyclicRedundancyCheck);
             }
             return false;
         },

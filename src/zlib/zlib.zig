@@ -66,7 +66,7 @@ test "Adler32"
 
 pub const State = struct
 {
-Action = .CompressionMethodAndFlags,
+    action: Action = .CompressionMethodAndFlags,
     windowSize: usize = 0,
     adler32: Adler32State = .{},
 
@@ -136,21 +136,26 @@ pub const Context = struct
     common: *const CommonContext,
     state: *State,
 
-    pub fn output(self: *const Context) *helper.OutputBuffer
+    pub fn level(self: *Context) *helper.LevelContext
+    {
+        return self.common.level();
+    }
+    pub fn output(self: *Context) *helper.OutputBuffer
     {
         return self.common.output;
     }
-    pub fn sequence(self: *const Context) *pipelines.Sequence
+    pub fn sequence(self: *Context) *pipelines.Sequence
     {
-        return self.common.sequence;
+        return self.common.sequence();
     }
 };
 
-pub fn decode(context: *const Context) !bool
+pub fn decode(context: *Context) !bool
 {
     const state = context.state;
 
-    try helper.initForStateAction(context, &state.action, {});
+    try context.level().pushInit({});
+    defer context.level().pop();
 
     switch (state.action)
     {
@@ -171,7 +176,7 @@ pub fn decode(context: *const Context) !bool
                     state.decompressor = .{
                         .deflate = .{},
                     };
-                    state.action.reset(Action.Flags);
+                    helper.advanceAction(context, &state.action, .Flags);
                 },
                 else => return error.UnsupportedCompressionMethod,
             }
@@ -188,19 +193,19 @@ pub fn decode(context: *const Context) !bool
 
             if (flags.presetDictionary)
             {
-                state.action.reset(.PresetDictionary);
+                helper.advanceAction(context, &state.action, .PresetDictionary);
                 return error.PresetDictionaryNotSupported;
             }
             else
             {
-                state.action.reset(.CompressedData);
+                helper.advanceAction(context, &state.action, .CompressedData);
             }
         },
         .PresetDictionary =>
         {
             const value = try pipelines.readNetworkUnsigned(context.sequence(), u32);
             state.data = .{ .dictionaryId = value };
-            state.action.reset(.CompressedData);
+            helper.advanceAction(context, &state.action, .CompressedData);
         },
         .CompressedData =>
         {
@@ -223,19 +228,24 @@ pub fn decode(context: *const Context) !bool
             const doneWithBlock = try deflate.deflate(&deflateContext);
             if (doneWithBlock and decompressor.isFinal)
             {
-                state.action.reset(.Adler32Checksum);
+                helper.advanceAction(context, &state.action, .Adler32Checksum);
                 deflate.skipToWholeByte(&deflateContext);
             }
             if (doneWithBlock)
             {
-                decompressor.action.reset(deflate.Action.Initial);
+                context.level().deinitCurrent();
+                // NOTE:
+                // If we assume the states after the max one get reset to "uninitialized"
+                // after each call, this is a valid thing to do.
+                // We couldn't do this straight up without resetting the initialized mask for its level.
+                decompressor.action.* = deflate.Action.Initial;
             }
         },
         .Adler32Checksum =>
         {
             const checksum = try pipelines.readNetworkUnsigned(context.sequence(), u32);
             state.checksum = checksum;
-            std.debug.print("Checksum expected: {x:0>16}, Computed: {x:0>16}\n", .{checksum, state.adler32.getChecksum()});
+            std.debug.print("Checksum expected: {x:0>16}, Computed: {x:0>16}\n", .{ checksum, state.adler32.getChecksum() });
 
             const computedChecksum = state.adler32.getChecksum();
             if (checksum != computedChecksum)
@@ -249,7 +259,7 @@ pub fn decode(context: *const Context) !bool
     return false;
 }
 
-pub fn decodeAsMuchAsPossible(context: *const Context) !void
+pub fn decodeAsMuchAsPossible(context: *Context) !void
 {
     while (true)
     {

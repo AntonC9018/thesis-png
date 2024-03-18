@@ -166,7 +166,7 @@ pub fn decodeCodes(
             }
 
             state.action.reset(.LiteralOrLenCodeLens);
-            state.literalOrLenCodeLens = try context.allocator()
+            state.literalOrLenCodeLens = try context.allocator()()
                 .alloc(u8, state.getLiteralOrLenCodeCount());
 
             const copy = state.codeLenCodeLens;
@@ -183,7 +183,7 @@ pub fn decodeCodes(
 
                 const tree = try huffman.createTree(
                     @ptrCast(&state.codeLenCodeLens),
-                    context.allocator());
+                    context.allocator()());
                 state.codeFrequencyState = std.mem.zeroInit(CodeFrequencyState, .{
                     .action = .LiteralLen,
                     .tree = tree,
@@ -203,7 +203,7 @@ pub fn decodeCodes(
             }
 
             state.action.reset(.DistanceCodeLens);
-            state.distanceCodeLens = try context.allocator()
+            state.distanceCodeLens = try context.allocator()()
                 .alloc(u8, state.getDistanceCodeCount());
             state.readListItemCount = 0;
         },

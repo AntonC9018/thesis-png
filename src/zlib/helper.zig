@@ -3,37 +3,18 @@ pub const DeflateContext = @import("deflate.zig").Context;
 pub const std = @import("std");
 pub const huffman = @import("huffmanTree.zig");
 
-const act = @import("../shared/action.zig");
-pub const Initiable = act.Initiable;
-pub const InitiableThroughPointer = act.InitiableThroughPointer;
+pub const levels = @import("../shared/level.zig");
+usingnamespace levels;
+
 pub const Settings = @import("../shared/Settings.zig");
-
-pub fn initForStateAction(
-    context: anytype,
-    action: anytype,
-    initialize: anytype) !void
-{
-    return act.initStateForAction(
-        context,
-        context.common.settings.returnOnInit,
-        action,
-        initialize);
-}
-
-pub fn initState(
-    context: anytype,
-    initialized: *bool) !void
-{
-    return act.initState(context.common.settings.returnOnInit, initialized);
-}
-
+const SharedCommonContext = @import("../shared/CommonContext.zig");
 
 pub const PeekApplyHelper = struct
 {
     nextBitOffset: u3,
     nextSequenceStart: pipelines.SequencePosition,
 
-    pub fn apply(self: PeekApplyHelper, context: *const DeflateContext) void
+    pub fn apply(self: PeekApplyHelper, context: *DeflateContext) void
     {
         context.state.bitOffset = self.nextBitOffset;
         context.sequence().* = context.sequence().sliceFrom(self.nextSequenceStart);
@@ -49,7 +30,7 @@ pub fn PeekNBitsResult(resultType: type) type
 
         const Self = @This();
 
-        pub fn apply(self: Self, context: *const DeflateContext) void
+        pub fn apply(self: Self, context: *DeflateContext) void
         {
             self.applyHelper.apply(context);
         }
@@ -58,7 +39,7 @@ pub fn PeekNBitsResult(resultType: type) type
 
 pub const PeekNBitsContext = struct
 {
-    context: *const DeflateContext,
+    context: *DeflateContext,
     bitsCount: u6,
     reverse: bool = false,
 
@@ -220,7 +201,7 @@ test "ApplyHelper works"
     var testContext = try createTestContext();
     testContext.init();
 
-    const newStart = testContext.sequence.getPosition(4);
+    const newStart = testcontext.sequence().getPosition(4);
     const newOffset = 3;
     const helper = PeekApplyHelper
     {
@@ -229,7 +210,7 @@ test "ApplyHelper works"
     };
     helper.apply(&testContext.context());
 
-    const start = testContext.sequence.start();
+    const start = testcontext.sequence().start();
     try expectEqual(newStart.offset, start.offset);
     try expectEqual(newStart.segment, start.segment);
     try expectEqual(newOffset, testContext.state.bitOffset);
@@ -254,7 +235,7 @@ test "Peek bits test"
         // Now reading the 0.
         r.apply(context);
 
-        try expectEqual(0, testContext.sequence.start().offset);
+        try expectEqual(0, testcontext.sequence().start().offset);
         try expectEqual(4, testContext.state.bitOffset);
     }
 
@@ -351,7 +332,7 @@ test "Peek bits test"
 
 pub const PeekBitsContext = struct
 {
-    context: *const DeflateContext,
+    context: *DeflateContext,
     reverse: bool = false,
 };
 
@@ -386,7 +367,7 @@ pub fn readBits(context: PeekBitsContext, ResultType: type) !ResultType
     return r.bits;
 }
 
-pub fn readNBits(context: *const DeflateContext, bitsCount: u6) !u32
+pub fn readNBits(context: *DeflateContext, bitsCount: u6) !u32
 {
     std.debug.assert(bitsCount > 0);
     const r = try peekNBits(.{
@@ -403,21 +384,21 @@ pub const DecodedCharacterResult = struct
     applyHelper: PeekApplyHelper,
     currentBitCount: *u5,
 
-    pub fn apply(self: *const DecodedCharacterResult, context: *const DeflateContext) void
+    pub fn apply(self: *const DecodedCharacterResult, context: *DeflateContext) void
     {
         self.applyHelper.apply(context);
         self.currentBitCount.* = 0;
     }
 };
 
-pub fn readAndDecodeCharacter(context: *const DeflateContext, huffman_: HuffmanContext) !u16
+pub fn readAndDecodeCharacter(context: *DeflateContext, huffman_: HuffmanContext) !u16
 {
     const r = try peekAndDecodeCharacter(context, huffman_);
     r.apply(context);
     return r.character;
 }
 
-fn peekAndDecodeCharacter(context: *const DeflateContext, huffman_: HuffmanContext) !DecodedCharacterResult
+fn peekAndDecodeCharacter(context: *DeflateContext, huffman_: HuffmanContext) !DecodedCharacterResult
 {
     if (huffman_.currentBitCount.* == 0)
     {
@@ -462,7 +443,7 @@ pub const HuffmanContext = struct
 };
 
 pub fn readArrayElement(
-    context: *const DeflateContext,
+    context: *DeflateContext,
     array: anytype, 
     currentNumberOfElements: *usize,
     bitsCount: u5) !bool
@@ -483,12 +464,26 @@ pub fn readArrayElement(
 
 pub const CommonContext = struct
 {
-    sequence: *pipelines.Sequence,
-    allocator: std.mem.Allocator,
+    common: SharedCommonContext,
     output: *OutputBuffer,
-    settings: *Settings,
-};
 
+    pub fn sequence(self: *CommonContext) *pipelines.Sequence
+    {
+        return self.common.sequence;
+    }
+    pub fn allocator(self: *CommonContext) std.mem.Allocator
+    {
+        return self.common.allocator;
+    }
+    pub fn settings(self: *CommonContext) *Settings
+    {
+        return self.common.settings;
+    }
+    pub fn level(self: *CommonContext) levels.LevelContext
+    {
+        return self.common.level;
+    }
+};
 
 pub const OutputBuffer = struct
 {
@@ -562,7 +557,7 @@ pub const Symbol = union(enum)
     BackReference: BackReference,
 };
 
-pub fn writeSymbolToOutput(context: *const DeflateContext, symbol: ?Symbol) !bool
+pub fn writeSymbolToOutput(context: *DeflateContext, symbol: ?Symbol) !bool
 {
     if (symbol) |s|
     {
@@ -575,7 +570,7 @@ pub fn writeSymbolToOutput(context: *const DeflateContext, symbol: ?Symbol) !boo
     return false;
 }
 
-fn writeSymbolToOutput_switch(context: *const DeflateContext, symbol: Symbol) !bool
+fn writeSymbolToOutput_switch(context: *DeflateContext, symbol: Symbol) !bool
 {
     switch (symbol)
     {

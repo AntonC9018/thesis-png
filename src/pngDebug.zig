@@ -101,7 +101,7 @@ pub fn readTestFile() !void
 
         if (readResult.isEnd)
         {
-            const remaining = context.sequence.len();
+            const remaining = context.sequence().len();
             if (remaining > 0)
             {
                 std.debug.print("Not all input consumed. Remaining length: {}\n", .{remaining});
@@ -115,7 +115,7 @@ pub fn readTestFile() !void
             break;
         }
 
-        try reader.advance(context.sequence.start());
+        try reader.advance(context.sequence().start());
     }
 
     for (chunks.items) |*chunk| 

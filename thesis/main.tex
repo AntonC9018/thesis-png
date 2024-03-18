@@ -405,7 +405,7 @@ pub fn impl(context: *Context) !void
         .Number =>
         {
             // Read the int, modify the stream
-            const number = try pipelines.readInt(context.sequence);
+            const number = try pipelines.readInt(context.sequence());
 
             // Save the context
             context.state.number = number;
@@ -470,7 +470,7 @@ pub fn impl(context: *Context) !void
         .Number =>
         {
             // Read the int, but do not consume the stream
-            const number = try pipelines.peekInt(context.sequence);
+            const number = try pipelines.peekInt(context.sequence());
 
             // Save the context
             context.state.number = number.value;
@@ -506,7 +506,7 @@ pub fn impl(context: *Context) !void
         .Number =>
         {
             // Read the int, modify the stream
-            const number = try pipelines.readInt(context.sequence);
+            const number = try pipelines.readInt(context.sequence());
 
             // Validate
             if (number == 256)

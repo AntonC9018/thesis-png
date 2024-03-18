@@ -14,18 +14,17 @@ pub const CodeState = 7 || 8 || 9;
 
 pub const SymbolDecompressionState = struct
 {
-SymbolDecompressionAction = .Code,
+    action: SymbolDecompressionAction = .Code,
     codeLen: CodeState = 7,
     lenCode: u9,
     len: u8,
     distanceCode: u5,
     distance: u16,
 
-    fn resetAction(state: *SymbolDecompressionState) void
-    {
-        state.action = .{ .key = .Code };
-        state.codeLen = 7;
-    }
+    pub const Initial: SymbolDecompressionState = std.mem.zeroInit(.{
+        .codeLen = 7,
+        .action = .Code,
+    });
 };
 
 const lengthCodeStart = 257;
@@ -161,7 +160,8 @@ pub fn decompressSymbol(
     context: *const helper.DeflateContext,
     state: *SymbolDecompressionState) !?helper.Symbol
 {
-    try helper.initForStateAction(context, &state.action, {});
+    try context.level().pushInit({});
+    defer context.level().pop();
 
     const lengthCodeUpperLimit = 0b001_0111;
 
@@ -204,7 +204,7 @@ pub fn decompressSymbol(
                         if (code.bits <= lengthCodeUpperLimit)
                         {
                             code.apply(context);
-                            state.action = .{ .key = .Length };
+                            helper.advanceAction(context, &state.action, .Length);
                             state.lenCode = code.bits - 1;
                             return null;
                         }
@@ -216,7 +216,6 @@ pub fn decompressSymbol(
                             code.apply(context);
 
                             const value = code.bits - literalLowerLimit;
-                            state.resetAction();
                             return .{ .LiteralValue = value };
                         }
 
@@ -225,7 +224,7 @@ pub fn decompressSymbol(
                             code.apply(context);
 
                             const codeRemapped = code.bits - lengthLowerLimit2 + lengthCodeUpperLimit;
-                            state.action = .{ .key = .Length };
+                            helper.advanceAction(context, &state.action, .Length);
                             state.lenCode = codeRemapped;
                             if (codeRemapped >= adjustStart(286))
                             {
@@ -242,7 +241,6 @@ pub fn decompressSymbol(
                         {
                             const literalOffset2 = 144;
                             const value = code - literalLowerLimit2 + literalOffset2;
-                            state.resetAction();
                             return .{ .LiteralValue = @intCast(value) };
                         }
 
@@ -263,12 +261,12 @@ pub fn decompressSymbol(
             const baseLength = getBaseLength(state.codeRemapped);
             const len = baseLength + extraBits;
             state.len = @intCast(len);
-            state.action = .{ .key = .DistanceCode };
+common.advanceAction(context, &state.action, .DistanceCode);
         },
         .DistanceCode =>
         {
             const distanceCode = try helper.readBits(readCodeBitsContext, u5);
-            state.action = .{ .key = .Distance };
+common.advanceAction(context, &state.action, .Distance);
             state.distanceCode = distanceCode;
 
             if (distanceCode >= 30)
@@ -287,7 +285,7 @@ pub fn decompressSymbol(
             const baseDistance = getBaseDistance(state.distanceCode);
             const distance = baseDistance + extraBits;
 
-            state.resetAction();
+            common.advanceAction(context, state.action, );;
             state.distance = distance;
             return .{
                 .BackReference = .{

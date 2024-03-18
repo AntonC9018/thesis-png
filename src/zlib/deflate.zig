@@ -21,15 +21,19 @@ pub const Context = struct
     state: *State,
     common: *const helper.CommonContext,
 
-    pub fn sequence(self: *const Context) *pipelines.Sequence
+    pub fn level(self: *Context) *helper.LevelContext
     {
-        return self.common.sequence;
+        return self.common.level();
     }
-    pub fn allocator(self: *const Context) std.mem.Allocator
+    pub fn sequence(self: *Context) *pipelines.Sequence
     {
-        return self.common.allocator;
+        return self.common.sequence();
     }
-    pub fn output(self: *const Context) *helper.OutputBuffer
+    pub fn allocator(self: *Context) std.mem.Allocator
+    {
+        return self.common.allocator();
+    }
+    pub fn output(self: *Context) *helper.OutputBuffer
     {
         return self.common.output;
     }
@@ -37,7 +41,7 @@ pub const Context = struct
 
 pub const State = struct
 {
-Action = Action.Initial,
+    action: Action = Action.Initial,
     bitOffset: u3 = 0,
 
     isFinal: bool = false,
@@ -53,7 +57,7 @@ Action = Action.Initial,
     blockState: union(BlockType)
     {
         NoCompression: noCompression.State,
-        FixedHuffman: helper.Initiable(fixed.SymbolDecompressionState),
+        FixedHuffman: fixed.SymbolDecompressionState,
         DynamicHuffman: dynamic.State,
         Reserved: void,
     } = .{ .Reserved = {} },
@@ -70,16 +74,20 @@ pub const Action = enum
 };
 
 // Returns true when it's done with a block.
-pub fn deflate(context: *const Context) !bool
+pub fn deflate(context: *Context) !bool
 {
     const state = context.state;
+
+    context.level().pushInit({});
+    defer context.level().pop();
+
     switch (state.action)
     {
         .IsFinal =>
         {
             const isFinal = try helper.readBits(.{ .context = context }, u1);
             state.isFinal = isFinal == 1;
-            state.action = .BlockType;
+            helper.advanceAction(context, &state.action, .BlockType);
         },
         .BlockType =>
         {
@@ -101,7 +109,7 @@ pub fn deflate(context: *const Context) !bool
                             .init = std.mem.zeroes(noCompression.InitState),
                         },
                     };
-                    state.action = .BlockInit;
+                    helper.advanceAction(context, &state.action, .BlockInit);
                 },
                 .FixedHuffman =>
                 {
@@ -112,7 +120,7 @@ pub fn deflate(context: *const Context) !bool
                     };
                     // It doesn't need to read any metadata.
                     // The symbol tables are predefined by the spec.
-                    state.action = .DecompressionLoop;
+                    helper.advanceAction(context, &state.action, .DecompressionLoop);
                 },
                 .DynamicHuffman =>
                 {
@@ -121,7 +129,7 @@ pub fn deflate(context: *const Context) !bool
                             .codeDecoding = std.mem.zeroes(dynamic.CodeDecodingState),
                         },
                     };
-                    state.action = .BlockInit;
+                    helper.advanceAction(context, &state.action, .BlockInit);
                 },
                 .Reserved =>
                 {
@@ -149,7 +157,7 @@ pub fn deflate(context: *const Context) !bool
                                 .bytesLeftToCopy = s.init.len,
                             },
                         };
-                        state.action = .DecompressionLoop;
+                        helper.advanceAction(context, &state.action, .DecompressionLoop);
                     }
                 },
                 .FixedHuffman => unreachable,
@@ -158,8 +166,8 @@ pub fn deflate(context: *const Context) !bool
                     const done = try dynamic.decodeCodes(context, &s.codeDecoding);
                     if (done)
                     {
-                        try dynamic.initializeDecompressionState(s, context.allocator());
-                        state.action = .DecompressionLoop;
+                        try dynamic.initializeDecompressionState(s, context.allocator()());
+                        helper.advanceAction(context, &state.action, .DecompressionLoop);
                     }
                 },
                 .Reserved => unreachable,
@@ -184,7 +192,6 @@ pub fn deflate(context: *const Context) !bool
                 },
                 .DynamicHuffman => |*s|
                 {
-                    try helper.initForStateAction(context, s, {});
                     const symbol = try dynamic.decompressSymbol(context, &s.decompression);
                     state.lastSymbol = symbol;
                     const done = try helper.writeSymbolToOutput(context, symbol);
@@ -197,7 +204,7 @@ pub fn deflate(context: *const Context) !bool
     return false;
 }
 
-pub fn skipToWholeByte(context: *const Context) void
+pub fn skipToWholeByte(context: *Context) void
 {
     const state = context.state;
     if (state.bitOffset != 0)

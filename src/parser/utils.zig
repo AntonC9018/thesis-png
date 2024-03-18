@@ -133,7 +133,7 @@ pub fn readNullTerminatedText(
 
         if (copyUntilPos > 0)
         {
-            const destinationSlice = try output.addManyAsSlice(context.allocator, copyUntilPos);
+            const destinationSlice = try output.addManyAsSlice(context.allocator(), copyUntilPos);
             @memcpy(destinationSlice, sourceSlice);
         }
 
@@ -155,21 +155,24 @@ pub fn readNullTerminatedText(
 }
 
 pub fn readZlibData(
-    context: anytype,
+    context: *common.Context,
     state: *zlib.State,
     output: *std.ArrayListUnmanaged(u8)) !bool
 {
+    // Maybe wrap the zlib stream.
+    try context.level().pushInit({});
+    defer context.level().pop();
+
     var outputBuffer = zlib.OutputBuffer
     {
-        .allocator = context.allocator,
+        .allocator = context.allocator(),
         .array = output,
         .windowSize = &state.windowSize,
     };
     const c = zlib.CommonContext
     {
-        .allocator = context.allocator,
+        .common = context.common,
         .output = &outputBuffer,
-        .sequence = context.sequence,
     };
     const zlibContext = zlib.Context
     {
@@ -197,7 +200,7 @@ pub fn removeAndProcessNextByte(
         return true;
     }
 
-    const front = try pipelines.removeFirst(context.sequence);
+    const front = try pipelines.removeFirst(context.sequence());
     bytesRead.* += 1;
 
     try functor.each(front);
@@ -220,7 +223,7 @@ pub fn removeAndProcessAsManyBytesAsAvailable(
         return true;
     }
 
-    const sequenceLength = context.sequence.len();
+    const sequenceLength = context.sequence().len();
     if (sequenceLength == 0)
     {
         return error.NotEnoughBytes;
@@ -228,8 +231,8 @@ pub fn removeAndProcessAsManyBytesAsAvailable(
 
     const maxBytesToRead = totalBytes - bytesRead.*;
     const bytesThatWillBeRead: u32 = @intCast(@min(maxBytesToRead, sequenceLength));
-    const readPosition = context.sequence.getPosition(bytesThatWillBeRead);
-    const s = context.sequence.disect(readPosition);
+    const readPosition = context.sequence().getPosition(bytesThatWillBeRead);
+    const s = context.sequence().disect(readPosition);
 
     if (@hasDecl(@TypeOf(functor), "initCount"))
     {
@@ -237,7 +240,7 @@ pub fn removeAndProcessAsManyBytesAsAvailable(
     }
 
     bytesRead.* += bytesThatWillBeRead;
-    context.sequence.* = s.right;
+    context.sequence().* = s.right;
 
     if (@hasDecl(@TypeOf(functor), "sequence"))
     {
@@ -298,15 +301,15 @@ pub fn skipBytes(context: *const common.Context, chunk: *common.ChunkState) !boo
     if (bytesSkipped.* < totalBytes)
     {
         const bytesLeftToSkip = totalBytes - bytesSkipped.*;
-        const bytesToSkipNowCount = @min(bytesLeftToSkip, context.sequence.len());
+        const bytesToSkipNowCount = @min(bytesLeftToSkip, context.sequence().len());
         if (bytesToSkipNowCount == 0)
         {
             return error.NotEnoughBytes;
         }
         bytesSkipped.* += @intCast(bytesToSkipNowCount);
 
-        const newStart = context.sequence.getPosition(bytesToSkipNowCount);
-        context.sequence.* = context.sequence.sliceFrom(newStart);
+        const newStart = context.sequence().getPosition(bytesToSkipNowCount);
+        context.sequence().* = context.sequence().sliceFrom(newStart);
     }
 
     return (bytesSkipped.* == totalBytes);
