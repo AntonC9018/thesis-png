@@ -43,7 +43,7 @@ pub const State = struct
 pub fn isParserStateTerminal(context: *const Context) bool 
 {
     return context.state.action == .Chunk
-        and !context.level().initMask.isInitedAtLevel(0);
+        and !context.level().infoMasks.isSetAtLevel(0);
 }
 
 pub const Context = struct
@@ -51,9 +51,12 @@ pub const Context = struct
     common: @import("../shared/CommonContext.zig"),
     state: *State,
 
-    pub fn level(self: *Context) *levels.LevelContext
+    pub fn level(self: *Context) levels.LevelContext(Context)
     {
-        return &self.common.level;
+        return .{
+            .data = &self.common.level,
+            .context = self,
+        };
     }
     pub fn sequence(self: *Context) *pipelines.Sequence
     {

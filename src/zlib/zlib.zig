@@ -136,9 +136,12 @@ pub const Context = struct
     common: *const CommonContext,
     state: *State,
 
-    pub fn level(self: *Context) *helper.LevelContext
+    pub fn level(self: *Context) *helper.LevelContext(Context)
     {
-        return self.common.level();
+        return .{
+            .data = self.common.level(),
+            .context = self,
+        };
     }
     pub fn output(self: *Context) *helper.OutputBuffer
     {
@@ -233,7 +236,7 @@ pub fn decode(context: *Context) !bool
             }
             if (doneWithBlock)
             {
-                context.level().deinitCurrent();
+                context.level().unsetCurrent();
                 // NOTE:
                 // If we assume the states after the max one get reset to "uninitialized"
                 // after each call, this is a valid thing to do.

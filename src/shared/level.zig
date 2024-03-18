@@ -1,90 +1,125 @@
 const std = @import("std");
 
-pub const LevelInitMask = struct
+pub const LevelInfoMask = std.bit_set.IntegerBitSet(32);
+
+pub const LevelInfoMasks = struct
 {
-    mask: std.bit_set.IntegerBitSet(32) = .{ .mask = 0 },
-
-    pub fn setAtLevel(self: *LevelInitMask, level: u5, comptime set: bool) void
-    {
-        if (set)
-        {
-            self.mask.set(level);
-        }
-        else
-        {
-            self.mask.unset(level);
-        }
-    }
-
-    pub fn isInitedAtLevel(self: *const LevelInitMask, level: u5) void
-    {
-        return self.mask.isSet(level);
-    }
+    init: LevelInfoMask = .{ .mask = 0 },
+    finalized: LevelInfoMask = .{ .mask = 0 },
 };
 
 pub const LevelStats = struct
 {
-    initMask: LevelInitMask,
+    initMask: LevelInfoMasks,
     max: u5,
 };
 
-pub const LevelContext = struct
+pub const LevelContextData = struct
 {
-    initMask: *LevelInitMask,
+    infoMasks: *LevelInfoMasks,
     current: u5,
     max: u5,
-
-    pub fn push(self: *LevelContext) void
-    {
-        self.current += 1;
-        self.max = @max(self.current, self.max);
-    }
-
-    pub fn pushInit(self: *LevelContext, callback: anytype) !void
-    {
-        self.push();
-        errdefer self.pop();
-
-        try self.initCurrent(callback);
-    }
-
-    fn currentLevel(self: *const LevelContext) u5
-    {
-        return self.current - 1;
-    }
-
-    fn initCurrent(self: *LevelContext, callback: anytype) !void
-    {
-        const level = self.currentLevel();
-        if (!self.initMask.isInitedAtLevel(level))
-        {
-            if (@hasDecl(callback, "execute"))
-            {
-                try callback.execute();
-            }
-            else if (@TypeOf(callback) != void)
-            {
-                try callback();
-            }
-            self.initMask.setAtLevel(level, true);
-        }
-    }
-
-    pub fn deinitCurrent(self: *LevelContext) void
-    {
-        self.initMask.setAtLevel(self.currentLevel(), false);
-    }
-
-    pub fn pop(self: *LevelContext) void
-    {
-        self.current -= 1;
-    }
-
-    pub fn assertPopped(self: *const LevelContext) void
-    {
-        std.debug.assert(self.current == 0);
-    }
 };
+
+pub fn LevelContext(Context: type) type
+{
+    return struct
+    {
+        context: *Context,
+        data: *LevelContextData,
+
+        const Self = @This();
+
+        pub fn infoMasks(self: *Self) *LevelInfoMasks
+        {
+            return self.data.infoMasks;
+        }
+        pub fn current(self: *Self) *u5
+        {
+            return self.data.current;
+        }
+        pub fn max(self: *Self) *u5
+        {
+            return self.data.max;
+        }
+
+        pub fn push(self: *Self) void
+        {
+            self.current().* += 1;
+            self.max().* = @max(self.current().*, self.max().*);
+        }
+
+        pub fn pushInit(self: *Self, callback: anytype) !void
+        {
+            self.push();
+            errdefer self.pop();
+
+            try self.initialize(callback);
+        }
+
+        fn currentLevel(self: *const Self) u5
+        {
+            return self.current().* - 1;
+        }
+
+        fn initialize(self: *Self, callback: anytype) !void
+        {
+            const level = self.currentLevel();
+            if (!self.infoMasks().init.isSet(level))
+            {
+                if (@hasDecl(callback, "execute"))
+                {
+                    try callback.execute();
+                }
+                else if (@TypeOf(callback) != void)
+                {
+                    try callback();
+                }
+                self.infoMasks().init.set(level);
+            }
+        }
+
+        pub fn unset(self: *Self) void
+        {
+            const c = self.currentLevel();
+            self.infoMasks().finalized.unset(c);
+            self.infoMasks().init.unset(c);
+        }
+
+        pub fn pop(self: *Self) void
+        {
+            self.current().* -= 1;
+        }
+
+        pub fn assertPopped(self: *const Self) void
+        {
+            std.debug.assert(self.current().* == 0);
+        }
+
+        pub fn finalize(self: *Self) !void
+        {
+            self.infoMasks().finalized.set(self.currentLevel());
+        }
+
+        pub fn advance(
+            self: *Self,
+            action: anytype,
+            value: PointedToType(@TypeOf(action))) !void
+        {
+            self.unset();
+            action.* = value;
+        }
+
+        pub fn clearUnreached(self: *Self) void
+        {
+            const setMask: LevelInfoMask = .{
+                .mask = (~@as(0, u32)) >> (32 - self.max()),
+            };
+            self.infoMasks().init.setIntersection(setMask);
+            self.infoMasks().finalized.setIntersection(setMask);
+        }
+    };
+}
 
 fn PointedToType(t: type) type
 {
@@ -97,6 +132,6 @@ pub fn advanceAction(
     action: anytype,
     value: PointedToType(@TypeOf(action))) void
 {
-    context.level().deinitCurrent();
+    context.level().unsetCurrent();
     action.* = value;
 }
