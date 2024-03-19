@@ -236,7 +236,7 @@ pub fn parseNextItem(context: *Context) !bool
             const isDone = try parseChunkItem(context);
             if (isDone)
             {
-                context.level().deinitCurrent();
+                context.level().unsetCurrent();
                 return true;
             }
         },

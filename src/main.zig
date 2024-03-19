@@ -342,7 +342,7 @@ fn finalizeNodesForCurrentAction(
     context: *TreeConstructionContext,
     currentPosition: ast.Position) !void
 {
-    const maskCopy = context.levelStats.initMask.mask;
+    const maskCopy = context.levelStats.initMask.inited;
     maskCopy.toggleAll();
     const firstUninitedIndex = if (maskCopy.findFirstSet()) |i| (i + 1) else 0;
 

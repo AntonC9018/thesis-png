@@ -479,9 +479,9 @@ pub const CommonContext = struct
     {
         return self.common.settings;
     }
-    pub fn level(self: *CommonContext) levels.LevelContextData
+    pub fn level(self: *CommonContext) *levels.LevelContextData
     {
-        return self.common.level;
+        return &self.common.level;
     }
 };
 
