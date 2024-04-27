@@ -30,6 +30,9 @@ pub const ChunkDataNodeType = parser.ChunkType;
 const NodeIndex = usize;
 const DataIndex = usize;
 
+const invalidNodeIndex: NodeIndex = @bitCast(@as(isize, -1));
+const invalidDataIndex: DataIndex = invalidNodeIndex;
+
 const NodeType = parser.ast.NodeType;
 const NodeValue = parser.ast.NodeValue;
 
@@ -44,8 +47,19 @@ const Node = struct
     // but it does allow you to gauge the edges.
     // If there are no children, it's just the range of the node.
     span: parser.ast.NodeSpan,
-    nodeData: ?DataIndex,
+    
+    // Points to the root data of the semantic linked list.
+    // If there's no semantic list, just points to the data.
+    // There's always at least one data in that case.
+    nodeData: ?DataIndex, 
     syntacticChildren: ChildrenList,
+    
+    // This is only going to be used for the image data nodes, probably.
+    semanticChildrenList: struct
+    {
+        prev: NodeIndex = invalidNodeIndex,
+        next: NodeIndex = invalidNodeIndex,
+    } = .{},
 };
 
 const AST = struct
