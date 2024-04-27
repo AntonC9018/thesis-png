@@ -13,6 +13,7 @@ pub const Chunk = common.Chunk;
 pub const Settings = common.Settings;
 pub const ChunkType = chunks.ChunkType;
 pub const isStateTerminal = common.isParserStateTerminal;
+pub const ast = @import("ast.zig");
 
 const pngFileSignature = "\x89PNG\r\n\x1A\n";
 fn validateSignature(slice: *pipelines.Sequence) !void 
@@ -198,26 +199,30 @@ pub fn parseTopLevelItem(context: *Context) !bool
         }
     }
 }
+const TopLevelInitializer = struct
+{
+    context: *Context,
+
+    fn execute(self: @This()) !void
+    {
+        const action = self.context.state.action;
+        self.context.level().setEmptyNodeData(.{ .TopLevel = action });
+
+        switch (action)
+        {
+            .Signature => unreachable,
+            .Chunk =>
+            {
+                self.context.state.chunk = createChunkParserState();
+            },
+        }
+    }
+};
 
 pub fn parseNextItem(context: *Context) !bool
 {
-    // NOTE: we don't need to push since we're on the 0-th level here.
-    try context.level().initCurrent(context, struct
+    try context.level().pushInit(context, TopLevelInitializer
     {
-        state: *State,
-
-        fn execute(self: *@This()) !void
-        {
-            switch (self.state.action)
-            {
-                .Signature => unreachable,
-                .Chunk =>
-                {
-                    self.state.chunk = createChunkParserState();
-                },
-            }
-        }
-    }{
         .state = context.state,
     });
     defer context.level().pop();
@@ -228,7 +233,10 @@ pub fn parseNextItem(context: *Context) !bool
         .Signature =>
         {
             try validateSignature(context.sequence());
-            common.advanceAction(context, action, .Chunk);
+            try context.level().setNodeValue(.{
+                .String = pngFileSignature,
+            });
+            action.* = .Chunk;
             return true;
         },
         .Chunk =>
@@ -236,7 +244,6 @@ pub fn parseNextItem(context: *Context) !bool
             const isDone = try parseChunkItem(context);
             if (isDone)
             {
-                context.level().unsetCurrent();
                 return true;
             }
         },
@@ -259,12 +266,11 @@ pub fn initChunkItem(
     }
 }
 
-
 pub fn parseChunkItem(context: *Context) !bool
 {
     const chunk = &context.state.chunk;
 
-    context.level().push();
+    try context.level().pushNodeData(.{ .Chunk = chunk.action });
     defer context.level().pop();
 
     switch (chunk.action)
@@ -278,7 +284,9 @@ pub fn parseChunkItem(context: *Context) !bool
                 };
 
             chunk.object.dataByteLen = len;
-            common.advanceAction(context, &chunk.action, .ChunkType);
+            try context.level().setNodeValue(.{ .U32 = len });
+
+            chunk.action = .ChunkType;
             return false;
         },
         .ChunkType =>
@@ -290,7 +298,7 @@ pub fn parseChunkItem(context: *Context) !bool
 
             var chunkType: chunks.RawChunkType = undefined;
 
-            const sequence_ = context.sequence;
+            const sequence_ = context.sequence();
             const chunkEndPosition = sequence_.getPosition(4);
             const o = sequence_.disect(chunkEndPosition);
             sequence_.* = o.right;
@@ -298,7 +306,12 @@ pub fn parseChunkItem(context: *Context) !bool
             o.left.copyTo(&chunkType.bytes);
 
             const convertedChunkType = chunks.getKnownDataChunkType(chunkType);
+
+            // Might have a special data slot for unknown chunk type?
             chunk.object.type = convertedChunkType;
+            try context.level().setNodeValue(.{
+                .ChunkType = convertedChunkType,
+            });
 
             if (context.state.imageHeader == null
                 and convertedChunkType != .ImageHeader)
@@ -313,7 +326,7 @@ pub fn parseChunkItem(context: *Context) !bool
                 return error.OnlyEndOrDataAllowedAfterIDAT;
             }
 
-            common.advanceAction(context, &chunk.action, .Data);
+            chunk.action = .Data;
             return false;
         },
         .Data =>
@@ -321,7 +334,8 @@ pub fn parseChunkItem(context: *Context) !bool
             const done = try chunks.parseChunkData(context);
             if (done)
             {
-                common.advanceAction(context, &chunk.action, .CyclicRedundancyCheck);
+                context.level().completeNode();
+                chunk.action = .CyclicRedundancyCheck;
             }
             return false;
         },

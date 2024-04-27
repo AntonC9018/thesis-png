@@ -118,6 +118,64 @@ pub fn LevelContext(Context: type) type
             self.infoMasks().init.setIntersection(setMask);
             self.infoMasks().finalized.setIntersection(setMask);
         }
+
+        // This has to be moved.
+        const ast = @import("../parser/ast.zig");
+
+        pub fn completeNode(self: *Self) void
+        {
+            // Should set the sequence end here.
+            _ = self;
+        }
+
+        pub fn setNodeValue(self: *Self, value: ast.NodeValue)
+            !struct
+            {
+                nodeId: ast.NodeId,
+                dataId: ast.DataId,
+            }
+        {
+            self.completeNode();
+            std.debug.print("Node {} \n", .{ value });
+            return .{
+                .nodeId = 0,
+                .dataId = 0,
+            };
+        }
+
+        pub fn setEmptyNodeData(self: *Self, nodeType: ast.NodeType) !ast.NodeId
+        {
+            _ = self;
+            std.debug.print("Node {}", .{ nodeType });
+            return 0;
+        }
+
+        pub fn setParentDataId(self: *Self, parentId: ast.NodeId) !ast.NodeId
+        {
+            _ = self;
+            std.debug.print("Node {}", .{ parentId });
+            return 0;
+        }
+
+        // Should save the sequence start here.
+        pub fn pushNodeData(self: *Self, nodeType: ast.NodeType) !ast.NodeId
+        {
+            const t = struct
+            {
+                level: *Self,
+                nodeType_: ast.NodeType,
+
+                pub fn execute(s: *@This()) !void
+                {
+                    s.level.setEmptyNodeData(s.nodeType_);
+                }
+            }{
+                .level = self,
+                .nodeType_ = nodeType,
+            };
+
+            try self.pushInit(t);
+        }
     };
 }
 

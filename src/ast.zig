@@ -30,214 +30,11 @@ pub const ChunkDataNodeType = parser.ChunkType;
 const NodeIndex = usize;
 const DataIndex = usize;
 
-const NodeType = union(enum)
-{
-    TopLevel: parser.Action,
-    Chunk: parser.ChunkAction,
+const NodeType = parser.ast.NodeType;
+const NodeValue = parser.ast.NodeValue;
 
-    ChunkData: union(enum)
-    {
-        RGB: chunks.RGBAction,
-        ImageHeader: chunks.ImageHeaderAction,
-        PrimaryChrom: chunks.PrimaryChromState,
-        ICCProfile: chunks.ICCProfileAction,
-        TextAction: chunks.TextAction,
-        CompressedText: chunks.CompressedTextAction,
-    },
-
-    Zlib: zlib.Action,
-    Deflate: deflate.Action,
-    NoCompression: deflate.noCompression.InitStateAction,
-    FixedHuffman: deflate.fixed.SymbolDecompressionAction,
-    DynamicHuffman: union(enum)
-    {
-        Decompression: deflate.dynamic.DecompressionAction,
-        CodeDecoding: deflate.dynamic.CodeDecodingAction,
-        CodeFrequency: deflate.dynamic.CodeFrequencyAction,
-    },
-
-    // Data from some nodes is skipped.
-    Skipped: void,
-
-    pub fn format(
-        self: NodeType,
-        comptime _: []const u8,
-        _: std.fmt.FormatOptions,
-        writer: anytype) !void
-    {
-        switch (self)
-        {
-            inline else => |v| try writer.print("{}", .{ v }),
-        }
-    }
-};
-
-const Data = struct
-{
-    // Maybe add a reference count here to be able to know when to delete things.
-    type: NodeType,
-    value: union(enum)
-    {
-        String: []const u8,
-        Number: usize,
-        ChunkType: parser.ChunkType,
-        None: void,
-    },
-};
-
-const bitsInByte = 8;
-
-const NodePositionOffset = struct
-{
-    byte: isize = 0,
-    bit: isize = 0,
-
-    pub fn addBits(self: NodePositionOffset, bits: isize) NodePositionOffset
-    {
-        return .{
-            .byte = self.byte,
-            .bit = self.bit + bits,
-        };
-    }
-
-    pub fn negate(self: NodePositionOffset) NodePositionOffset
-    {
-        return .{
-            .byte = -self.byte,
-            .bit = -self.bit,
-        };
-    }
-
-    pub fn add(a: NodePositionOffset, b: NodePositionOffset) NodePositionOffset
-    {
-        return .{
-            .byte = a.byte + b.byte,
-            .bit = a.bit + b.bit,
-        };
-    }
-
-    pub fn normalized(self: NodePositionOffset) NodePositionOffset
-    {
-        return .{
-            .byte = self.byte + @divFloor(self.bit, bitsInByte),
-            .bit = @mod(self.bit, bitsInByte),
-        };
-    }
-
-    pub fn isLessThanOrEqualToZero(self: NodePositionOffset) bool
-    {
-        const n = self.normalized();
-        return n.byte <= 0 and n.byte == 0;
-    }
-};
-
-
-test "Normalization"
-{
-    const doNodeOffsetNormalizationTest = struct
-    {
-        fn f(
-            before: NodePositionOffset,
-            after: NodePositionOffset) !void
-        {
-            const norm = before.normalized();
-            try std.testing.expectEqualDeep(after, norm);
-        }
-    }.f;
-
-    try doNodeOffsetNormalizationTest(
-        .{ .byte = 0, .bit = -17, },
-        .{ .byte = -3, .bit = 7, });
-
-    try doNodeOffsetNormalizationTest(
-        .{ .byte = 0, .bit = 17, },
-        .{ .byte = 2, .bit = 1, });
-}
-
-const Position = struct
-{
-    byte: usize,
-    bit: u3,
-
-    pub fn compareTo(a: Position, b: Position) isize
-    {
-        const byteDiff = @as(isize, @intCast(a.byte)) - @as(isize, @intCast(b.byte));
-        if (byteDiff != 0)
-        {
-            return byteDiff;
-        }
-
-        const bitDiff = @as(isize, @intCast(a.bit)) - @as(isize, @intCast(b.bit));
-        return bitDiff;
-    }
-
-    fn asOffset(self: Position) NodePositionOffset
-    {
-        return .{
-            .byte = @intCast(self.byte),
-            .bit = @intCast(self.bit),
-        };
-    }
-
-    pub fn offsetTo(a: Position, b: Position) NodePositionOffset
-    {
-        const fromNegative = a.asOffset().negate();
-        const to = b.asOffset();
-        const result = fromNegative.add(to);
-        return result;
-    }
-
-    fn fromOffset(offset: NodePositionOffset) Position
-    {
-        return .{
-            .byte = @intCast(offset.byte),
-            .bit = @intCast(offset.bit),
-        };
-    }
-
-    pub fn add(self: Position, added: NodePositionOffset) Position
-    {
-        const resultOffset = self.asOffset().add(added).normalized();
-        std.debug.assert(resultOffset.byte >= 0);
-        const result = fromOffset(resultOffset);
-        return result;
-    }
-};
-
-const NodeSpan = struct
-{
-    start: Position,
-    endInclusive: Position,
-
-    pub fn bitLen(span: *const NodeSpan) usize
-    {
-        const difference = span.start.offsetTo(span.endInclusive);
-        const bitsDiff = difference.byte * bitsInByte + difference.bit + 1;
-        return bitsDiff;
-    }
-
-    pub fn fromStartAndEndExclusive(startPos: Position, endPosExclusive: Position) NodeSpan
-    {
-        const comparison = endPosExclusive.compareTo(startPos);
-        std.debug.assert(comparison > 0);
-        const endInclusive_ = endPosExclusive.add(.{ .bit = -1 });
-        return .{
-            .start = startPos,
-            .endInclusive = endInclusive_,
-        };
-    }
-
-    pub fn fromStartAndLen(startPos: Position, len: NodePositionOffset) NodeSpan
-    {
-        const endOffset = len.addBits(-1);
-        std.debug.assert(!endOffset.isLessThanOrEqualToZero());
-
-        return .{
-            .start = startPos,
-            .endInclusive = startPos.add(endOffset),
-        };
-    }
-};
+// Maybe add a reference count here to be able to know when to delete things.
+const Data = parser.ast.NodeData;
 
 const Node = struct
 {
@@ -246,9 +43,9 @@ const Node = struct
     // The idea is that there may be gaps in the range of the span,
     // but it does allow you to gauge the edges.
     // If there are no children, it's just the range of the node.
-    span: NodeSpan,
+    span: parser.ast.NodeSpan,
     nodeData: ?DataIndex,
-    children: ChildrenList,
+    syntacticChildren: ChildrenList,
 };
 
 const AST = struct
@@ -294,7 +91,7 @@ pub fn createTestTree(allocator: std.mem.Allocator) !AST
         };
     }
 
-    var position = Position
+    var position = parser.ast.Position
     {
         .byte = 0,
         .bit = 0,
@@ -304,7 +101,7 @@ pub fn createTestTree(allocator: std.mem.Allocator) !AST
         const endPosition = position.add(.{ .byte = 1 });
         const node = Node
         {
-            .span = NodeSpan.fromStartAndEndExclusive(position, endPosition),
+            .span = parser.ast.NodeSpan.fromStartAndEndExclusive(position, endPosition),
             .nodeData = null,
             .children = .{},
         };
@@ -328,7 +125,7 @@ pub fn createTestTree(allocator: std.mem.Allocator) !AST
         // std.debug.print("To: {d},{d}\n", .{ endPosition.byte, endPosition.bit });
         const node = Node
         {
-            .span = NodeSpan.fromStartAndEndExclusive(position, endPosition),
+            .span = parser.ast.NodeSpan.fromStartAndEndExclusive(position, endPosition),
             .nodeData = i,
             .children = .{},
         };

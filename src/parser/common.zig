@@ -135,3 +135,34 @@ pub const ChunkState = struct
     dataState: chunks.ChunkDataState,
 };
 
+const ast = @import("ast.zig");
+
+pub fn setNodeValue(context: anytype, value: ast.NodeValue)
+    !struct
+    {
+        nodeId: ast.NodeId,
+        dataId: ast.DataId,
+    }
+{
+    _ = context;
+    std.debug.print("Node {} \n", .{ value });
+    return .{
+        .nodeId = 0,
+        .dataId = 0,
+    };
+}
+
+pub fn setEmptyNodeData(context: anytype, nodeType: ast.NodeType) !ast.NodeId
+{
+    _ = context;
+    std.debug.print("Node {}", .{ nodeType });
+    return 0;
+}
+
+pub fn createParentedNode(context: anytype, nodeType: ast.NodeType) !ast.NodeId
+{
+    _ = context;
+    std.debug.print("Node {}", .{ nodeType });
+    return 0;
+}
+
