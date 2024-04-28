@@ -8,6 +8,9 @@ const chunks = parser.chunks;
 pub const NodeId = usize;
 pub const DataId = usize;
 
+const invalidNodeId: NodeId = @bitCast(@as(isize, -1));
+const invalidDataId: NodeId = @bitCast(@as(isize, -1));
+
 pub const NodeType = union(enum)
 {
     TopLevel: parser.Action,
@@ -21,6 +24,7 @@ pub const NodeType = union(enum)
         ICCProfile: chunks.ICCProfileAction,
         TextAction: chunks.TextAction,
         CompressedText: chunks.CompressedTextAction,
+        ImageData: void,
     },
 
     Zlib: zlib.Action,
@@ -216,4 +220,10 @@ pub const NodeSpan = struct
             .endInclusive = startPos.add(endOffset),
         };
     }
+};
+
+
+pub const NodeSemanticContext = struct
+{
+    semanticNodeIds: std.ArrayListUnmanaged(DataId) = .{},
 };

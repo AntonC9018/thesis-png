@@ -8,7 +8,7 @@ pub fn readNullTerminatedText(
     output: *std.ArrayListUnmanaged(u8),
     maxLenExcludingNull: usize) !void
 {
-    const sequence = context.sequence;
+    const sequence = context.sequence();
 
     if (output.items.len == maxLenExcludingNull)
     {
@@ -182,6 +182,7 @@ pub fn readZlibData(
     const isDone = try zlib.decode(&zlibContext);
     if (isDone)
     {
+        context.level().completeNode();
         return true;
     }
     return false;

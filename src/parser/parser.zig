@@ -14,6 +14,7 @@ pub const Settings = common.Settings;
 pub const ChunkType = chunks.ChunkType;
 pub const isStateTerminal = common.isParserStateTerminal;
 pub const ast = @import("ast.zig");
+pub const CyclicRedundancyCheck = common.CyclicRedundancyCheck;
 
 const pngFileSignature = "\x89PNG\r\n\x1A\n";
 fn validateSignature(slice: *pipelines.Sequence) !void 
@@ -44,13 +45,6 @@ pub fn printStepName(writer: anytype, parserState: *const State) !void
                 .Data =>
                 {
                     try writer.print("Data ", .{});
-                    // TODO:
-                    // this probably needs some structure
-                    // and I should solve this with reflection.
-                    if (!chunk.action.initialized)
-                    {
-                        return;
-                    }
 
                     switch (chunk.object.type)
                     {
@@ -199,6 +193,7 @@ pub fn parseTopLevelItem(context: *Context) !bool
         }
     }
 }
+
 const TopLevelInitializer = struct
 {
     context: *Context,
@@ -206,7 +201,7 @@ const TopLevelInitializer = struct
     fn execute(self: @This()) !void
     {
         const action = self.context.state.action;
-        self.context.level().setEmptyNodeData(.{ .TopLevel = action });
+        self.context.level().maybeCreateSemanticNode(.{ .TopLevel = action });
 
         switch (action)
         {
@@ -233,7 +228,7 @@ pub fn parseNextItem(context: *Context) !bool
         .Signature =>
         {
             try validateSignature(context.sequence());
-            try context.level().setNodeValue(.{
+            try context.level().completeNodeWithValue(.{
                 .String = pngFileSignature,
             });
             action.* = .Chunk;
@@ -266,11 +261,47 @@ pub fn initChunkItem(
     }
 }
 
+const ChunkItemNodeInitializer = struct
+{
+    context: *Context,
+
+    pub fn execute(self: ChunkItemNodeInitializer) !void
+    {
+        const state = self.context.state.chunk;
+        const isImageData = state.action == .Data and state.object.type == .ImageData;
+
+        if (isImageData)
+        {
+            const semanticNodeId = &self.context.state.imageData.semanticNodeId;
+            if (semanticNodeId) |i|
+            {
+                // std.debug.assert(self.context.state.isData == false);
+                try self.context.level().setSemanticParent(i);
+                return;
+            }
+
+            const parentId = try self.context.level().maybeCreateSemanticNode(.{
+                .Chunk = state.action,
+            });
+            semanticNodeId.* = parentId;
+        }
+        else
+        {
+            try self.context.level().maybeCreateSemanticNode(.{
+                .Chunk = state.action,
+            });
+        }
+    }
+};
+
 pub fn parseChunkItem(context: *Context) !bool
 {
     const chunk = &context.state.chunk;
 
-    try context.level().pushNodeData(.{ .Chunk = chunk.action });
+    try context.level().pushInit(ChunkItemNodeInitializer
+    {
+        .context = context,
+    });
     defer context.level().pop();
 
     switch (chunk.action)
@@ -284,7 +315,9 @@ pub fn parseChunkItem(context: *Context) !bool
                 };
 
             chunk.object.dataByteLen = len;
-            try context.level().setNodeValue(.{ .U32 = len });
+            try context.level().completeNodeWithValue(.{ 
+                .Number = len,
+            });
 
             chunk.action = .ChunkType;
             return false;
@@ -309,7 +342,7 @@ pub fn parseChunkItem(context: *Context) !bool
 
             // Might have a special data slot for unknown chunk type?
             chunk.object.type = convertedChunkType;
-            try context.level().setNodeValue(.{
+            try context.level().completeNodeWithValue(.{
                 .ChunkType = convertedChunkType,
             });
 
@@ -342,8 +375,12 @@ pub fn parseChunkItem(context: *Context) !bool
         .CyclicRedundancyCheck =>
         {
             // Just skip for now
-            const value = try pipelines.readNetworkUnsigned(context.sequence, u32);
-            chunk.object.crc = .{ .value = value };
+            const value = try pipelines.readNetworkUnsigned(context.sequence(), u32);
+            const crc = .{ .value = value };
+            chunk.object.crc = crc;
+            context.level().completeNodeWithValue(.{
+                .U32 = value,
+            });
             return true;
         },
     }

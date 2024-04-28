@@ -43,7 +43,7 @@ pub const State = struct
 pub fn isParserStateTerminal(context: *const Context) bool 
 {
     return context.state.action == .Chunk
-        and !context.level().infoMasks.isSetAtLevel(0);
+        and !context.level().infoMasks().init.isSet(0);
 }
 
 pub const Context = struct
@@ -106,6 +106,8 @@ pub const CarryOverSegment = struct
     }
 };
 
+const ast = @import("ast.zig");
+
 // Of course, this will need to be reworked once I do the tree range optimizations
 pub const ImageData = struct
 {
@@ -113,6 +115,8 @@ pub const ImageData = struct
     bytes: std.ArrayListUnmanaged(u8) = .{},
     zlib: zlib.State = .{},
     carryOverData: CarryOverSegment = .{},
+    semanticNodeId: ?ast.DataId = null,
+    zlibStreamSemanticContext: NodePathSemanticContext = .{},
 };
 
 pub const CyclicRedundancyCheck = struct
@@ -134,35 +138,4 @@ pub const ChunkState = struct
     object: Chunk,
     dataState: chunks.ChunkDataState,
 };
-
-const ast = @import("ast.zig");
-
-pub fn setNodeValue(context: anytype, value: ast.NodeValue)
-    !struct
-    {
-        nodeId: ast.NodeId,
-        dataId: ast.DataId,
-    }
-{
-    _ = context;
-    std.debug.print("Node {} \n", .{ value });
-    return .{
-        .nodeId = 0,
-        .dataId = 0,
-    };
-}
-
-pub fn setEmptyNodeData(context: anytype, nodeType: ast.NodeType) !ast.NodeId
-{
-    _ = context;
-    std.debug.print("Node {}", .{ nodeType });
-    return 0;
-}
-
-pub fn createParentedNode(context: anytype, nodeType: ast.NodeType) !ast.NodeId
-{
-    _ = context;
-    std.debug.print("Node {}", .{ nodeType });
-    return 0;
-}
 

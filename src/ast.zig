@@ -30,8 +30,8 @@ pub const ChunkDataNodeType = parser.ChunkType;
 const NodeIndex = usize;
 const DataIndex = usize;
 
-const invalidNodeIndex: NodeIndex = @bitCast(@as(isize, -1));
-const invalidDataIndex: DataIndex = invalidNodeIndex;
+const invalidNodeIndex: NodeIndex = parser.ast.invalidNodeId;
+const invalidDataIndex: DataIndex = parser.ast.invalidDataId;
 
 const NodeType = parser.ast.NodeType;
 const NodeValue = parser.ast.NodeValue;
@@ -86,13 +86,13 @@ pub fn createTestTree(allocator: std.mem.Allocator) !AST
     data.*[0] = .{
         .type = defaultType,
         .value = .{
-            .string = "Test",
+            .String = "Test",
         },
     };
     data.*[1] = .{
         .type = defaultType,
         .value = .{
-            .string = "Hello world, this is a longer piece of text",
+            .String = "Hello world, this is a longer piece of text",
         },
     };
     for (2 .. data.len) |i|
@@ -100,7 +100,7 @@ pub fn createTestTree(allocator: std.mem.Allocator) !AST
         data.*[i] = .{
             .type = defaultType,
             .value = .{
-                .number = i,
+                .Number = i,
             },
         };
     }

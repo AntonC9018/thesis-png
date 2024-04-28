@@ -316,6 +316,12 @@ pub const TaggedChunkDataAction = union(ChunkType)
     LastModificationTime: void,
 
     _: void,
+
+    // TODO:
+    pub fn isEmpty(self: TaggedChunkDataAction) bool
+    {
+        return true;
+    }
 };
 
 pub const ChunkDataAction: type = b:
@@ -910,15 +916,14 @@ pub fn getActiveDataAction(state: *const common.ChunkState) TaggedChunkDataActio
 {
     switch (state.object.type)
     {
-        inline else => |k|
+        inline else => |*value, key|
         {
             const resultInfo = @typeInfo(TaggedChunkDataAction);
             for (resultInfo.Union.fields) |f|
             {
-                if (@field(ChunkType, f.name) == k)
+                if (@field(ChunkType, f.name) == key)
                 {
-                    return @unionInit(TaggedChunkDataAction, f.name,
-                        &@field(state.dataState.action, f.name));
+                    return @unionInit(TaggedChunkDataAction, f.name, &value);
                 }
             }
         }
@@ -981,6 +986,228 @@ pub fn getActiveChunkDataState(state: *const common.ChunkState) TaggedChunkDataS
     }
 
     unreachable;
+}
+
+const ast = @import("ast.zig");
+
+fn mapDataActionToNodeType(action: TaggedChunkDataAction) ast.NodeType.ChunkData
+{
+    const mappingToType = ast.NodeType.ChunkData;
+
+    switch (action)
+    {
+        // TODO:
+        // I dont' think this works.
+        inline else => |value, key|
+        {
+            const resultInfo = @typeInfo(mappingToType);
+            for (resultInfo.Union.fields) |f|
+            {
+                if (@field(ChunkType, f.name) == key)
+                {
+                    return @unionInit(mappingToType, f.name, &value);
+                }
+            }
+        }
+    }
+}
+
+const ChunkDataInitializer = struct
+{
+    context: *common.Context,
+
+    pub fn execute(self: ChunkDataInitializer) !void
+    {
+        const type_ = self.context.state.chunk.object.type;
+        switch (type_)
+        {
+            .ImageData =>
+            {
+                const imageData = &self.context.state.imageData;
+                self.context.level()
+                    .applySemanticContextForHierarchy(imageData.zlibStreamSemanticContext);
+            },
+        }
+
+        switch (type_)
+        {
+            inline else =>
+            {
+                const activeAction = getActiveDataAction(self.context);
+                if (activeAction.isEmpty())
+                {
+                    // Node created manually probably in this case.
+                    return;
+                }
+
+                const actionMappedToNodeType = mapDataActionToNodeType(activeAction);
+                self.context.level().maybeCreateSemanticNode(.{
+                    .ChunkData = actionMappedToNodeType,
+                });
+            },
+        }
+    }
+};
+
+pub fn parseImageData(context: *common.Context, state: *ImageDataState) !bool
+{
+    const imageData = &context.state.imageData;
+    const bytesRead = &state.bytesRead;
+    const bytesLeftToRead = context.state.chunk.object.dataByteLen - bytesRead.*;
+
+    var sequence = context.sequence().*;
+    const newLen = @min(sequence.len(), bytesLeftToRead);
+    const isLastLoopForChunk = newLen == bytesLeftToRead;
+    sequence = sequence.sliceToExclusive(sequence.getPosition(newLen));
+
+    const carryOverData = &imageData.carryOverData;
+    const usesCarryOverSegment = carryOverData.isActive();
+
+    var segments: ?struct
+        {
+            carryOverFirst: pipelines.Segment,
+            hijackedStart: pipelines.Segment,
+        } = segments:
+    {
+        if (!usesCarryOverSegment)
+        {
+            break :segments null;
+        }
+
+        const replacedStart = sequence.start();
+        var hijackedStartSegment = replacedStart.segment.*;
+        // This is a hack that applies the sequence position offset to a segment's buffer.
+        // Because we can't have intermediate segments have an offset buffer.
+        hijackedStartSegment.data.bytePosition += replacedStart.offset;
+        // This is the key hijacking thing that I kind of hate.
+        hijackedStartSegment.data.items = hijackedStartSegment.data.items[replacedStart.offset ..];
+
+        break :segments .{
+            .carryOverFirst = .{},
+            .hijackedStart = hijackedStartSegment,
+        };
+    };
+
+    if (segments) |*s|
+    {
+        // TODO: Think of a better solution to this hijacking, it's just dirty.
+        // NOTE: Since this references its own memory, it has to be done separately after creation.
+        s.carryOverFirst = carryOverData.segment(&s.hijackedStart);
+
+        sequence.range.start = .{
+            .segment = &s.carryOverFirst,
+            .offset = carryOverData.offset,
+        };
+        sequence.range.len += carryOverData.len();
+    }
+
+    defer
+    {
+        const maybeNewStart: ?pipelines.SequencePosition = newStart:
+        {
+            if (segments == null)
+            {
+                break :newStart sequence.start();
+            }
+
+            const s = &segments.?;
+
+            {
+                // Can only happen if we get an error, but we still have to update it.
+                const notFullyReadCarryOverSegment = sequence.start().segment == &s.carryOverFirst;
+                if (notFullyReadCarryOverSegment)
+                {
+                    carryOverData.offset = sequence.start().offset;
+                    std.debug.assert(carryOverData.offset < s.carryOverFirst.len());
+                    break :newStart null;
+                }
+                else
+                {
+                    carryOverData.setInactive();
+                }
+            }
+
+            if (sequence.start().segment != &s.hijackedStart)
+            {
+                break :newStart sequence.start();
+            }
+
+            var oldStart = context.sequence().start();
+            // The offset on the hijacked segment is always zero, because it can't be the first.
+            // This has been mitigated by slicing the items.
+            oldStart.offset += sequence.start().offset;
+            std.debug.assert(oldStart.offset < oldStart.segment.len());
+            break :newStart oldStart;
+        };
+
+        if (maybeNewStart) |newStart|
+        {
+            const lenChange = newLen - sequence.len();
+            bytesRead.* += @intCast(lenChange);
+            context.sequence().* = context.sequence().sliceFrom(newStart);
+        }
+    }
+
+    const readContext = readContext:
+    {
+        var c = context.*;
+        c.common.sequence = &sequence;
+        break :readContext c;
+    };
+
+    // This creates syntactic nodes, along with the data nodes.
+    // What we have to do besides this, is that we have to complete 
+    // the created nodes if we're going to be doing a carry over.
+    // So we need to go on a level below, call complete,
+    // then save the semantic node id there, and then have it be passed rather than created inside.
+    // So, the outside has to have a mechanism to override what happens on the inside.
+    // Specifically, setting a semantic id for a node to be created,
+    // and then having the create code actually check that first.
+    // But in that case, make sure it's empty first.
+    _ = utils.readZlibData(readContext, &imageData.zlib, &imageData.bytes)
+        catch |err|
+        {
+            if (err != error.NotEnoughBytes)
+            {
+                return err;
+            }
+
+            if (!isLastLoopForChunk)
+            {
+                return error.NotEnoughBytes;
+            }
+
+            // Not implemented yet.
+            std.debug.assert(!usesCarryOverSegment);
+
+
+            {
+                context.level().captureSemanticContextForHierarchy(&imageData.zlibStreamSemanticContext);
+
+                // We need to complete all of the syntactic nodes below manually.
+                // That's useful for detecting bugs too, if incomplete nodes were to throw an error.
+                context.level().completeNodesInHierarchy();
+            }
+
+            {
+                if (sequence.len() == 0)
+                {
+                    return true;
+                }
+
+                // Go over the remaining bytes and save them to the carry-over segment.
+                // Technically, multiple separate carry-over segments are possible,
+                // but I'll ignore that possibility for now.
+                const carryOverBuffer = try carryOverData.array
+                    .addManyAsSlice(context.allocator(), sequence.len());
+                sequence.copyTo(carryOverBuffer);
+                carryOverData.offset = 0;
+                carryOverData.bytePosition = sequence.getStartBytePosition();
+            }
+
+            return true;
+        };
+    return isLastLoopForChunk and sequence.len() == 0;
 }
 
 pub fn parseChunkData(context: *const common.Context) !bool
@@ -1103,121 +1330,7 @@ pub fn parseChunkData(context: *const common.Context) !bool
         },
         .ImageData => |t|
         {
-            const imageData = &context.state.imageData;
-            const bytesRead = &t.state.bytesRead;
-            const bytesLeftToRead = chunk.object.dataByteLen - bytesRead.*;
-
-            var sequence = context.sequence().*;
-            const newLen = @min(sequence.len(), bytesLeftToRead);
-            const isLastLoopForChunk = newLen == bytesLeftToRead;
-            sequence = sequence.sliceToExclusive(sequence.getPosition(newLen));
-
-            const carryOverData = &imageData.carryOverData;
-            const usesCarryOverSegment = carryOverData.isActive();
-
-            // TODO: Think of a better solution to this hijacking, it's just dirty.
-            var carryOverFirstSegment: pipelines.Segment = undefined;
-            // Start segment with updated slice and byte positions.
-            var hijackedStartSegment: pipelines.Segment = undefined;
-            if (usesCarryOverSegment)
-            {
-                carryOverFirstSegment = carryOverData.segment(@constCast(sequence.start().segment));
-
-                const oldStart = sequence.start();
-                hijackedStartSegment = oldStart.segment.*;
-                hijackedStartSegment.data.bytePosition += oldStart.offset;
-                // This is the key hijacking thing that I kind of hate.
-                hijackedStartSegment.data.items = hijackedStartSegment.data.items[oldStart.offset ..];
-
-                sequence.range.start = .{
-                    .segment = &carryOverFirstSegment,
-                    .offset = carryOverData.offset,
-                };
-                sequence.range.len += carryOverData.len();
-            }
-
-            defer
-            {
-                const maybeNewStart: ?pipelines.SequencePosition = newStart:
-                {
-                    if (!usesCarryOverSegment)
-                    {
-                        break :newStart sequence.start();
-                    }
-
-                    const notFullyReadCarryOverSegment = sequence.start().segment == &carryOverFirstSegment;
-                    // Can only happen if we get an error, but we still have to update it.
-                    if (notFullyReadCarryOverSegment)
-                    {
-                        carryOverData.offset = sequence.start().offset;
-                        std.debug.assert(carryOverData.offset < carryOverFirstSegment.len());
-                        break :newStart null;
-                    }
-                    else
-                    {
-                        carryOverData.setInactive();
-                    }
-
-                    if (sequence.start().segment != &hijackedStartSegment)
-                    {
-                        break :newStart sequence.start();
-                    }
-
-                    var oldStart = context.sequence().start();
-                    // The offset on the hijacked segment is always zero, because it can't be the first.
-                    // This has been mitigated by slicing the items.
-                    // So the actual offset is the slice len difference + the new offset.
-                    const arrayWasShiftedBy = oldStart.segment.len() - hijackedStartSegment.len();
-                    oldStart.offset = sequence.start().offset + arrayWasShiftedBy;
-                    std.debug.assert(oldStart.offset < oldStart.segment.len());
-                    break :newStart oldStart;
-                };
-
-                if (maybeNewStart) |newStart|
-                {
-                    const lenChange = newLen - sequence.len();
-                    bytesRead.* += @intCast(lenChange);
-                    context.sequence().* = context.sequence().sliceFrom(newStart);
-                }
-            }
-
-            const readContext = .{
-                .allocator = context.allocator(),
-                .sequence = &sequence,
-            };
-
-            _ = utils.readZlibData(readContext, &imageData.zlib, &imageData.bytes)
-                catch |err|
-                {
-                    if (err != error.NotEnoughBytes)
-                    {
-                        return err;
-                    }
-
-                    if (isLastLoopForChunk)
-                    {
-                        // Not implemented yet.
-                        std.debug.assert(!usesCarryOverSegment);
-
-                        if (sequence.len() == 0)
-                        {
-                            return true;
-                        }
-
-                        // Go over the remaining bytes and save them to the carry-over segment.
-                        // Techincally, multiple separate carry-over segments are possible,
-                        // but I'll ignore that possibility for now.
-                        const carryOverBuffer = try carryOverData.array
-                            .addManyAsSlice(context.allocator(), sequence.len());
-                        sequence.copyTo(carryOverBuffer);
-                        carryOverData.offset = 0;
-                        carryOverData.bytePosition = sequence.getStartBytePosition();
-                        return true;
-                    }
-
-                    return error.NotEnoughBytes;
-                };
-            return isLastLoopForChunk and sequence.len() == 0;
+            return try parseImageData(context, t.state);
         },
         .Transparency => |*t|
         {

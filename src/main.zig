@@ -127,7 +127,7 @@ const TreeConstructionContext = struct
         if (params.parentNode) |parent|
         {
             // NOTE: the span has not yet been updated at this point.
-            try parent.children.array.addOne(self.tree.childrenAllocator(), index);
+            try parent.syntacticChildren.array.addOne(self.tree.childrenAllocator(), index);
         }
         else
         {
@@ -265,8 +265,8 @@ const TerminationContext = struct
     fn maybeTerminate(
         self: *TerminationContext,
         // Initiable
-        action: anytype) 
-            {
+        action: anytype) void
+    {
         defer self.pathIndex += 1;
 
         if (!action.initializedPointer().*)
