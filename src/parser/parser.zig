@@ -15,6 +15,7 @@ pub const ChunkType = chunks.ChunkType;
 pub const isStateTerminal = common.isParserStateTerminal;
 pub const ast = @import("ast.zig");
 pub const CyclicRedundancyCheck = common.CyclicRedundancyCheck;
+pub const ColorType = chunks.ColorType;
 
 const pngFileSignature = "\x89PNG\r\n\x1A\n";
 fn validateSignature(slice: *pipelines.Sequence) !void 

@@ -823,23 +823,25 @@ pub const DataNodeParserState = union
     imageData: ImageDataState,
 };
 
+const InitStateForAction = struct
+{
+    context: *common.Context,
+    colors: *std.ArrayListUnmanaged(RGB),
+
+    fn execute(self: *InitStateForAction) !void
+    {
+        // TODO: We're gonna have a memory leak if we don't move the list.
+        _ = try self.colors.addOne(self.context.allocator());
+
+        try self.context.level().maybeCreateSemanticNode(.RGBColor);
+    }
+};
+
 const PaletteBytesProcessor = struct
 {
     context: *const common.Context,
     state: *PaletteState,
     data: *Palette,
-
-    const InitStateForAction = struct
-    {
-        colors: *std.ArrayListUnmanaged(RGB),
-        allocator: std.mem.Allocator,
-
-        fn execute(self: *InitStateForAction) !void
-        {
-            // We're gonna have a memory leak if we don't move the list.
-            _ = try self.colors.addOne(self.allocator);
-        }
-    };
 
     pub fn each(self: *const PaletteBytesProcessor, byte: u8) !void
     {
@@ -847,31 +849,49 @@ const PaletteBytesProcessor = struct
 
         try self.context.level().pushInit(InitStateForAction
         {
+            .context = self.context,
             .colors = &self.data.colors,
-            .allocator = self.context.allocator(),
         });
         defer self.context.level().pop();
 
-        const color = color:
         {
-            const items = self.data.colors.items;
-            break :color &items[items.len - 1];
-        };
+            try self.context.level().pushNodeData(.{
+                .RGBComponent = action,
+            });
+            defer self.context.level().pop();
 
-        const colorByte = colorByte:
-        {
-            switch (action)
+            const color = color:
             {
-                .R => break :colorByte &color.r,
-                .G => break :colorByte &color.g,
-                .B => break :colorByte &color.b,
-            }
-        };
-        colorByte.* = byte; 
+                const items = self.data.colors.items;
+                break :color &items[items.len - 1];
+            };
 
-        // Advance state
-        const nextState = if (action.next()) |next| next else RGBAction.FirstColor;
-        common.advanceAction(self.context, action, nextState);
+            const colorByte = colorByte:
+            {
+                switch (action)
+                {
+                    .R => break :colorByte &color.r,
+                    .G => break :colorByte &color.g,
+                    .B => break :colorByte &color.b,
+                }
+            };
+            colorByte.* = byte; 
+
+            try self.context.level().completeNodeWithValue(.{
+                .Number = byte,
+            });
+        }
+
+        if (action.next()) |next|
+        {
+            action.* = next;
+        }
+        else
+        {
+            action.* = RGBAction.FirstColor;
+            // TODO: Maybe complete with a separate color?
+            self.context.level().completeNode();
+        }
     }
 };
 
@@ -1217,7 +1237,17 @@ pub fn parseChunkData(context: *const common.Context) !bool
 
     const activeActionAndState = getActiveChunkDataActionAndState(chunk);
 
-    context.level().pushInit({});
+    // Currently, this always pushes, creating a node, but doesn't always create data.
+    // Maybe making this optional is the way to go?
+    // Because this makes it wrap all nodes, for all chunk data types,
+    // but that's not required for some of them.
+    // E.g. ImageEnd never has any other nodes associated with it,
+    // so wrapping it would be foolish.
+    // This logic should just probably be moved to the correspoding header types.
+    context.level().pushInit(ChunkDataInitializer
+    {
+        .context = context,
+    });
     defer context.level().pop();
 
     switch (activeActionAndState)
@@ -1230,29 +1260,50 @@ pub fn parseChunkData(context: *const common.Context) !bool
                 .Width => 
                 {
                     const value = try utils.readPngU32Dimension(context.sequence());
+
                     ihdr.width = value;
-                    common.advanceAction(context, t.action, .Height);
+                    context.level().completeNodeWithValue(.{
+                        .Number = value,
+                    });
+
+                    t.action.* = .Height;
                 },
                 .Height =>
                 {
                     const value = try utils.readPngU32Dimension(context.sequence());
+
                     ihdr.height = value;
-                    common.advanceAction(context, t.action, .BitDepth);
+                    context.level().completeNodeWithValue(.{
+                        .Number = value,
+                    });
+
+                    t.action = .BitDepth;
                 },
                 .BitDepth =>
                 {
                     const value = try pipelines.removeFirst(context.sequence());
+
                     ihdr.bitDepth = value;
+                    context.level().completeNodeWithValue(.{
+                        .Number = value,
+                    });
+
                     if (!isBitDepthValid(value))
                     {
                         return error.InvalidBitDepth;
                     }
-                    common.advanceAction(context, t.action, .ColorType);
+                    t.action = .ColorType;
                 },
                 .ColorType =>
                 {
                     const value = try pipelines.removeFirst(context.sequence());
-                    ihdr.colorType = .{ .flags = value };
+
+                    const colorType = .{ .flags = value };
+                    ihdr.colorType = colorType;
+                    context.level().completeNodeWithValue(.{
+                        .ColorType = colorType,
+                    });
+
                     if (!isColorTypeValid(ihdr.colorType))
                     {
                         return error.InvalidColorType;
@@ -1261,33 +1312,52 @@ pub fn parseChunkData(context: *const common.Context) !bool
                     {
                         return error.ColorTypeNotAllowedForBitDepth;
                     }
-                    common.advanceAction(context, t.action, .CompressionMethod);
+                    t.action = .CompressionMethod;
                 },
                 .CompressionMethod =>
                 {
                     const value = try pipelines.removeFirst(context.sequence());
-                    ihdr.compressionMethod = value;
+
+                    const compressionMethod = value;
+                    ihdr.compressionMethod = compressionMethod;
+                    context.level().completeNodeWithValue(.{
+                        .CompressionMethod = compressionMethod,
+                    });
+
                     if (!isCompressionMethodValid(value))
                     {
                         return error.InvalidCompressionMethod;
                     }
-                    common.advanceAction(context, t.action, .FilterMethod);
+
+                    t.action = .FilterMethod;
                 },
                 .FilterMethod =>
                 {
                     const value = try pipelines.removeFirst(context.sequence());
-                    ihdr.filterMethod = value;
+
+                    const filterMethod = value;
+                    ihdr.filterMethod = filterMethod;
+                    context.level().completeNodeWithValue(.{
+                        .FilterMethod = filterMethod,
+                    });
+
                     if (!isFilterMethodValid(value))
                     {
                         return error.InvalidFilterMethod;
                     }
-                    common.advanceAction(context, t.action, .InterlaceMethod);
+
+                    t.action = .InterlaceMethod;
                 },
                 .InterlaceMethod =>
                 {
                     const value = try pipelines.removeFirst(context.sequence());
+
                     const enumValue: InterlaceMethod = @enumFromInt(value);
                     ihdr.interlaceMethod = enumValue;
+                    context.level().completeNodeWithValue(.{
+                        .InterlaceMethod = enumValue,
+                    });
+
                     switch (enumValue)
                     {
                         .None, .Adam7 => {},

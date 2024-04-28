@@ -15,6 +15,8 @@ pub const NodeType = union(enum)
 {
     TopLevel: parser.Action,
     Chunk: parser.ChunkAction,
+    RGBColor: void,
+    RGBComponent: chunks.RGBAction,
 
     ChunkData: union(enum)
     {
@@ -61,6 +63,10 @@ pub const NodeValue = union(enum)
     U32: u32,
     ChunkType: parser.ChunkType,
     None: void,
+    ColorType: chunks.ColorType,
+    CompressionMethod: chunks.CompressionMethod,
+    FilterMethod: chunks.FilterMethod,
+    InterlaceMethod: chunks.InterlaceMethod,
 };
 
 // Semantic node
