@@ -3,6 +3,7 @@ const std = common.std;
 const pipelines = common.pipelines;
 const zlib = common.zlib;
 const utils = common.utils;
+const Context = common.Context;
 
 // TODO: Remove this completely. Move this logic to a separate module if necessary.
 pub const ChunkData = union
@@ -627,7 +628,7 @@ pub const ChunkType = enum(u32)
 // Check if the size specified matches the expected size.
 // If the size of the chunk is dynamic, resize
 // the sequence appropriately and reinterpret error.NotEnoughBytes.
-pub fn initChunkDataNode(context: *const common.Context, chunkType: ChunkType) !void
+pub fn initChunkDataNode(context: *const Context, chunkType: ChunkType) !void
 {
     const chunk = &context.state.chunk;
     const h = struct
@@ -827,7 +828,7 @@ pub const DataNodeParserState = union
 
 const ColorStateInitializer = struct
 {
-    context: *common.Context,
+    context: *Context,
     colors: *std.ArrayListUnmanaged(RGB),
 
     fn execute(self: *ColorStateInitializer) !void
@@ -840,7 +841,7 @@ const ColorStateInitializer = struct
 };
 
 fn readRgbComponentNode(
-    context: *common.Context,
+    context: *Context,
     action: *RGBAction,
     color: *RGB,
     byte: u8) !bool
@@ -881,7 +882,7 @@ fn readRgbComponentNode(
 
 const PaletteBytesProcessor = struct
 {
-    context: *const common.Context,
+    context: *const Context,
     state: *PaletteState,
     data: *Palette,
 
@@ -917,7 +918,7 @@ const PaletteBytesProcessor = struct
 
 const TransparencyBytesProcessor = struct
 {
-    context: *common.Context,
+    context: *Context,
     alphaValues: *std.ArrayListUnmanaged(u8),
     allocator: std.mem.Allocator,
 
@@ -1059,7 +1060,7 @@ fn mapDataActionToNodeType(action: TaggedChunkDataAction) ast.NodeType.ChunkData
     }
 }
 
-fn parseImageData(context: *common.Context, state: *ImageDataState) !bool
+fn parseImageData(context: *Context, state: *ImageDataState) !bool
 {
     const imageData = &context.state.imageData;
     const bytesRead = &state.bytesRead;
@@ -1220,7 +1221,7 @@ fn parseImageData(context: *common.Context, state: *ImageDataState) !bool
     return isLastLoopForChunk and sequence.len() == 0;
 }
 
-pub fn parseChunkData(context: *const common.Context) !bool
+pub fn parseChunkData(context: *const Context) !bool
 {
     const chunk = &context.state.chunk;
     const data = &chunk.object.data;
@@ -1386,7 +1387,7 @@ pub fn parseChunkData(context: *const common.Context) !bool
         {
             context.level().pushInit(struct
             {
-                context_: *common.Context,
+                context_: *Context,
 
                 pub fn execute(self: @This()) !void
                 {

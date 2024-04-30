@@ -1,10 +1,9 @@
-const deflate = @import("deflate.zig");
+pub const deflate = @import("deflate.zig");
 const helper = @import("helper.zig");
 const std = @import("std");
 const pipelines = helper.pipelines;
 
 pub const OutputBuffer = deflate.OutputBuffer;
-pub const DecompressionValueType = helper.DecompressionValueType;
 
 const Header = struct
 {
@@ -107,7 +106,6 @@ pub const Flags = packed struct
     presetDictionary: bool,
     compressionLevel: CompressionLevel,
 };
-
 
 const CompressionLevel = enum(u2)
 {

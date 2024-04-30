@@ -1,15 +1,19 @@
 pub const std = @import("std");
-pub const pipelines = @import("../pipelines.zig");
-pub const zlib = @import("../zlib/zlib.zig");
 pub const chunks = @import("chunks.zig");
 pub const utils = @import("utils.zig");
-pub const Settings = @import("../shared/Settings.zig");
 
-pub const levels = @import("../shared/level.zig");
+const parser = @import("../module.zig");
+usingnamespace parser;
+
+pub const zlib = parser.zlib;
+pub const pipelines = parser.pipelines;
+const Settings = parser.Settings;
+
+const levels = parser.level;
 usingnamespace levels;
 
 // What is the next expected type?
-pub const Action = enum
+pub const TopLevelAction = enum
 {
     Signature,
     Chunk,
@@ -27,7 +31,7 @@ pub const ChunkAction = enum
 pub const State = struct
 {
     chunk: ChunkState,
-    action: Action = .Signature,
+    action: TopLevelAction = .Signature,
 
     imageHeader: ?chunks.ImageHeader = null,
     // True after the IEND chunk has been parsed.
@@ -51,7 +55,7 @@ pub const Context = struct
     common: @import("../shared/CommonContext.zig"),
     state: *State,
 
-    pub fn level(self: *Context) levels.LevelContext(Context)
+    pub fn level(self: *Context) level.LevelContext(Context)
     {
         return .{
             .data = &self.common.level,

@@ -1,13 +1,15 @@
-pub const pipelines = @import("../pipelines.zig");
-pub const DeflateContext = @import("deflate.zig").Context;
+const parser = @import("../module.zig");
+const deflate = @import("deflate.zig");
+pub const pipelines = parser.pipelines;
+pub const DeflateContext = deflate.Context;
 pub const std = @import("std");
 pub const huffman = @import("huffmanTree.zig");
 
-pub const levels = @import("../shared/level.zig");
+pub const levels = parser.level;
 usingnamespace levels;
 
-pub const Settings = @import("../shared/Settings.zig");
-const SharedCommonContext = @import("../shared/CommonContext.zig");
+pub const Settings = parser.Settings;
+const SharedCommonContext = parser.CommonContext;
 
 pub const PeekApplyHelper = struct
 {
@@ -153,7 +155,7 @@ const BitsTestContext = struct
     allocator: std.mem.Allocator,
     buffer: pipelines.BufferManager,
     sequence: pipelines.Sequence = undefined,
-    state: @import("deflate.zig").State = .{},
+    state: deflate.State = .{},
     common: CommonContext = undefined,
     settings: Settings,
 
@@ -518,7 +520,8 @@ pub const OutputBuffer = struct
 
     pub fn copyFromSelf(self: *OutputBuffer, backRef: BackReference) !void
     {
-        std.debug.print("Buffer len: {}, distance: {}, windowSize: {}\n", .{self.buffer().len, backRef.distance, self.windowSize.*});
+        std.debug.print("Buffer len: {}, distance: {}, windowSize: {}\n", 
+            .{self.buffer().len, backRef.distance, self.windowSize.*});
 
         if (self.buffer().len < backRef.distance)
         {

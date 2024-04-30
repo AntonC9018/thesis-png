@@ -7,13 +7,12 @@ const utils = common.utils;
 
 pub const State = common.State;
 pub const Context = common.Context;
-pub const Action = common.Action;
+pub const Action = common.TopLevelAction;
 pub const ChunkAction = common.ChunkAction;
 pub const Chunk = common.Chunk;
 pub const Settings = common.Settings;
 pub const ChunkType = chunks.ChunkType;
 pub const isStateTerminal = common.isParserStateTerminal;
-pub const ast = @import("ast.zig");
 pub const CyclicRedundancyCheck = common.CyclicRedundancyCheck;
 pub const ColorType = chunks.ColorType;
 

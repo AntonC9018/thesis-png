@@ -1,17 +1,18 @@
 const std = @import("std");
-const pipelines = @import("pipelines.zig");
-const parser = @import("parser/parser.zig");
-const zlib = @import("zlib/zlib.zig");
-const deflate = @import("zlib/deflate.zig");
-const levels = @import("shared/level.zig");
-const LevelContext = levels.LevelContext;
-const LevelStats = levels.LevelStats;
+const parser = @import("parser/module.zig");
+const png = parser.png;
+const pipelines = parser.pipelines;
+const zlib = parser.zlib;
+const deflate = zlib.deflate;
 
-const chunks = parser.chunks;
+const LevelContext = parser.level.LevelContext;
+const LevelStats = parser.level.LevelStats;
+
+const chunks = png.chunks;
 const debug = @import("pngDebug.zig");
 const ast = @import("ast.zig");
 
-pub fn getBitPosition(state: *const parser.State) u3
+pub fn getBitPosition(state: *const png.State) u3
 {
     const getBitPositionFromZlib = struct
     {
@@ -62,7 +63,7 @@ pub fn getBitPosition(state: *const parser.State) u3
 }
 
 fn getCompletePosition(
-    state: *const parser.State,
+    state: *const png.State,
     sequence: *const pipelines.Sequence) ast.Position
 {
     const byteOffset = sequence.getStartBytePosition();
@@ -87,7 +88,7 @@ const NodeDataResult = struct
 
 const TreeConstructionContext = struct
 {
-    parserState: parser.State,
+    parserState: png.State,
     allocator: std.mem.Allocator,
     nodePath: std.ArrayListUnmanaged(ast.NodeIndex),
     tree: ast.AST,
@@ -474,8 +475,8 @@ fn parseIntoTree(allocator: std.mem.Allocator) !ast.AST
     defer testContext.deinit();
 
     const reader = &testContext.reader;
-    var parserState = parser.createParserState();
-    const parserSettings = parser.Settings
+    var parserState = png.createParserState();
+    const parserSettings = png.Settings
     {
         .logChunkStart = true,
     };

@@ -3,8 +3,10 @@ const std = common.std;
 const zlib = common.zlib;
 const pipelines = common.pipelines;
 
+const Context = common.Context;
+
 pub fn readNullTerminatedText(
-    context: *const common.Context,
+    context: *const Context,
     output: *std.ArrayListUnmanaged(u8),
     maxLenExcludingNull: usize) !void
 {
@@ -155,7 +157,7 @@ pub fn readNullTerminatedText(
 }
 
 pub fn readZlibData(
-    context: *common.Context,
+    context: *Context,
     state: *zlib.State,
     output: *std.ArrayListUnmanaged(u8)) !bool
 {
@@ -189,7 +191,7 @@ pub fn readZlibData(
 }
 
 pub fn removeAndProcessNextByte(
-    context: *const common.Context,
+    context: *const Context,
     bytesRead: *u32,
     functor: anytype) !bool
 {
@@ -210,7 +212,7 @@ pub fn removeAndProcessNextByte(
 }
 
 pub fn removeAndProcessAsManyBytesAsAvailable(
-    context: *const common.Context,
+    context: *const Context,
     bytesRead: *u32,
     // Must have a function each that takes in the byte.
     // Can have an optional function init that takes the count.
@@ -292,7 +294,7 @@ pub fn readPngU32Dimension(sequence: *pipelines.Sequence) !u32
     return value;
 }
 
-pub fn skipBytes(context: *const common.Context, chunk: *common.ChunkState) !bool
+pub fn skipBytes(context: *const Context, chunk: *common.ChunkState) !bool
 {
     const bytesSkipped = &chunk.dataState.bytesSkipped;
     const totalBytes = chunk.object.dataByteLen;
@@ -317,7 +319,7 @@ pub fn skipBytes(context: *const common.Context, chunk: *common.ChunkState) !boo
 }
 
 pub fn readKeywordText(
-    context: *const common.Context,
+    context: *const Context,
     keyword: *std.ArrayListUnmanaged(u8),
     bytesRead: *u32) !void
 {
