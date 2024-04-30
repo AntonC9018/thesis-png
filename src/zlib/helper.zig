@@ -201,7 +201,7 @@ test "ApplyHelper works"
     var testContext = try createTestContext();
     testContext.init();
 
-    const newStart = testcontext.sequence().getPosition(4);
+    const newStart = testContext.sequence().getPosition(4);
     const newOffset = 3;
     const helper = PeekApplyHelper
     {
@@ -210,7 +210,7 @@ test "ApplyHelper works"
     };
     helper.apply(&testContext.context());
 
-    const start = testcontext.sequence().start();
+    const start = testContext.sequence().start();
     try expectEqual(newStart.offset, start.offset);
     try expectEqual(newStart.segment, start.segment);
     try expectEqual(newOffset, testContext.state.bitOffset);
@@ -235,7 +235,7 @@ test "Peek bits test"
         // Now reading the 0.
         r.apply(context);
 
-        try expectEqual(0, testcontext.sequence().start().offset);
+        try expectEqual(0, testContext.sequence().start().offset);
         try expectEqual(4, testContext.state.bitOffset);
     }
 
