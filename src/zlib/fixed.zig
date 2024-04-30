@@ -5,7 +5,7 @@ pub const SymbolDecompressionAction = enum
 {
     Code,
     InvalidCode,
-    Length,
+    Len,
     DistanceCode,
     Distance,
 };
@@ -18,7 +18,7 @@ pub const SymbolDecompressionState = struct
     codeLen: CodeState = 7,
     lenCode: u9,
     len: u8,
-    distanceCode: u5,
+    distanceLenCode: u5,
     distance: u16,
 
     pub const Initial: SymbolDecompressionState = std.mem.zeroInit(.{
@@ -160,7 +160,7 @@ pub fn decompressSymbol(
     context: *const helper.DeflateContext,
     state: *SymbolDecompressionState) !?helper.Symbol
 {
-    try context.level().pushInit({});
+    try context.level().push();
     defer context.level().pop();
 
     const lengthCodeUpperLimit = 0b001_0111;
@@ -177,6 +177,11 @@ pub fn decompressSymbol(
     {
         .context = context,
         .reverse = true,
+    };
+
+    const nodeCreator = DecompressionNodeWriter
+    {
+        .context = context,
     };
 
     switch (state.action)
@@ -198,14 +203,18 @@ pub fn decompressSymbol(
                         if (code.bits == 0)
                         {
                             code.apply(context);
+                            try nodeCreator.create(.EndBlock, 0);
+
                             return .{ .EndBlock = {} };
                         }
 
                         if (code.bits <= lengthCodeUpperLimit)
                         {
                             code.apply(context);
-                            helper.advanceAction(context, &state.action, .Length);
                             state.lenCode = code.bits - 1;
+                            try nodeCreator.create(.LenLen, state.codeLen);
+                            state.action = .Length;
+
                             return null;
                         }
                     },
@@ -216,6 +225,9 @@ pub fn decompressSymbol(
                             code.apply(context);
 
                             const value = code.bits - literalLowerLimit;
+
+                            try nodeCreator.create(.Literal, value);
+
                             return .{ .LiteralValue = value };
                         }
 
@@ -224,8 +236,11 @@ pub fn decompressSymbol(
                             code.apply(context);
 
                             const codeRemapped = code.bits - lengthLowerLimit2 + lengthCodeUpperLimit;
-                            helper.advanceAction(context, &state.action, .Length);
                             state.lenCode = codeRemapped;
+
+                            try nodeCreator.create(.LenCode, codeRemapped);
+
+                            state.action = .Length;
                             if (codeRemapped >= adjustStart(286))
                             {
                                 return error.LengthCodeTooLarge;
@@ -241,6 +256,7 @@ pub fn decompressSymbol(
                         {
                             const literalOffset2 = 144;
                             const value = code - literalLowerLimit2 + literalOffset2;
+                            try nodeCreator.create(.Literal, value);
                             return .{ .LiteralValue = @intCast(value) };
                         }
 
@@ -250,7 +266,7 @@ pub fn decompressSymbol(
                 state.codeLen += 1;
             }
         },
-        .Length =>
+        .Len =>
         {
             const lengthBitCount = getLengthBitCount(state.codeRemapped);
             const extraBits = if (lengthBitCount == 0)
@@ -261,13 +277,18 @@ pub fn decompressSymbol(
             const baseLength = getBaseLength(state.codeRemapped);
             const len = baseLength + extraBits;
             state.len = @intCast(len);
-common.advanceAction(context, &state.action, .DistanceCode);
+
+            try nodeCreator.create(.Len, len);
+
+            state.action = .DistanceCode;
         },
         .DistanceCode =>
         {
             const distanceCode = try helper.readBits(readCodeBitsContext, u5);
-common.advanceAction(context, &state.action, .Distance);
-            state.distanceCode = distanceCode;
+            state.action = .Distance;
+            state.distanceLenCode = distanceCode;
+
+            try nodeCreator.create(.LenCode, distanceCode);
 
             if (distanceCode >= 30)
             {
@@ -276,18 +297,24 @@ common.advanceAction(context, &state.action, .Distance);
         },
         .Distance =>
         {
-            const distanceBitCount = getDistanceBitCount(state.distanceCode);
+            const distanceBitCount = getDistanceBitCount(state.distanceLenCode);
             const extraBits = if (distanceBitCount == 0)
                     0
                 else
                     try helper.readNBits(context, distanceBitCount);
 
-            const baseDistance = getBaseDistance(state.distanceCode);
+            const baseDistance = getBaseDistance(state.distanceLenCode);
             const distance = baseDistance + extraBits;
-
-            common.advanceAction(context, state.action, );;
             state.distance = distance;
+
+            try nodeCreator.create(.Distance, distance);
+
+            state.action = .Code;
+
             return .{
+                // TODO: 
+                // This has to be a semantic node as well.
+                // They should allow trees probably also, not just lists?
                 .BackReference = .{
                     .distance = @intCast(distance + 1),
                     .len = @as(u16, state.len) + 3,
@@ -298,3 +325,30 @@ common.advanceAction(context, &state.action, .Distance);
 
     return null;
 }
+
+pub const DecompressionValueType = enum
+{
+    Literal,
+    Len,
+    EndBlock,
+    Distance,
+
+    // TODO: allow semantic nodes to store more useful data.
+    LenCode,
+    DistanceLenCode,
+};
+
+const DecompressionNodeWriter = struct
+{
+    context: *const helper.DeflateContext,
+
+    pub fn create(self: @This(), t: DecompressionValueType, value: usize) !void
+    {
+        try self.context.level().maybeCreateSemanticNode(.{
+            .FixedDecompressionValue = t,
+        });
+        try self.context.level().completeNodeWithValue(.{
+            .Number = value,
+        });
+    }
+};

@@ -68,7 +68,9 @@ pub const DecompressionState = struct
 
 pub fn initState(context: *const helper.DeflateContext, state: *InitState) !bool
 {
-    try context.level().pushInit({});
+    try context.level().pushNode(.{
+        .NoCompression = state.action,
+    });
     defer context.level().pop();
 
     switch (state.action)
@@ -77,13 +79,20 @@ pub fn initState(context: *const helper.DeflateContext, state: *InitState) !bool
         {
             const len = try pipelines.readNetworkUnsigned(context.sequence(), u16);
             state.len = len;
-            helper.advanceAction(context, &state.action, .NLen);
+            try context.level().completeNodeWithValue(.{
+                .Number = len,
+            });
+            state.action = .NLen;
             return false;
         },
         .NLen =>
         {
             const nlen = try pipelines.readNetworkUnsigned(context.sequence(), u16);
             state.nlen = nlen;
+
+            try context.level().completeNodeWithValue(.{
+                .Number = nlen,
+            });
 
             if (nlen != ~state.len)
             {

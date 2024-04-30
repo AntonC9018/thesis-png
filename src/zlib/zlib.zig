@@ -4,6 +4,7 @@ const std = @import("std");
 const pipelines = helper.pipelines;
 
 pub const OutputBuffer = deflate.OutputBuffer;
+pub const DecompressionValueType = helper.DecompressionValueType;
 
 const Header = struct
 {
@@ -83,26 +84,24 @@ pub const State = struct
         cmf: CompressionMethodAndFlags,
         dictionaryId: u32,
     } = .{ .none = {} },
-
-    checksum: u32 = 0,
 };
 
-const CompressionMethodAndFlags = packed struct
+pub const CompressionMethodAndFlags = packed struct
 {
     compressionMethod: CompressionMethod,
     compressionInfo: CompressionInfo,
 };
 
-const CompressionMethod = enum(u4)
+pub const CompressionMethod = enum(u4)
 {
     Deflate = 8,
     Reserved = 15,
     _,
 };
 
-const CompressionInfo = u4;
+pub const CompressionInfo = u4;
 
-const Flags = packed struct
+pub const Flags = packed struct
 {
     check: u5,
     presetDictionary: bool,
@@ -157,7 +156,9 @@ pub fn decode(context: *Context) !bool
 {
     const state = context.state;
 
-    try context.level().pushInit({});
+    try context.level().pushNode(.{
+        .Zlib = state.action,
+    });
     defer context.level().pop();
 
     switch (state.action)
@@ -167,6 +168,9 @@ pub fn decode(context: *Context) !bool
             const value = try pipelines.removeFirst(context.sequence());
             const cmf: CompressionMethodAndFlags = @bitCast(value);
             state.data = .{ .cmf = cmf };
+            try context.level().completeNodeWithValue(.{
+                .CompressionMethodAndFlags = cmf,
+            });
 
             switch (cmf.compressionMethod)
             {
@@ -179,7 +183,7 @@ pub fn decode(context: *Context) !bool
                     state.decompressor = .{
                         .deflate = .{},
                     };
-                    helper.advanceAction(context, &state.action, .Flags);
+                    state.action = .Flags;
                 },
                 else => return error.UnsupportedCompressionMethod,
             }
@@ -188,6 +192,10 @@ pub fn decode(context: *Context) !bool
         {
             const value = try pipelines.removeFirst(context.sequence());
             const flags: Flags = @bitCast(value);
+            try context.level().completeNodeWithValue(.{
+                .ZlibFlags = flags,
+            });
+
             const flagValid = checkCheckFlag(state.data.cmf, flags);
             if (!flagValid)
             {
@@ -196,19 +204,22 @@ pub fn decode(context: *Context) !bool
 
             if (flags.presetDictionary)
             {
-                helper.advanceAction(context, &state.action, .PresetDictionary);
+                state.action = .PresetDictionary;
                 return error.PresetDictionaryNotSupported;
             }
             else
             {
-                helper.advanceAction(context, &state.action, .CompressedData);
+                state.action = .CompressedData;
             }
         },
         .PresetDictionary =>
         {
             const value = try pipelines.readNetworkUnsigned(context.sequence(), u32);
             state.data = .{ .dictionaryId = value };
-            helper.advanceAction(context, &state.action, .CompressedData);
+            try context.level().CompleteNodeWithValue(.{
+                .Number = value,
+            });
+            state.action = .CompressedData;
         },
         .CompressedData =>
         {
@@ -231,26 +242,25 @@ pub fn decode(context: *Context) !bool
             const doneWithBlock = try deflate.deflate(&deflateContext);
             if (doneWithBlock and decompressor.isFinal)
             {
-                helper.advanceAction(context, &state.action, .Adler32Checksum);
+                state.action = .Adler32Checksum;
                 deflate.skipToWholeByte(&deflateContext);
             }
             if (doneWithBlock)
             {
-                context.level().unsetCurrent();
-                // NOTE:
-                // If we assume the states after the max one get reset to "uninitialized"
-                // after each call, this is a valid thing to do.
-                // We couldn't do this straight up without resetting the initialized mask for its level.
+                try context.level().completeNode();
                 decompressor.action.* = deflate.Action.Initial;
             }
         },
         .Adler32Checksum =>
         {
             const checksum = try pipelines.readNetworkUnsigned(context.sequence(), u32);
-            state.checksum = checksum;
-            std.debug.print("Checksum expected: {x:0>16}, Computed: {x:0>16}\n", .{ checksum, state.adler32.getChecksum() });
+            try context.level().completeNodeWithValue(.{
+                .U32 = checksum,
+            });
 
             const computedChecksum = state.adler32.getChecksum();
+            std.debug.print("Checksum expected: {x:0>16}, Computed: {x:0>16}\n", .{ checksum, computedChecksum });
+
             if (checksum != computedChecksum)
             {
                 return error.ChecksumMismatch;

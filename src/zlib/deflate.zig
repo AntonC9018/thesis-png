@@ -7,8 +7,9 @@ pub const OutputBuffer = helper.OutputBuffer;
 pub const noCompression = @import("noCompression.zig");
 pub const fixed = @import("fixed.zig");
 pub const dynamic = @import("dynamic.zig");
+pub const Symbol = helper.Symbol;
 
-const BlockType = enum(u2)
+pub const BlockType = enum(u2)
 {
     NoCompression = 0,
     FixedHuffman = 1,
@@ -21,9 +22,12 @@ pub const Context = struct
     state: *State,
     common: *const helper.CommonContext,
 
-    pub fn level(self: *Context) *helper.LevelContext
+    pub fn level(self: *Context) helper.LevelContext(Context)
     {
-        return self.common.level();
+        return .{
+            .context = self,
+            .data = self.common.level(),
+        };
     }
     pub fn sequence(self: *Context) *pipelines.Sequence
     {
@@ -49,9 +53,6 @@ pub const State = struct
 
     dataBytesRead: u16 = 0,
 
-    /// Never used internally.
-    /// Useful for debugging and for insight into the decompression state.
-    lastSymbol: ?helper.Symbol = null,
     symbolDecompressionInitialized: bool,
 
     blockState: union(BlockType)
@@ -78,16 +79,22 @@ pub fn deflate(context: *Context) !bool
 {
     const state = context.state;
 
-    context.level().pushInit({});
+    try context.level().pushNode(.{
+        .Deflate = state.action,
+    });
     defer context.level().pop();
 
     switch (state.action)
     {
         .IsFinal =>
         {
-            const isFinal = try helper.readBits(.{ .context = context }, u1);
-            state.isFinal = isFinal == 1;
-            helper.advanceAction(context, &state.action, .BlockType);
+            const value = try helper.readBits(.{ .context = context }, u1);
+            const isFinal = value == 1;
+            state.isFinal = isFinal;
+            try context.level().completeNodeWithValue(.{
+                .Bool = isFinal,
+            });
+            state.action = .BlockType;
         },
         .BlockType =>
         {
@@ -95,6 +102,9 @@ pub fn deflate(context: *Context) !bool
             const typedBlockType: BlockType = @enumFromInt(blockType);
 
             std.debug.print("Block type value: {}\n", .{typedBlockType});
+            try context.level().completeNodeWithValue(.{
+                .BlockType = typedBlockType,
+            });
 
             switch (typedBlockType)
             {
@@ -109,7 +119,7 @@ pub fn deflate(context: *Context) !bool
                             .init = std.mem.zeroes(noCompression.InitState),
                         },
                     };
-                    helper.advanceAction(context, &state.action, .BlockInit);
+                    state.action = .BlockInit;
                 },
                 .FixedHuffman =>
                 {
@@ -120,7 +130,7 @@ pub fn deflate(context: *Context) !bool
                     };
                     // It doesn't need to read any metadata.
                     // The symbol tables are predefined by the spec.
-                    helper.advanceAction(context, &state.action, .DecompressionLoop);
+                    state.action = .DecompressionLoop;
                 },
                 .DynamicHuffman =>
                 {
@@ -129,7 +139,7 @@ pub fn deflate(context: *Context) !bool
                             .codeDecoding = std.mem.zeroes(dynamic.CodeDecodingState),
                         },
                     };
-                    helper.advanceAction(context, &state.action, .BlockInit);
+                    state.action = .BlockInit;
                 },
                 .Reserved =>
                 {
@@ -152,12 +162,13 @@ pub fn deflate(context: *Context) !bool
                     const done = try noCompression.initState(context, &s.init);
                     if (done)
                     {
+                        try context.level().completeNode();
                         s.* = .{
                             .decompression = .{
                                 .bytesLeftToCopy = s.init.len,
                             },
                         };
-                        helper.advanceAction(context, &state.action, .DecompressionLoop);
+                        state.action = .DecompressionLoop;
                     }
                 },
                 .FixedHuffman => unreachable,
@@ -167,7 +178,8 @@ pub fn deflate(context: *Context) !bool
                     if (done)
                     {
                         try dynamic.initializeDecompressionState(s, context.allocator()());
-                        helper.advanceAction(context, &state.action, .DecompressionLoop);
+                        try context.level().completeNode();
+                        state.action = .DecompressionLoop;
                     }
                 },
                 .Reserved => unreachable,
@@ -183,21 +195,28 @@ pub fn deflate(context: *Context) !bool
                     try noCompression.decompress(context, &s.decompression);
                     return true;
                 },
-                .FixedHuffman => |*s|
-                {
-                    const symbol = try fixed.decompressSymbol(context, s.key);
-                    state.lastSymbol = symbol;
-                    const done = try helper.writeSymbolToOutput(context, symbol);
-                    return done;
-                },
-                .DynamicHuffman => |*s|
-                {
-                    const symbol = try dynamic.decompressSymbol(context, &s.decompression);
-                    state.lastSymbol = symbol;
-                    const done = try helper.writeSymbolToOutput(context, symbol);
-                    return done;
-                },
                 .Reserved => unreachable,
+                inline else => |*s, mechanism|
+                {
+                    const symbol = symbol:
+                    {
+                        try context.level().pushNode(.ZlibSymbol);
+                        defer context.level().pop();
+
+                        const symbol_ = switch (mechanism)
+                        {
+                            .DynamicHuffman => try dynamic.decompressSymbol(context, &s.decompression),
+                            .FixedHuffman => try fixed.decompressSymbol(context, s.key),
+                        };
+
+                        try context.level().completeNodeWithValue(.{
+                            .ZlibSymbol = symbol_,
+                        });
+                        break :symbol symbol_;
+                    };
+                    const done = try helper.writeSymbolToOutput(context, symbol);
+                    return done;
+                },
             }
         },
     }

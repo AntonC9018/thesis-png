@@ -131,7 +131,7 @@ pub fn LevelContext(Context: type) type
         // This has to be moved.
         const ast = @import("../parser/ast.zig");
 
-        pub fn completeNode(self: Self) void
+        pub fn completeNode(self: Self) !void
         {
             // Should set the sequence end here.
             _ = self;
@@ -140,27 +140,6 @@ pub fn LevelContext(Context: type) type
         pub fn completeNodeWithValue(self: Self, value: ast.NodeValue) !void
         {
             self.completeNode();
-            std.debug.print("Node {} \n", .{ value });
-        }
-
-        pub fn completeNodeWithMovedValue(self: Self, value: anytype) !void
-        {
-            self.completeNode();
-
-            switch (@TypeOf(value))
-            {
-                *std.ArrayListUnmanaged(u8) =>
-                {
-                    self.completeNodeWithValue(.{
-                        .OwnedString = value.*,
-                    });
-                    value.* = .{};
-                },
-                else =>
-                {
-                    std.debug.assert();
-                },
-            }
             std.debug.print("Node {} \n", .{ value });
         }
 

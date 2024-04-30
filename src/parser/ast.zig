@@ -28,12 +28,14 @@ pub const NodeType = union(enum)
     Zlib: zlib.Action,
     Deflate: deflate.Action,
     NoCompression: deflate.noCompression.InitStateAction,
-    FixedHuffman: deflate.fixed.SymbolDecompressionAction,
+    FixedHuffmanDecompression: deflate.fixed.DecompressionValueType,
+    ZlibSymbol: void,
     DynamicHuffman: union(enum)
     {
-        Decompression: deflate.dynamic.DecompressionAction,
+        DecompressionValue: deflate.dynamic.DecompressionValueType,
         CodeDecoding: deflate.dynamic.CodeDecodingAction,
         CodeFrequency: deflate.dynamic.CodeFrequencyAction,
+        EncodedFrequency: void,
     },
 
     // Data from some nodes is skipped.
@@ -56,15 +58,22 @@ pub const NodeValue = union(enum)
 {
     String: []const u8,
     OwnedString: std.ArrayListUnmanaged(u8),
-    Number: usize,
+    Number: u64,
     U32: u32,
+    Bool: bool,
     ChunkType: parser.ChunkType,
     None: void,
+
     ColorType: chunks.ColorType,
     CompressionMethod: chunks.CompressionMethod,
     FilterMethod: chunks.FilterMethod,
     InterlaceMethod: chunks.InterlaceMethod,
     RenderingIntent: chunks.RenderingIntent,
+
+    CompressionMethodAndFlags: zlib.CompressionMethodAndFlags,
+    ZlibFlags: zlib.Flags,
+    BlockType: deflate.BlockType,
+    ZlibSymbol: deflate.Symbol,
 };
 
 // Semantic node
