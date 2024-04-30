@@ -4,6 +4,7 @@ const pipelines = common.pipelines;
 const zlib = common.zlib;
 const utils = common.utils;
 
+// TODO: Remove this completely. Move this logic to a separate module if necessary.
 pub const ChunkData = union
 { 
     none: void,
@@ -320,6 +321,7 @@ pub const TaggedChunkDataAction = union(ChunkType)
     // TODO:
     pub fn isEmpty(self: TaggedChunkDataAction) bool
     {
+        _ = self;
         return true;
     }
 };
@@ -823,12 +825,12 @@ pub const DataNodeParserState = union
     imageData: ImageDataState,
 };
 
-const InitStateForAction = struct
+const ColorStateInitializer = struct
 {
     context: *common.Context,
     colors: *std.ArrayListUnmanaged(RGB),
 
-    fn execute(self: *InitStateForAction) !void
+    fn execute(self: *ColorStateInitializer) !void
     {
         // TODO: We're gonna have a memory leak if we don't move the list.
         _ = try self.colors.addOne(self.context.allocator());
@@ -836,6 +838,46 @@ const InitStateForAction = struct
         try self.context.level().maybeCreateSemanticNode(.RGBColor);
     }
 };
+
+fn readRgbComponentNode(
+    context: *common.Context,
+    action: *RGBAction,
+    color: *RGB,
+    byte: u8) !bool
+{
+    {
+        try context.level().pushNode(.{
+            .RGBComponent = action.*,
+        });
+        defer context.level().pop();
+
+        const colorByte = colorByte:
+        {
+            switch (action)
+            {
+                .R => break :colorByte &color.r,
+                .G => break :colorByte &color.g,
+                .B => break :colorByte &color.b,
+            }
+        };
+        colorByte.* = byte; 
+
+        try context.level().completeNodeWithValue(.{
+            .Number = byte,
+        });
+    }
+
+    if (action.next()) |next|
+    {
+        action.* = next;
+        return false;
+    }
+    else
+    {
+        action.* = RGBAction.FirstColor;
+        return true;
+    }
+}
 
 const PaletteBytesProcessor = struct
 {
@@ -847,48 +889,26 @@ const PaletteBytesProcessor = struct
     {
         const action = &self.state.rgbAction;
 
-        try self.context.level().pushInit(InitStateForAction
+        try self.context.level().pushInit(ColorStateInitializer
         {
             .context = self.context,
             .colors = &self.data.colors,
         });
         defer self.context.level().pop();
 
+        const color = color:
         {
-            try self.context.level().pushNodeData(.{
-                .RGBComponent = action,
-            });
-            defer self.context.level().pop();
-
-            const color = color:
-            {
-                const items = self.data.colors.items;
-                break :color &items[items.len - 1];
-            };
-
-            const colorByte = colorByte:
-            {
-                switch (action)
-                {
-                    .R => break :colorByte &color.r,
-                    .G => break :colorByte &color.g,
-                    .B => break :colorByte &color.b,
-                }
-            };
-            colorByte.* = byte; 
-
-            try self.context.level().completeNodeWithValue(.{
-                .Number = byte,
-            });
-        }
-
-        if (action.next()) |next|
+            const items = self.data.colors.items;
+            break :color &items[items.len - 1];
+        };
+        const readFully = try readRgbComponentNode(
+            self.context,
+            action,
+            color,
+            byte);
+        
+        if (readFully)
         {
-            action.* = next;
-        }
-        else
-        {
-            action.* = RGBAction.FirstColor;
             // TODO: Maybe complete with a separate color?
             self.context.level().completeNode();
         }
@@ -910,7 +930,14 @@ const TransparencyBytesProcessor = struct
 
     pub fn each(self: *const TransparencyBytesProcessor, byte: u8) !void
     {
+        // TODO: needs to be done BEFORE reading.
+        try self.context.level().pushInit({});
+        defer self.context.level().pop();
+
         try self.alphaValues.append(self.allocator, byte);
+        self.context.level().completeNodeWithValue(.{
+            .Number = byte,
+        });
     }
 };
 
@@ -1032,44 +1059,7 @@ fn mapDataActionToNodeType(action: TaggedChunkDataAction) ast.NodeType.ChunkData
     }
 }
 
-const ChunkDataInitializer = struct
-{
-    context: *common.Context,
-
-    pub fn execute(self: ChunkDataInitializer) !void
-    {
-        const type_ = self.context.state.chunk.object.type;
-        switch (type_)
-        {
-            .ImageData =>
-            {
-                const imageData = &self.context.state.imageData;
-                self.context.level()
-                    .applySemanticContextForHierarchy(imageData.zlibStreamSemanticContext);
-            },
-        }
-
-        switch (type_)
-        {
-            inline else =>
-            {
-                const activeAction = getActiveDataAction(self.context);
-                if (activeAction.isEmpty())
-                {
-                    // Node created manually probably in this case.
-                    return;
-                }
-
-                const actionMappedToNodeType = mapDataActionToNodeType(activeAction);
-                self.context.level().maybeCreateSemanticNode(.{
-                    .ChunkData = actionMappedToNodeType,
-                });
-            },
-        }
-    }
-};
-
-pub fn parseImageData(context: *common.Context, state: *ImageDataState) !bool
+fn parseImageData(context: *common.Context, state: *ImageDataState) !bool
 {
     const imageData = &context.state.imageData;
     const bytesRead = &state.bytesRead;
@@ -1237,23 +1227,17 @@ pub fn parseChunkData(context: *const common.Context) !bool
 
     const activeActionAndState = getActiveChunkDataActionAndState(chunk);
 
-    // Currently, this always pushes, creating a node, but doesn't always create data.
-    // Maybe making this optional is the way to go?
-    // Because this makes it wrap all nodes, for all chunk data types,
-    // but that's not required for some of them.
-    // E.g. ImageEnd never has any other nodes associated with it,
-    // so wrapping it would be foolish.
-    // This logic should just probably be moved to the correspoding header types.
-    context.level().pushInit(ChunkDataInitializer
-    {
-        .context = context,
-    });
-    defer context.level().pop();
-
     switch (activeActionAndState)
     {
         .ImageHeader => |t|
         {
+            // We could map this automatically, but then we'd also want to defer pop conditionally.
+            // I probably don't want that? Though it's not that bad.
+            try context.level().pushNode(.{ 
+                .ImageHeader = t.action.*,
+            });
+            defer context.level().pop();
+
             const ihdr = &data.imageHeader;
             switch (t.action.*)
             {
@@ -1277,7 +1261,7 @@ pub fn parseChunkData(context: *const common.Context) !bool
                         .Number = value,
                     });
 
-                    t.action = .BitDepth;
+                    t.action.* = .BitDepth;
                 },
                 .BitDepth =>
                 {
@@ -1292,7 +1276,7 @@ pub fn parseChunkData(context: *const common.Context) !bool
                     {
                         return error.InvalidBitDepth;
                     }
-                    t.action = .ColorType;
+                    t.action.* = .ColorType;
                 },
                 .ColorType =>
                 {
@@ -1312,7 +1296,7 @@ pub fn parseChunkData(context: *const common.Context) !bool
                     {
                         return error.ColorTypeNotAllowedForBitDepth;
                     }
-                    t.action = .CompressionMethod;
+                    t.action.* = .CompressionMethod;
                 },
                 .CompressionMethod =>
                 {
@@ -1329,7 +1313,7 @@ pub fn parseChunkData(context: *const common.Context) !bool
                         return error.InvalidCompressionMethod;
                     }
 
-                    t.action = .FilterMethod;
+                    t.action.* = .FilterMethod;
                 },
                 .FilterMethod =>
                 {
@@ -1346,7 +1330,7 @@ pub fn parseChunkData(context: *const common.Context) !bool
                         return error.InvalidFilterMethod;
                     }
 
-                    t.action = .InterlaceMethod;
+                    t.action.* = .InterlaceMethod;
                 },
                 .InterlaceMethod =>
                 {
@@ -1400,17 +1384,28 @@ pub fn parseChunkData(context: *const common.Context) !bool
         },
         .ImageData => |t|
         {
+            context.level().pushInit(struct
+            {
+                context_: *common.Context,
+
+                pub fn execute(self: @This()) !void
+                {
+                    const imageData = &self.context_.state.imageData;
+                    try self.context_.level()
+                        .applySemanticContextForHierarchy(imageData.zlibStreamSemanticContext);
+                }
+            });
+            defer context.level().pop();
+
             return try parseImageData(context, t.state);
         },
         .Transparency => |*t|
         {
+            // TODO: Figure out how the nodes should be.
             switch (chunk.object.data.transparency)
             {
                 .paletteEntryAlphaValues => |*alphaValues|
                 {
-                    try context.level().pushInit({});
-                    defer context.level().pop();
-
                     const bytesRead = &t.state.bytesRead;
                     const functor = TransparencyBytesProcessor
                     {
@@ -1424,41 +1419,82 @@ pub fn parseChunkData(context: *const common.Context) !bool
                 },
                 .gray => |*gray|
                 {
-                    gray.* = try pipelines.readNetworkUnsigned(context.sequence, u16);
+                    // Should this have a type?
+                    try context.level().pushInit({});
+                    defer context.level().pop();
+
+                    const value = try pipelines.readNetworkUnsigned(context.sequence(), u16);
+
+                    gray.* = value;
+                    context.level().completeNodeWithValue(.{
+                        .Number = value,
+                    });
+
                     return true;
                 },
                 .rgb => |*rgb|
                 {
-                    const rgbIndex = &t.action.RGB;
+                    try context.level().pushNode(.RGBColor);
+                    defer context.level().pop();
 
-                    const value = try pipelines.readNetworkUnsigned(context.sequence, u16);
-                    rgb.at(@intFromEnum(rgbIndex.*)).* = value;
+                    const rgbIndex = &t.action.RGB;
+                    {
+                        try context.level().pushNode(.{ .RGBComponent = rgbIndex.* });
+                        defer context.level().pop();
+
+                        const value = try pipelines.readNetworkUnsigned(context.sequence(), u16);
+                        rgb.at(@intFromEnum(rgbIndex.*)).* = value;
+
+                        try context.level().completeNodeWithValue(.{
+                            .Number = value,
+                        });
+                    }
 
                     if (rgbIndex.next()) |next|
                     {
-                        common.advanceAction(context, rgbIndex, next);
+                        rgbIndex.* = next;
                         return false;
                     }
-                    return true;
+                    else
+                    {
+                        try context.level().completeNode();
+                        return true;
+                    }
                 },
             }
         },
         .Gamma =>
         {
             // The spec doesn't say anything about this value being limited.
-            data.gamma = try pipelines.readNetworkUnsigned(context.sequence, u32);
+            const gamma = try pipelines.readNetworkUnsigned(context.sequence(), u32);
+            data.gamma = gamma;
+
+            // Completes the node on the level above.
+            context.level().completeNode(.{
+                .U32 = gamma,
+            });
+
             return true;
         },
         .PrimaryChrom => |t|
         {
             // TODO: What is up with this one?
             const primaryChroms = &data.primaryChroms;
-            const value = try pipelines.readNetworkUnsigned(context.sequence, u32);
+            try context.level().pushNode(.{
+                .PrimaryChrom = primaryChroms.*
+            });
+            defer context.level().pop();
+
+            const value = try pipelines.readNetworkUnsigned(context.sequence(), u32);
 
             const vector = t.state.vector();
             const index = t.state.coord();
             const targetPointer = &primaryChroms.values[vector].values[index];
             targetPointer.* = value;
+
+            try context.level().completeNodeWithValue(.{
+                .U32 = value,
+            });
 
             t.state.advance();
 
@@ -1467,9 +1503,16 @@ pub fn parseChunkData(context: *const common.Context) !bool
         },
         .ColorSpace =>
         {
+            try context.level().pushNode(.RenderingIntent);
+            defer context.level().pop();
+
             const value = try pipelines.removeFirst(context.sequence());
             const e: RenderingIntent = @enumFromInt(value);
             data.renderingIntent = e;
+            try context.level().completeNodeWithValue(.{
+                .RenderingIntent = e,
+            });
+
             if (!e.isValid())
             {
                 return error.InvalidRenderingIntent;
@@ -1486,76 +1529,129 @@ pub fn parseChunkData(context: *const common.Context) !bool
                 {
                     const maxNameLen = 80;
                     try utils.readNullTerminatedText(context, &node.name, maxNameLen);
-                    common.advanceAction(context, t.action, .CompressionMethod);
+
+                    // TODO:
+                    // We don't want to store the value in the node, since it's not essential.
+                    // Right?
+                    // If that's needed, we'll have to replicate that functionality outside the parser.
+                    try context.level().completeNodeWithValue(.{
+                        .OwnedString = common.move(&node.name),
+                    });
+                    
+                    t.action.* = .CompressionMethod;
                     return false;
                 },
                 .CompressionMethod =>
                 {
                     const compressionMethod = try pipelines.removeFirst(context.sequence());
+                    try context.level().completeNodeWithValue(.{
+                        .CompressionMethod = compressionMethod,
+                    });
+
                     if (compressionMethod != 0)
                     {
                         return error.InvalidCompressionMethod;
                     }
-                    common.advanceAction(context, t.action, .CompressedData);
                     return false;
                 },
                 .CompressedData =>
                 {
                     const isDone = try utils.readZlibData(context, &t.state.zlib, &node.decompressedProfile);
+                    // TODO:
+                    // Make higher level nodes that represent structure in the decoded buffer.
+                    // Currently since it's a string it's easy enough.
+                    if (isDone)
+                    {
+                        try context.level().completeNodeWithValue(.{
+                            .OwnedString = common.move(&node.decompressedProfile),
+                        });
+                    }
                     return isDone;
                 },
             }
         },
-        .Text => |state|
+        .Text => |t|
         {
             const node = &data.text;
-            switch (state.action)
+            try context.level().pushNode(.{
+                .TextAction = t.action.*,
+            });
+            defer context.level().pop();
+
+            switch (t.action.*)
             {
                 .Keyword =>
                 {
-                    try utils.readKeywordText(context, &node.keyword, &state.bytesRead);
-                    state.action = .Text;
+                    try utils.readKeywordText(context, &node.keyword, &t.bytesRead);
+                    try context.level().completeNodeWithValue(.{
+                        .OwnedString = common.move(&node.keyword),
+                    });
+
+                    t.action = .Text;
                     return false;
                 },
                 .Text =>
                 {
-                    const bytesRead = &state.bytesRead;
+                    const bytesRead = &t.state.bytesRead;
                     const functor = TextBytesProcessor
                     {
-                        .text = &state.text,
+                        .text = &node.text,
                         .allocator = context.allocator(),
                     };
 
                     const done = try utils.removeAndProcessAsManyBytesAsAvailable(context, bytesRead, functor);
+                    if (done)
+                    {
+                        try context.level().completeNodeWithValue(.{
+                            .OwnedString = common.move(&node.text),
+                        });
+                    }
                     return done;
                 },
             }
         },
-        .CompressedText => |state|
+        .CompressedText => |t|
         {
             const node = &data.text;
-            switch (state.action)
+
+            try context.level().pushNode(.{
+                .CompressedText = t.action.*,
+            });
+            defer context.level().pop();
+
+            switch (t.action)
             {
                 .Keyword =>
                 {
-                    try utils.readKeywordText(context, &node.keyword, &state.bytesRead);
-                    state.action = .CompressionMethod;
+                    try utils.readKeywordText(context, &node.keyword, &t.bytesRead);
+                    try context.level().completeNodeWithValue(.{
+                        .OwnedString = common.move(&node.keyword),
+                    });
+                    t.action.* = .CompressionMethod;
                     return false;
                 },
                 .CompressionMethod =>
                 {
                     const value = try pipelines.removeFirst(context.sequence());
-                    // Maybe store it?
+                    try context.level().completeNodeWithValue(.{
+                        .CompressionMethod = value,
+                    });
                     if (value != 0)
                     {
                         return error.UnsupportedCompressionMethod;
                     }
-                    state.action = .Text;
+                    t.action.* = .Text;
                     return false;
                 },
                 .Text =>
                 {
-                    const isDone = try utils.readZlibData(context, &state.zlib, &node.text);
+                    const isDone = try utils.readZlibData(context, &t.state.zlib, &node.text);
+                    if (isDone)
+                    {
+                        try context.level().completeNodeWithValue(.{
+                            .OwnedString = &node.text,
+                        });
+                    }
                     return isDone;
                 },
             }

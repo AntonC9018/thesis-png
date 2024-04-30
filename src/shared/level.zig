@@ -137,19 +137,31 @@ pub fn LevelContext(Context: type) type
             _ = self;
         }
 
-        pub fn completeNodeWithValue(self: Self, value: ast.NodeValue)
-            !struct
-            {
-                nodeId: ast.NodeId,
-                dataId: ast.DataId,
-            }
+        pub fn completeNodeWithValue(self: Self, value: ast.NodeValue) !void
         {
             self.completeNode();
             std.debug.print("Node {} \n", .{ value });
-            return .{
-                .nodeId = 0,
-                .dataId = 0,
-            };
+        }
+
+        pub fn completeNodeWithMovedValue(self: Self, value: anytype) !void
+        {
+            self.completeNode();
+
+            switch (@TypeOf(value))
+            {
+                *std.ArrayListUnmanaged(u8) =>
+                {
+                    self.completeNodeWithValue(.{
+                        .OwnedString = value.*,
+                    });
+                    value.* = .{};
+                },
+                else =>
+                {
+                    std.debug.assert();
+                },
+            }
+            std.debug.print("Node {} \n", .{ value });
         }
 
         // If the semantic node is already set, this does nothing.
@@ -168,7 +180,7 @@ pub fn LevelContext(Context: type) type
         }
 
         // Should save the sequence start here.
-        pub fn pushNodeData(self: Self, nodeType: ast.NodeType) !ast.NodeId
+        pub fn pushNode(self: Self, nodeType: ast.NodeType) !ast.NodeId
         {
             const t = struct
             {
@@ -230,7 +242,7 @@ pub fn LevelContext(Context: type) type
 
         pub fn applySemanticContextForHierarchy(
             self: Self,
-            target: ast.NodeSemanticContext) void
+            target: ast.NodeSemanticContext) !void
         {
             var levelData = self.data.*;
             const level = Self
@@ -241,7 +253,7 @@ pub fn LevelContext(Context: type) type
             for (target.semanticNodeIds.items) |it|
             {
                 level.push();
-                level.setSemanticParent(it);
+                try level.setSemanticParent(it);
             }
         }
     };

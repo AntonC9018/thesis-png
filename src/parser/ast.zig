@@ -18,16 +18,12 @@ pub const NodeType = union(enum)
     RGBColor: void,
     RGBComponent: chunks.RGBAction,
 
-    ChunkData: union(enum)
-    {
-        RGB: chunks.RGBAction,
-        ImageHeader: chunks.ImageHeaderAction,
-        PrimaryChrom: chunks.PrimaryChromState,
-        ICCProfile: chunks.ICCProfileAction,
-        TextAction: chunks.TextAction,
-        CompressedText: chunks.CompressedTextAction,
-        ImageData: void,
-    },
+    ImageHeader: chunks.ImageHeaderAction,
+    PrimaryChrom: chunks.PrimaryChromState,
+    ICCProfile: chunks.ICCProfileAction,
+    TextAction: chunks.TextAction,
+    CompressedText: chunks.CompressedTextAction,
+    RenderingIntent: void,
 
     Zlib: zlib.Action,
     Deflate: deflate.Action,
@@ -59,6 +55,7 @@ pub const NodeType = union(enum)
 pub const NodeValue = union(enum)
 {
     String: []const u8,
+    OwnedString: std.ArrayListUnmanaged(u8),
     Number: usize,
     U32: u32,
     ChunkType: parser.ChunkType,
@@ -67,6 +64,7 @@ pub const NodeValue = union(enum)
     CompressionMethod: chunks.CompressionMethod,
     FilterMethod: chunks.FilterMethod,
     InterlaceMethod: chunks.InterlaceMethod,
+    RenderingIntent: chunks.RenderingIntent,
 };
 
 // Semantic node

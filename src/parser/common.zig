@@ -116,7 +116,7 @@ pub const ImageData = struct
     zlib: zlib.State = .{},
     carryOverData: CarryOverSegment = .{},
     semanticNodeId: ?ast.DataId = null,
-    zlibStreamSemanticContext: NodePathSemanticContext = .{},
+    zlibStreamSemanticContext: ast.NodeSemanticContext = .{},
 };
 
 pub const CyclicRedundancyCheck = struct
@@ -139,3 +139,9 @@ pub const ChunkState = struct
     dataState: chunks.ChunkDataState,
 };
 
+pub fn move(t: anytype) @TypeOf(t.*)
+{
+    const result = t.*;
+    t.* = .{};
+    return result;
+}
