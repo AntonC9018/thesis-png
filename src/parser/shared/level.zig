@@ -1,4 +1,6 @@
 const std = @import("std");
+const parser = @import("../module.zig");
+const ast = parser.ast;
 
 pub const LevelInfoMask = std.bit_set.IntegerBitSet(32);
 
@@ -28,6 +30,73 @@ pub const LevelContextData = struct
     {
         return &self.data.max;
     }
+};
+
+const NodeOperationsContext = opaque{};
+
+const NodeInfo = struct
+{
+    id: ast.NodeId,
+    data: ast.NodeData,
+
+};
+
+const NodeOperationsVtable = struct
+{
+    createNode: fn(context: *NodeOperationsContext) anyerror!ast.NodeId,
+    completeNode: fn(context: *NodeOperationsContext, nodeId: ast.NodeId, data: ast.NodeData) anyerror!void,
+    linkSemanticParent: fn(context: *NodeOperationsContext, nodeId: ast.NodeId, parentId: ast.NodeId) anyerror!void,
+};
+
+const NodeOperationsFatPointer = struct
+{
+    context: *NodeOperationsContext,
+    vtable: NodeOperationsVtable,
+
+    pub fn createNode(self: NodeOperationsFatPointer) !ast.NodeId
+    {
+        const result = self.vtable.createNode(self.context);
+        return result;
+    }
+
+    pub fn completeNode(self: NodeOperationsFatPointer, id: ast.NodeId, data: ast.NodeData) !void
+    {
+        const result = self.vtable.completeNode(self.context, id, data);
+        return result;
+    }
+
+    pub fn linkSemanticParent(self: NodeOperationsFatPointer, nodeId: ast.NodeId, parentId: ast.NodeId) !void
+    {
+        const result = self.vtable.linkSemanticParent(self.context, nodeId, parentId);
+        return result;
+    }
+};
+
+pub fn createNodeOperationsHelper(context: anytype) NodeOperationsFatPointer
+{
+    const Context = @TypeOf(context.*);
+    const vtable = NodeOperationsVtable
+    {
+        .createNode = &Context.createNode,
+        .completeNode = &Context.completeNode,
+        .linkSemanticParent = &Context.linkSemanticParent,
+    };
+    return .{
+        .vtable = vtable,
+        .context = context,
+    };
+}
+
+const SyntacticNode = struct
+{
+    nodeId: ast.NodeId,
+};
+
+const NodeContext = struct
+{
+    allocator: std.mem.Allocator,
+    syntacticStack: std.ArrayListUnmanaged(),
+    sem
 };
 
 pub fn LevelContext(Context: type) type
@@ -127,9 +196,6 @@ pub fn LevelContext(Context: type) type
             self.infoMasks().init.setIntersection(setMask);
             self.infoMasks().finalized.setIntersection(setMask);
         }
-
-        // This has to be moved.
-        const ast = @import("../parser/ast.zig");
 
         pub fn completeNode(self: Self) !void
         {

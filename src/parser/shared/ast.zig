@@ -1,15 +1,15 @@
 const std = @import("std");
-const pipelines = @import("pipelines.zig");
-const parser = @import("parser.zig");
-const zlib = @import("../zlib/zlib.zig");
-const deflate = @import("../zlib/deflate.zig");
-const chunks = parser.chunks;
+const parser = @import("../module.zig");
+const pipelines = parser.pipelines;
+const zlib = parser.zlib;
+const deflate = zlib.deflate;
+const chunks = parser.png.chunks;
 
 pub const NodeId = usize;
 pub const DataId = usize;
 
 const invalidNodeId: NodeId = @bitCast(@as(isize, -1));
-const invalidDataId: NodeId = @bitCast(@as(isize, -1));
+const invalidDataId: DataId = invalidNodeId;
 
 pub const NodeType = union(enum)
 {
@@ -56,13 +56,15 @@ pub const NodeType = union(enum)
 
 pub const NodeValue = union(enum)
 {
-    String: []const u8,
+    None: void,
+
+    LiteralString: []const u8,
+    // The memory is from the context's allocator.
     OwnedString: std.ArrayListUnmanaged(u8),
     Number: u64,
     U32: u32,
     Bool: bool,
-    ChunkType: parser.ChunkType,
-    None: void,
+    ChunkType: parser.png.ChunkType,
 
     ColorType: chunks.ColorType,
     CompressionMethod: chunks.CompressionMethod,
