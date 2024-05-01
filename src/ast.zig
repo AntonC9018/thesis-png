@@ -16,11 +16,11 @@ const resourcesDir = "raylib/raylib/examples/text/resources/";
 // 6. Deleting invisible parts of the tree
 //
 
-const ChildrenList = struct
+const SyntaxChildrenList = struct
 {
     array: std.ArrayListUnmanaged(usize) = .{},
 
-    pub fn len(self: *const ChildrenList) usize
+    pub fn len(self: *const SyntaxChildrenList) usize
     {
         return self.array.items.len;
     }
@@ -29,16 +29,22 @@ const ChildrenList = struct
 pub const ChunkDataNodeType = parser.ChunkType;
 
 const NodeIndex = ast.NodeId;
-const DataIndex = ast.SemanticNodeId;
+const DataIndex = ast.NodeDataId;
 
 const invalidNodeIndex: NodeIndex = ast.invalidNodeId;
-const invalidDataIndex: DataIndex = ast.invalidDataId;
+const invalidDataIndex: DataIndex = ast.invalidNodeDataId;
 
 const NodeType = ast.NodeType;
-const NodeValue = ast.NodeValue;
+const NodeValue = ast.NodeData;
 
 // Maybe add a reference count here to be able to know when to delete things.
-const Data = ast.NodeValue;
+const SemanticNode = ast.NodeData;
+
+const SemanticListNode = struct
+{
+    next: NodeIndex = invalidNodeIndex,
+    prev: NodeIndex = invalidNodeIndex,
+};
 
 const Node = struct
 {
@@ -54,26 +60,186 @@ const Node = struct
     // Points to the root data of the semantic linked list.
     // If there's no semantic list, just points to the data.
     // There's always at least one data in that case.
-    nodeData: DataIndex = invalidDataIndex, 
-    syntacticChildren: ChildrenList = .{},
+    data: DataIndex = invalidDataIndex, 
+    syntaxChildren: SyntaxChildrenList = .{},
     
     // This is only going to be used for the image data nodes, probably.
-    semanticList: struct
-    {
-        prev: NodeIndex = invalidNodeIndex,
-        next: NodeIndex = invalidNodeIndex,
-    } = .{},
+    semanticList: SemanticListNode = .{},
 };
 
-const AST = struct
+fn nodeIdToIndex(id: ast.NodeId) NodeIndex
+{
+    return id;
+}
+fn dataIdToIndex(id: ast.NodeDataId) DataIndex
+{
+    return id;
+}
+fn nodeIndexToId(index: NodeIndex) ast.NodeId
+{
+    return index;
+}
+fn dataIndexToId(index: DataIndex) ast.NodeDataId
+{
+    return index;
+}
+
+pub const AST = struct
 {
     rootNodes: std.ArrayList(NodeIndex),
-    nodes: std.ArrayList(Node),
-    nodeData: std.ArrayList(Data),
+    syntaxNodes: std.ArrayList(Node),
+    nodeDatas: std.ArrayList(SemanticNode),
+
+    const NodeOperations = parser.NodeOperations;
 
     pub fn childrenAllocator(self: *AST) std.mem.Allocator
     {
-        return self.nodes.allocator;
+        return self.syntaxNodes.allocator;
+    }
+
+    pub fn createNode(self: *AST, params: NodeOperations.SyntaxNodeCreationParams)
+        NodeOperations.Error!ast.NodeId
+    {
+        const childIndex = self.syntaxNodes.items.len;
+        try self.syntaxNodes.append(Node
+        {
+            .span = .{
+                .start = params.start,
+                .endInclusive = params.start,
+            },
+        });
+
+        const parentIndex = nodeIdToIndex(params.parentId);
+        if (parentIndex == invalidNodeIndex)
+        {
+            std.debug.assert(params.level == 0);
+            try self.rootNodes.append(childIndex);
+        }
+        else
+        {
+            const parentNode = &self.syntaxNodes.items[parentIndex];
+            try parentNode.syntaxChildren.array.append(
+                self.childrenAllocator(),
+                childIndex);
+        }
+
+        return nodeIndexToId(childIndex);
+    }
+
+    pub fn completeNode(self: *AST, params: NodeOperations.SyntaxNodeCompletionParams)
+        NodeOperations.Error!void
+    {
+        const nodeIndex = nodeIdToIndex(params.id);
+        const dataIndex = dataIdToIndex(params.dataId);
+
+        // data exists?
+        std.debug.assert(self.nodeDatas.items.len > dataIndex);
+
+        const node = &self.syntaxNodes.items[nodeIndex];
+        node.span.endInclusive = end:
+        {
+            const comparison = node.span.start.compareTo(params.endExclusive);
+            std.debug.assert(comparison >= 0);
+
+            if (comparison == 0)
+            {
+                break :end node.span.start;
+            }
+            else
+            {
+                break :end params.endExclusive.add(.{ .bit = -1 });
+            }
+        };
+        node.nodeType = params.nodeType;
+        std.debug.assert(node.data == dataIndex);
+
+        if (dataIndex != invalidDataIndex)
+        {
+            const data = &self.nodeDatas.items[dataIndex];
+            if (data == .None)
+            {
+                std.debug.print("Data was created but is empty on node completion."
+                    ++ "Something might be wrong. The node type is {}", 
+                    .{ node.nodeType });
+            }
+        }
+    }
+
+    pub fn linkSemanticParent(self: *AST, params: NodeOperations.SyntaxNodeSemanticLinkParams)
+        NodeOperations.Error!void
+    {
+        const nodeIndex = nodeIdToIndex(params.id);
+        const parentIndex = nodeIdToIndex(params.semanticParentId);
+
+        const child = &self.syntaxNodes.items[nodeIndex];
+        std.debug.assert(child.semanticList.prev == invalidNodeIndex);
+        child.semanticList.prev = parentIndex;
+
+        if (parentIndex != invalidNodeIndex)
+        {
+            const parent = &self.syntaxNodes.items[parentIndex];
+            std.debug.assert(parent.semanticList.next == invalidNodeIndex);
+            parent.semanticList.next = nodeIndex;
+        }
+    }
+
+    pub fn createNodeData(self: *AST, params: NodeOperations.NodeDataCreationParams)
+        NodeOperations.Error!ast.NodeDataId
+    {
+        const associatedNodeIndex = nodeIdToIndex(params.associatedNode);
+        const node: ?*Node = if (associatedNodeIndex == invalidNodeIndex)
+                null
+            else
+                &self.syntaxNodes.items[associatedNodeIndex];
+        if (node) |n|
+        {
+            // Not already created.
+            std.debug.assert(n.data == invalidDataIndex);
+        }
+
+        const dataIndex = self.nodeDatas.items.len;
+        const data = try self.nodeDatas.addOne();
+        data.* = params.value;
+
+        if (node) |n|
+        {
+            n.data = data.*;
+        }
+
+        return dataIndexToId(dataIndex);
+    }
+
+    pub fn setNodeDataValue(self: *AST, params: NodeOperations.NodeDataParams) 
+        NodeOperations.Error!void
+    {
+        const dataIndex = dataIdToIndex(params.id);
+        // TODO: Maybe use a multiarray.
+        const data = &self.nodeDatas.items[dataIndex];
+        
+        // Changing the type halfway is disallowed, unless it's not been set yet.
+        if (data != .None)
+        {
+            const currentTag = @intFromEnum(data.*);
+            const newTag = @intFromEnum(params.value);
+            std.debug.assert(currentTag == newTag);
+        }
+
+        data.* = params.value;
+    }
+
+    pub fn deinit(self: *AST, parserAllocator: std.mem.Allocator) void
+    {
+        for (self.nodeDatas.items) |*data|
+        {
+            switch (data)
+            {
+                .OwnedString => |s|
+                {
+                    s.deinit(parserAllocator);
+                },
+                else => {},
+            }
+        }
     }
 };
 
@@ -82,9 +248,9 @@ pub fn createTestTree(allocator: std.mem.Allocator) !AST
     var tree: AST = .{
         .rootNodes = std.ArrayList(usize).init(allocator),
         .nodes = std.ArrayList(Node).init(allocator),
-        .nodeData = std.ArrayList(Data).init(allocator),
+        .nodeData = std.ArrayList(SemanticNode).init(allocator),
     };
-    const data = try tree.nodeData.addManyAsArray(10);
+    const data = try tree.nodeDatas.addManyAsArray(10);
     const defaultType = NodeType { .TopLevel = .Chunk };
     data.*[0] = .{
         .type = defaultType,
@@ -122,14 +288,14 @@ pub fn createTestTree(allocator: std.mem.Allocator) !AST
             .nodeData = null,
             .children = .{},
         };
-        try tree.nodes.append(node);
+        try tree.syntaxNodes.append(node);
         position = endPosition;
     }
     // Make a couple nodes to serve as children.
     const childrenCount = 3;
-    const parentNode = try tree.nodes.addOne();
+    const parentNode = try tree.syntaxNodes.addOne();
 
-    var children: ChildrenList = .{};
+    var children: SyntaxChildrenList = .{};
     try children.array.ensureTotalCapacity(tree.childrenAllocator(), childrenCount);
 
     for (0 .. childrenCount) |i|
@@ -146,9 +312,9 @@ pub fn createTestTree(allocator: std.mem.Allocator) !AST
             .nodeData = i,
             .children = .{},
         };
-        const currentIndex = tree.nodes.items.len;
+        const currentIndex = tree.syntaxNodes.items.len;
         try children.array.append(tree.childrenAllocator(), currentIndex);
-        try tree.nodes.append(node);
+        try tree.syntaxNodes.append(node);
         position = endPosition;
     }
 
@@ -157,8 +323,8 @@ pub fn createTestTree(allocator: std.mem.Allocator) !AST
         const firstChild = childIndices[0];
         const lastChild = childIndices[childIndices.len - 1];
 
-        const start = tree.nodes.items[firstChild].span.start;
-        const end = tree.nodes.items[lastChild].span.endInclusive;
+        const start = tree.syntaxNodes.items[firstChild].span.start;
+        const end = tree.syntaxNodes.items[lastChild].span.endInclusive;
         parentNode.* = Node
         {
             .span = .{

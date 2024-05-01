@@ -482,9 +482,13 @@ pub const CommonContext = struct
     {
         return self.common.settings;
     }
-    pub fn level(self: *CommonContext) *levels.LevelContextData
+    pub fn levelData(self: *CommonContext) *levels.LevelContextData
     {
         return &self.common.level;
+    }
+    pub fn nodeContext(self: *CommonContext) *levels.NodeContext
+    {
+        return self.common.nodeContext;
     }
 };
 

@@ -43,11 +43,11 @@ pub const State = struct
     imageData: ImageData = .{},
 };
 
-// TODO: Only works assuming PNG is the top level of the tree.
 pub fn isParserStateTerminal(context: *const Context) bool 
 {
     return context.state.action == .Chunk
-        and !context.level().infoMasks().init.isSet(0);
+        and context.level().depth() == 0
+        and context.state.isEnd;
 }
 
 pub const Context = struct
@@ -55,7 +55,7 @@ pub const Context = struct
     common: @import("../shared/CommonContext.zig"),
     state: *State,
 
-    pub fn level(self: *Context) level.LevelContext(Context)
+    pub fn level(self: *Context) levels.LevelContext(Context)
     {
         return .{
             .data = &self.common.level,
@@ -80,6 +80,10 @@ pub const Context = struct
             .byte = self.sequence().getStartBytePosition(),
             .bit = 0,
         };
+    }
+    pub fn nodeContext(self: *Context) *parser.NodeContext
+    {
+        return self.common.nodeContext;
     }
 };
 
@@ -117,7 +121,7 @@ pub const CarryOverSegment = struct
     }
 };
 
-const ast = @import("ast.zig");
+const ast = parser.ast;
 
 // Of course, this will need to be reworked once I do the tree range optimizations
 pub const ImageData = struct
@@ -126,8 +130,8 @@ pub const ImageData = struct
     bytes: std.ArrayListUnmanaged(u8) = .{},
     zlib: zlib.State = .{},
     carryOverData: CarryOverSegment = .{},
-    semanticNodeId: ?ast.DataId = null,
-    zlibStreamSemanticContext: ast.NodeSemanticContext = .{},
+    dataId: ast.NodeDataId = ast.invalidNodeDataId,
+    zlibStreamSemanticContext: levels.NodeSemanticContext = .{},
 };
 
 pub const CyclicRedundancyCheck = struct

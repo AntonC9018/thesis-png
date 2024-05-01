@@ -26,7 +26,7 @@ pub const Context = struct
     {
         return .{
             .context = self,
-            .data = self.common.level(),
+            .data = self.common.levelData(),
         };
     }
     pub fn sequence(self: *Context) *pipelines.Sequence

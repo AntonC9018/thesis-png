@@ -1,9 +1,11 @@
-const pipelines = @import("../pipelines/pipelines.zig");
+const parser = @import("../module.zig");
+const pipelines = parser.pipelines;
 const std = @import("std");
-const LevelContextData = @import("level.zig").LevelContextData;
-const Settings = @import("Settings.zig");
+const LevelContextData = parser.level.LevelContextData;
+const Settings = parser.Settings;
 
 sequence: *pipelines.Sequence,
 allocator: std.mem.Allocator,
 settings: *Settings,
-level: LevelContextData,
+nodeContext: *parser.level.NodeContext,
+level: LevelContextData = .{},

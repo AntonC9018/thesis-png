@@ -2,157 +2,17 @@ const std = @import("std");
 const parser = @import("../module.zig");
 const ast = parser.ast;
 const pipelines = parser.pipelines;
-
-pub const LevelInfoMask = std.bit_set.IntegerBitSet(32);
-
-pub const LevelInfoMasks = struct
-{
-    init: LevelInfoMask = .{ .mask = 0 },
-    finalized: LevelInfoMask = .{ .mask = 0 },
-};
-
-pub const LevelStats = struct
-{
-    initMask: LevelInfoMasks,
-    max: u5,
-};
+const NodeOperations = parser.NodeOperations;
 
 pub const LevelContextData = struct
 {
-    data: *LevelStats,
-    current: u5,
-
-    pub fn infoMasks(self: LevelContextData) *LevelInfoMasks
-    {
-        return &self.data.initMask;
-    }
-
-    pub fn max(self: LevelContextData) *u5
-    {
-        return &self.data.max;
-    }
+    current: u5 = 0,
 };
-
-const NodeOperationsContext = opaque{};
-
-pub const SyntaxNodeCreationContext = struct
-{
-    start: ast.Position,
-    level: usize,
-    parentId: ast.NodeId,
-};
-
-pub const SyntaxNodeCompletionContext = struct
-{
-    id: ast.NodeId,
-    endExclusive: ast.Position,
-    nodeType: ast.NodeType,
-};
-
-pub const SyntaxNodeSemanticLinkContext = struct
-{
-    id: ast.NodeId,
-    semanticParentId: ast.NodeId,
-};
-
-pub const SemanticNodeCreationContext = struct
-{
-    associatedNode: ast.NodeId = ast.invalidNodeId,
-    value: ast.NodeValue = .None,
-};
-
-pub const SemanticNodeContext = struct
-{
-    id: ast.SemanticNodeId,
-    value: ast.NodeValue = .None,
-};
-
-const NodeOperationsError = std.mem.Allocator.Error;
-
-const NodeOperationsVtable = struct
-{
-    // Should allocate space for a node at a given level.
-    // May discard the level information.
-    // The returned node is to be treated as an opaque value 
-    // (the caller is not to be concerned with its structure).
-    createSyntaxNode: fn(context: *NodeOperationsContext, value: SyntaxNodeCreationContext) NodeOperationsError!ast.NodeId,
-
-    // A completed node must not accept any new children nodes.
-    // A completed syntax node may or may not have an associated semantic node.
-    // The associated semantic node may or may have been completed when this is called.
-    // The children nodes must have been completed (to be validated).
-    completeSyntaxNode: fn(context: *NodeOperationsContext, value: SyntaxNodeCompletionContext) NodeOperationsError!void,
-
-    // The given node is to be linked with the given other existing node.
-    // The other node must not be deleted before this.
-    // This shows that the new node is sharing contextual information with the other node.
-    linkSemanticParent: fn(context: *NodeOperationsContext, value: SyntaxNodeSemanticLinkContext) NodeOperationsError!void,
-
-    // Creates a semantic node, associating it with the given syntax node if its id is valid.
-    // The value given is the initial value and might be changed later.
-    createSemanticNode: fn(context: *NodeOperationsContext, value: SemanticNodeCreationContext) NodeOperationsError!ast.SemanticNodeId,
-
-    // Updates the value of a semantic node.
-    setSemanticNodeValue: fn(context: *NodeOperationsContext, value: SemanticNodeContext) NodeOperationsError!void,
-};
-
-const NodeOperations = struct
-{
-    context: *NodeOperationsContext,
-    vtable: *NodeOperationsVtable,
-
-    pub fn createNode(self: NodeOperations, value: SyntaxNodeCreationContext) NodeOperationsError!ast.NodeId
-    {
-        const result = self.vtable.createNode(self.context, value);
-        return result;
-    }
-
-    pub fn completeNode(self: NodeOperations, value: SyntaxNodeCompletionContext) NodeOperationsError!void
-    {
-        const result = self.vtable.completeNode(self.context, value);
-        return result;
-    }
-
-    pub fn linkSemanticParent(self: NodeOperations, value: SyntaxNodeSemanticLinkContext) NodeOperationsError!void
-    {
-        const result = self.vtable.linkSemanticParent(self.context, value);
-        return result;
-    }
-
-    pub fn createSemanticNode(self: NodeOperations, value: SemanticNodeCreationContext) NodeOperationsError!ast.SemanticNodeId
-    {
-        const result = self.vtable.createSemanticNode(self.context, value);
-        return result;
-    }
-
-    pub fn setSemanticNodeValue(self: NodeOperations, value: SemanticNodeContext) NodeOperationsError!void
-    {
-        const result = self.vtable.setSemanticNodeValue(self.context, value);
-        return result;
-    }
-};
-
-pub fn createNodeOperations(context: anytype) NodeOperations
-{
-    const Context = @TypeOf(context.*);
-    const vtable = NodeOperationsVtable
-    {
-        .createNode = Context.createNode,
-        .completeNode = Context.completeNode,
-        .linkSemanticParent = Context.linkSemanticParent,
-        .createSemanticNode = Context.createSemanticNode,
-        .setSemanticNodeValue = Context.setSemanticNodeValue,
-    };
-    return .{
-        .vtable = &vtable,
-        .context = context,
-    };
-}
 
 const SyntaxNodeInfo = struct
 {
     nodeId: ast.NodeId,
-    semanticNodeId: ast.SemanticNodeId = ast.invalidSemanticNodeId,
+    dataId: ast.NodeDataId = ast.invalidNodeDataId,
     nodeType: ast.NodeType = .Container,
 };
 
@@ -161,10 +21,10 @@ pub const NodeSemanticContext = struct
     hierarchy: std.ArrayList(SyntaxNodeInfo) = .{},
 };
 
-const NodeContext = struct
+pub const NodeContext = struct
 {
     allocator: std.mem.Allocator,
-    syntaxNodeStack: std.ArrayListUnmanaged(SyntaxNodeInfo),
+    syntaxNodeStack: std.ArrayListUnmanaged(SyntaxNodeInfo) = .{},
     operations: NodeOperations,
 };
 
@@ -177,25 +37,22 @@ pub fn LevelContext(Context: type) type
 
         const Self = @This();
 
-        pub fn infoMasks(self: Self) *LevelInfoMasks
-        {
-            return self.data.infoMasks();
-        }
         pub fn current(self: Self) *u5
         {
             return self.data.current;
         }
-        pub fn max(self: Self) *u5
-        {
-            return self.data.max();
-        }
         fn nodeContext(self: Self) *NodeContext
         {
-            return self.context.nodeContext;
+            return self.context.nodeContext();
+        }
+
+        pub fn depth(self: Self) usize
+        {
+            return self.nodeContext().syntaxNodeStack.items.len;
         }
 
         fn maybeCreateSyntaxNode(self: Self) 
-            NodeOperationsError!struct
+            NodeOperations.Error!struct
             {
                 node: *SyntaxNodeInfo,
                 created: bool,
@@ -243,7 +100,6 @@ pub fn LevelContext(Context: type) type
         fn pushImpl(self: Self) void
         {
             self.current().* += 1;
-            self.max().* = @max(self.current().*, self.max().*);
         }
 
         pub fn push(self: Self) !void
@@ -251,7 +107,7 @@ pub fn LevelContext(Context: type) type
             self.pushImpl();
             errdefer self.pop();
 
-            _ = self.maybeCreateSyntaxNode(.None);
+            _ = self.maybeCreateSyntaxNode();
         }
 
         pub fn pushInit(self: Self, callback: anytype) !void
@@ -259,7 +115,7 @@ pub fn LevelContext(Context: type) type
             self.pushImpl();
             errdefer self.pop();
 
-            const node = self.maybeCreateSyntaxNode(.None);
+            const node = self.maybeCreateSyntaxNode();
             if (!node.created)
             {
                 return;
@@ -305,6 +161,7 @@ pub fn LevelContext(Context: type) type
                 .nodeType = node.nodeType,
                 .endExclusive = position,
                 .id = node.nodeId,
+                .dataId = node.dataId,
             });
         }
 
@@ -345,30 +202,30 @@ pub fn LevelContext(Context: type) type
             }
         }
 
-        pub fn setSemanticValue(self: Self, value: ast.NodeValue) !void
+        pub fn setSemanticValue(self: Self, value: ast.NodeData) !void
         {
             // TODO: Check value and type compatibility.
             const currentNode_: *SyntaxNodeInfo = self.currentNode();
             const nodeContext_ = self.nodeContext();
             const ops = nodeContext_.operations; 
-            if (currentNode_.semanticNodeId == ast.invalidSemanticNodeId)
+            if (currentNode_.dataId == ast.invalidNodeDataId)
             {
-                const semanticNodeId = ops.createSemanticNode(.{
+                const semanticNodeId = ops.createNodeData(.{
                     .associatedNode = currentNode_.nodeId,
                     .value = value,
                 });
-                currentNode_.semanticNodeId = semanticNodeId;
+                currentNode_.dataId = semanticNodeId;
             }
             else
             {
-                nodeContext_.operations.setSemanticNodeValue(.{
+                nodeContext_.operations.setNodeDataValue(.{
                     .value = value,
-                    .id = currentNode_.semanticNodeId,
+                    .id = currentNode_.dataId,
                 });
             }
         }
 
-        pub fn completeNodeWithValue(self: Self, value: ast.NodeValue) !void
+        pub fn completeNodeWithValue(self: Self, value: ast.NodeData) !void
         {
             std.debug.print("Node {} \n", .{ value });
             try self.setSemanticValue(value);
@@ -416,18 +273,18 @@ pub fn LevelContext(Context: type) type
             const nodeContext_ = self.nodeContext();
             const levelIndex = self.currentLevel();
             const firstChildLevelIndex = levelIndex + 1;
-            const levelCount = self.max().*;
+            const nodes = &nodeContext_.syntaxNodeStack.items;
+            const levelCount = nodes.len;
             const nodeCountAfterThis = levelCount - firstChildLevelIndex;
 
             try targetContext.hierarchy.resize(nodeCountAfterThis);
 
             {
                 const hierarchy = targetContext.hierarchy.items;
-                const nodes = nodeContext_.syntaxNodeStack.items;
                 for (0 .. nodeCountAfterThis) |i|
                 {
                     const nodeIndex = firstChildLevelIndex + i;
-                    hierarchy[i] = nodes[nodeIndex];
+                    hierarchy[i] = nodes.*[nodeIndex];
 
                     self.completeNodeAtWithoutRemoving(nodeIndex);
                 }
@@ -435,7 +292,7 @@ pub fn LevelContext(Context: type) type
             }
             {
                 // Pop all of the child nodes.
-                nodeContext_.syntaxNodeStack.items.len = firstChildLevelIndex;
+                nodes.len = firstChildLevelIndex;
             }
         }
 
@@ -458,7 +315,7 @@ pub fn LevelContext(Context: type) type
                 try level.pushImpl();
                 const r = try level.maybeCreateSyntaxNode();
                 r.node.nodeType = it.nodeType;
-                r.node.semanticNodeId = it.semanticNodeId;
+                r.node.dataId = it.dataId;
                 try level.setSemanticParent(it.nodeId);
             }
         }

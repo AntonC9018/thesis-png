@@ -6,3 +6,5 @@ pub const level = @import("shared/level.zig");
 
 pub const Settings = @import("shared/Settings.zig");
 pub const CommonContext = @import("shared/CommonContext.zig");
+pub const NodeOperations = @import("shared/NodeOperations.zig");
+pub const NodeContext = level.NodeContext;

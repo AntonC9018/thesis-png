@@ -156,8 +156,10 @@ test "Base distance"
     try testBaseDistance(24577, 29);
 }
 
+const DeflateContext = helper.DeflateContext;
+
 pub fn decompressSymbol(
-    context: *const helper.DeflateContext,
+    context: *DeflateContext,
     state: *SymbolDecompressionState) !?helper.Symbol
 {
     try context.level().push();
@@ -340,11 +342,11 @@ pub const DecompressionValueType = enum
 
 const DecompressionNodeWriter = struct
 {
-    context: *const helper.DeflateContext,
+    context: *DeflateContext,
 
     pub fn create(self: @This(), t: DecompressionValueType, value: usize) !void
     {
-        try self.context.level().maybeCreateSemanticNode(.{
+        try self.context.level().setNodeType(.{
             .FixedDecompressionValue = t,
         });
         try self.context.level().completeNodeWithValue(.{

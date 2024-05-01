@@ -6,10 +6,10 @@ const deflate = zlib.deflate;
 const chunks = parser.png.chunks;
 
 pub const NodeId = usize;
-pub const SemanticNodeId = usize;
+pub const NodeDataId = usize;
 
 pub const invalidNodeId: NodeId = @bitCast(@as(isize, -1));
-pub const invalidDataId: SemanticNodeId = invalidNodeId;
+pub const invalidNodeDataId: NodeDataId = invalidNodeId;
 
 pub const NodeType = union(enum)
 {
@@ -53,7 +53,7 @@ pub const NodeType = union(enum)
     }
 };
 
-pub const NodeValue = union(enum)
+pub const NodeData = union(enum)
 {
     None: void,
 
@@ -227,10 +227,4 @@ pub const NodeSpan = struct
             .endInclusive = startPos.add(endOffset),
         };
     }
-};
-
-
-pub const NodeSemanticContext = struct
-{
-    semanticNodeIds: std.ArrayListUnmanaged(SemanticNodeId) = .{},
 };

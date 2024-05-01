@@ -2,6 +2,8 @@ const helper = @import("helper.zig");
 const huffman = helper.huffman;
 const std = helper.std;
 
+const DeflateContext = helper.DeflateContext;
+
 pub const CodeDecodingAction = enum
 {
     LiteralOrLenCodeCount,
@@ -72,7 +74,7 @@ pub const CodeDecodingState = struct
 
     const Self = @This();
 
-    pub fn initArrayElement(context: *const helper.DeflateContext, self: *CodeDecodingState) !void
+    pub fn initArrayElement(context: *DeflateContext, self: *CodeDecodingState) !void
     {
         try helper.initState(context, &self.arrayElementInitialized);
     }
@@ -117,7 +119,7 @@ const DecompressionState = struct
 };
 
 pub fn decodeCodes(
-    context: *const helper.DeflateContext,
+    context: *DeflateContext,
     state: *CodeDecodingState) !bool
 {
     try context.level().pushNode(.{
@@ -214,12 +216,12 @@ pub fn decodeCodes(
                 return false;
             }
 
-            try context.level().completeNode();
-
             state.action = .DistanceCodeLens;
             state.distanceCodeLens = try context.allocator()
                 .alloc(u8, state.getDistanceCodeCount());
             state.readListItemCount = 0;
+
+            try context.level().completeNode();
         },
         .DistanceCodeLens =>
         {
@@ -238,7 +240,7 @@ pub fn decodeCodes(
 }
 
 fn readCodeLenEncodedFrequency(
-    context: *const helper.DeflateContext,
+    context: *DeflateContext,
     state: *CodeDecodingState,
     outputArray: []u8) !bool
 {
@@ -259,12 +261,13 @@ fn readCodeLenEncodedFrequency(
             const character = try helper.readAndDecodeCharacter(context, freqState.huffmanContext());
             const len: u5 = @intCast(character);
             state.literalOrLenCodeCount = len;
-            try context.level().completeNodeWithValue(.{
-                .Number = len,
-            });
 
             std.debug.assert(len <= 18);
 
+            try context.level().completeNodeWithValue(.{
+                .Number = len,
+            });
+            
             // Value above 16 means the bits that follow are the repeat count.
             if (len >= 16)
             {
@@ -277,10 +280,12 @@ fn readCodeLenEncodedFrequency(
 
                 return false;
             }
-
-            outputArray[readCount.*] = len;
-            readCount.* += 1;
-            return true;
+            else
+            {
+                outputArray[readCount.*] = len;
+                readCount.* += 1;
+                return true;
+            }
         },
         .RepeatCount =>
         {
@@ -311,7 +316,7 @@ fn readCodeLenEncodedFrequency(
 }
 
 fn fullyReadCodeLenEncodedFrequency(
-    context: *const helper.DeflateContext,
+    context: *DeflateContext,
     state: *CodeDecodingState,
     outputArray: []u8) !bool
 {
@@ -367,7 +372,7 @@ pub fn initializeDecompressionState(
 }
 
 pub fn decompressSymbol(
-    context: *const helper.DeflateContext,
+    context: *DeflateContext,
     state: *DecompressionState) !?helper.Symbol
 {
     try context.level().push();
@@ -381,7 +386,7 @@ pub fn decompressSymbol(
                 .tree = &state.literalOrLenTree,
                 .currentBitCount = &state.currentBitCount,
             });
-            var createNode = helper.DecompressionNodeWriter
+            var createNode = DecompressionNodeWriter
             {
                 .context = context,
                 .value = value,
@@ -422,10 +427,10 @@ pub fn decompressSymbol(
                 .tree = &state.distanceTree,
                 .currentBitCount = &state.currentBitCount,
             });
+            state.action = .LiteralOrLen;
             try context.level().completeNodeWithValue(.{
                 .Number = distance,
             });
-            state.action = .LiteralOrLen;
 
             return .{
                 .BackReference = .{
@@ -448,7 +453,7 @@ pub const DecompressionValueType = enum
 
 pub const DecompressionNodeWriter = struct
 {
-    context: *const helper.DeflateContext,
+    context: *DeflateContext,
 
     pub fn create(self: @This(), t: DecompressionValueType, value: usize) !void
     {

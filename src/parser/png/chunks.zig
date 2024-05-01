@@ -628,7 +628,7 @@ pub const ChunkType = enum(u32)
 // Check if the size specified matches the expected size.
 // If the size of the chunk is dynamic, resize
 // the sequence appropriately and reinterpret error.NotEnoughBytes.
-pub fn initChunkDataNode(context: *const Context, chunkType: ChunkType) !void
+pub fn initChunkDataNode(context: *Context, chunkType: ChunkType) !void
 {
     const chunk = &context.state.chunk;
     const h = struct
@@ -882,7 +882,7 @@ fn readRgbComponentNode(
 
 const PaletteBytesProcessor = struct
 {
-    context: *const Context,
+    context: *Context,
     state: *PaletteState,
     data: *Palette,
 
@@ -1194,10 +1194,6 @@ fn parseImageData(context: *Context, state: *ImageDataState) !bool
 
             {
                 context.level().captureSemanticContextForHierarchy(&imageData.zlibStreamSemanticContext);
-
-                // We need to complete all of the syntactic nodes below manually.
-                // That's useful for detecting bugs too, if incomplete nodes were to throw an error.
-                context.level().completeNodesInHierarchy();
             }
 
             {
@@ -1221,7 +1217,7 @@ fn parseImageData(context: *Context, state: *ImageDataState) !bool
     return isLastLoopForChunk and sequence.len() == 0;
 }
 
-pub fn parseChunkData(context: *const Context) !bool
+pub fn parseChunkData(context: *Context) !bool
 {
     const chunk = &context.state.chunk;
     const data = &chunk.object.data;
@@ -1269,7 +1265,7 @@ pub fn parseChunkData(context: *const Context) !bool
                     const value = try pipelines.removeFirst(context.sequence());
 
                     ihdr.bitDepth = value;
-                    context.level().completeNodeWithValue(.{
+                    try context.level().completeNodeWithValue(.{
                         .Number = value,
                     });
 
@@ -1285,7 +1281,7 @@ pub fn parseChunkData(context: *const Context) !bool
 
                     const colorType = .{ .flags = value };
                     ihdr.colorType = colorType;
-                    context.level().completeNodeWithValue(.{
+                    try context.level().completeNodeWithValue(.{
                         .ColorType = colorType,
                     });
 
@@ -1305,7 +1301,7 @@ pub fn parseChunkData(context: *const Context) !bool
 
                     const compressionMethod = value;
                     ihdr.compressionMethod = compressionMethod;
-                    context.level().completeNodeWithValue(.{
+                    try context.level().completeNodeWithValue(.{
                         .CompressionMethod = compressionMethod,
                     });
 
@@ -1322,7 +1318,7 @@ pub fn parseChunkData(context: *const Context) !bool
 
                     const filterMethod = value;
                     ihdr.filterMethod = filterMethod;
-                    context.level().completeNodeWithValue(.{
+                    try context.level().completeNodeWithValue(.{
                         .FilterMethod = filterMethod,
                     });
 
@@ -1339,7 +1335,7 @@ pub fn parseChunkData(context: *const Context) !bool
 
                     const enumValue: InterlaceMethod = @enumFromInt(value);
                     ihdr.interlaceMethod = enumValue;
-                    context.level().completeNodeWithValue(.{
+                    try context.level().completeNodeWithValue(.{
                         .InterlaceMethod = enumValue,
                     });
 
@@ -1427,7 +1423,7 @@ pub fn parseChunkData(context: *const Context) !bool
                     const value = try pipelines.readNetworkUnsigned(context.sequence(), u16);
 
                     gray.* = value;
-                    context.level().completeNodeWithValue(.{
+                    try context.level().completeNodeWithValue(.{
                         .Number = value,
                     });
 

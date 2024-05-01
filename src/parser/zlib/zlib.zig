@@ -136,7 +136,7 @@ pub const Context = struct
     pub fn level(self: *Context) *helper.LevelContext(Context)
     {
         return .{
-            .data = self.common.level(),
+            .data = self.common.levelData(),
             .context = self,
         };
     }
@@ -154,6 +154,10 @@ pub const Context = struct
             .byte = self.sequence().getStartBytePosition(),
             .bit = 0,
         };
+    }
+    pub fn nodeContext(self: *Context) *helper.NodeContext
+    {
+        return self.common.nodeContext();
     }
 };
 

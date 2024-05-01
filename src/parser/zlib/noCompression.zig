@@ -1,7 +1,9 @@
 const helper = @import("helper.zig");
 const pipelines = helper.pipelines;
 
-pub fn decompress(context: *const helper.DeflateContext, state: *DecompressionState) !void
+const DeflateContext = helper.DeflateContext;
+
+pub fn decompress(context: *DeflateContext, state: *DecompressionState) !void
 {
     if (state.bytesLeftToCopy == 0)
     {
@@ -66,7 +68,7 @@ pub const DecompressionState = struct
     bytesLeftToCopy: u16,
 };
 
-pub fn initState(context: *const helper.DeflateContext, state: *InitState) !bool
+pub fn initState(context: *DeflateContext, state: *InitState) !bool
 {
     try context.level().pushNode(.{
         .NoCompression = state.action,

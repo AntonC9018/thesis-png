@@ -201,7 +201,7 @@ const TopLevelInitializer = struct
     fn execute(self: @This()) !void
     {
         const action = self.context.state.action;
-        self.context.level().maybeCreateSemanticNode(.{ .TopLevel = action });
+        self.context.level().setNodeType(.{ .TopLevel = action });
 
         switch (action)
         {
@@ -272,22 +272,21 @@ const ChunkItemNodeInitializer = struct
 
         if (isImageData)
         {
-            const semanticNodeId = &self.context.state.imageData.semanticNodeId;
-            if (semanticNodeId) |i|
+            const dataId = &self.context.state.imageData.dataId;
+            if (dataId != common.ast.invalidNodeDataId)
             {
-                // std.debug.assert(self.context.state.isData == false);
-                try self.context.level().setSemanticParent(i);
+                try self.context.level().setSemanticParent(dataId);
                 return;
             }
 
-            const parentId = try self.context.level().maybeCreateSemanticNode(.{
+            const parentId = try self.context.level().setNodeType(.{
                 .Chunk = state.action,
             });
-            semanticNodeId.* = parentId;
+            dataId.* = parentId;
         }
         else
         {
-            try self.context.level().maybeCreateSemanticNode(.{
+            try self.context.level().setNodeType(.{
                 .Chunk = state.action,
             });
         }
@@ -314,12 +313,13 @@ pub fn parseChunkItem(context: *Context) !bool
                     return error.LengthValueTooLarge;
                 };
 
+            chunk.action = .ChunkType;
+
             chunk.object.dataByteLen = len;
             try context.level().completeNodeWithValue(.{ 
                 .Number = len,
             });
 
-            chunk.action = .ChunkType;
             return false;
         },
         .ChunkType =>
@@ -367,8 +367,8 @@ pub fn parseChunkItem(context: *Context) !bool
             const done = try chunks.parseChunkData(context);
             if (done)
             {
-                context.level().completeNode();
                 chunk.action = .CyclicRedundancyCheck;
+                try context.level().completeNode();
             }
             return false;
         },
@@ -378,7 +378,7 @@ pub fn parseChunkItem(context: *Context) !bool
             const value = try pipelines.readNetworkUnsigned(context.sequence(), u32);
             const crc = .{ .value = value };
             chunk.object.crc = crc;
-            context.level().completeNodeWithValue(.{
+            try context.level().completeNodeWithValue(.{
                 .U32 = value,
             });
             return true;

@@ -1,6 +1,7 @@
 const std = @import("std");
-const parser = @import("parser/parser.zig");
-const pipelines = @import("pipelines.zig");
+const parser = @import("parser/module.zig");
+const pipelines = parser.pipelines;
+const png = parser.png;
 
 pub const TestReaderContext = struct
 {
@@ -46,8 +47,8 @@ pub fn readTestFile() !void
 
     const reader = &readerContext.reader;
 
-    var parserState = parser.createParserState();
-    var chunks = std.ArrayList(parser.Chunk).init(allocator);
+    var parserState = png.createParserState();
+    var chunks = std.ArrayList(png.Chunk).init(allocator);
     const settings = parser.Settings
     {
         .logChunkStart = true,
@@ -56,7 +57,7 @@ pub fn readTestFile() !void
     outerLoop: while (true)
     {
         var readResult = try reader.read();
-        var context = parser.Context
+        var context = png.Context
         { 
             .state = &parserState,
             .sequence = &readResult.sequence,
@@ -107,7 +108,7 @@ pub fn readTestFile() !void
                 std.debug.print("Not all input consumed. Remaining length: {}\n", .{remaining});
             }
 
-            if (!parser.isStateTerminal(context.state))
+            if (!png.isStateTerminal(context.state))
             {
                 std.debug.print("Ended in a non-terminal state.\n", .{});
             }
@@ -160,7 +161,7 @@ fn doMaximumAmountOfParsing(
     while (true)
     {
         const currentlyParsing = context.state.action.key;
-        const isDone = try parser.parseTopLevelItem(context);
+        const isDone = try png.parseTopLevelItem(context);
         if (!isDone)
         {
             continue;
