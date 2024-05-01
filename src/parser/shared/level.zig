@@ -144,7 +144,7 @@ pub fn createNodeOperations(context: anytype) NodeOperations
         .setSemanticNodeValue = Context.setSemanticNodeValue,
     };
     return .{
-        .vtable = vtable,
+        .vtable = &vtable,
         .context = context,
     };
 }
