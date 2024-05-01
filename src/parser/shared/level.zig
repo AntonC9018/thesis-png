@@ -137,11 +137,11 @@ pub fn createNodeOperations(context: anytype) NodeOperations
     const Context = @TypeOf(context.*);
     const vtable = NodeOperationsVtable
     {
-        .createNode = &Context.createNode,
-        .completeNode = &Context.completeNode,
-        .linkSemanticParent = &Context.linkSemanticParent,
-        .createSemanticNode = &Context.createSemanticNode,
-        .setSemanticNodeValue = &Context.setSemanticNodeValue,
+        .createNode = Context.createNode,
+        .completeNode = Context.completeNode,
+        .linkSemanticParent = Context.linkSemanticParent,
+        .createSemanticNode = Context.createSemanticNode,
+        .setSemanticNodeValue = Context.setSemanticNodeValue,
     };
     return .{
         .vtable = vtable,
