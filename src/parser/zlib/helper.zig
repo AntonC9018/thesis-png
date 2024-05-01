@@ -10,6 +10,7 @@ usingnamespace levels;
 
 pub const Settings = parser.Settings;
 const SharedCommonContext = parser.CommonContext;
+pub const NodePosition = parser.ast.Position;
 
 pub const PeekApplyHelper = struct
 {

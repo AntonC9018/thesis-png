@@ -148,6 +148,13 @@ pub const Context = struct
     {
         return self.common.sequence();
     }
+    pub fn getStartBytePosition(self: *Context) helper.NodePosition
+    {
+        return .{
+            .byte = self.sequence().getStartBytePosition(),
+            .bit = 0,
+        };
+    }
 };
 
 pub fn decode(context: *Context) !bool

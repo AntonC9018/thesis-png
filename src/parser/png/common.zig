@@ -74,6 +74,13 @@ pub const Context = struct
     {
         return self.common.allocator;
     }
+    pub fn getStartBytePosition(self: *Context) parser.ast.Position
+    {
+        return .{
+            .byte = self.sequence().getStartBytePosition(),
+            .bit = 0,
+        };
+    }
 };
 
 pub const CarryOverSegment = struct

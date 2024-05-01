@@ -1,6 +1,7 @@
 const std = @import("std");
 const parser = @import("../module.zig");
 const ast = parser.ast;
+const pipelines = parser.pipelines;
 
 pub const LevelInfoMask = std.bit_set.IntegerBitSet(32);
 
@@ -34,45 +35,104 @@ pub const LevelContextData = struct
 
 const NodeOperationsContext = opaque{};
 
-const NodeInfo = struct
+pub const SyntaxNodeCreationContext = struct
+{
+    start: ast.Position,
+    level: usize,
+    parentId: ast.NodeId,
+};
+
+pub const SyntaxNodeCompletionContext = struct
 {
     id: ast.NodeId,
-    data: ast.NodeData,
-
+    endExclusive: ast.Position,
+    nodeType: ast.NodeType,
 };
+
+pub const SyntaxNodeSemanticLinkContext = struct
+{
+    id: ast.NodeId,
+    semanticParentId: ast.NodeId,
+};
+
+pub const SemanticNodeCreationContext = struct
+{
+    associatedNode: ast.NodeId = ast.invalidNodeId,
+    value: ast.NodeValue = .None,
+};
+
+pub const SemanticNodeContext = struct
+{
+    id: ast.SemanticNodeId,
+    value: ast.NodeValue = .None,
+};
+
+const NodeOperationsError = std.mem.Allocator.Error;
 
 const NodeOperationsVtable = struct
 {
-    createNode: fn(context: *NodeOperationsContext) anyerror!ast.NodeId,
-    completeNode: fn(context: *NodeOperationsContext, nodeId: ast.NodeId, data: ast.NodeData) anyerror!void,
-    linkSemanticParent: fn(context: *NodeOperationsContext, nodeId: ast.NodeId, parentId: ast.NodeId) anyerror!void,
+    // Should allocate space for a node at a given level.
+    // May discard the level information.
+    // The returned node is to be treated as an opaque value 
+    // (the caller is not to be concerned with its structure).
+    createSyntaxNode: fn(context: *NodeOperationsContext, value: SyntaxNodeCreationContext) NodeOperationsError!ast.NodeId,
+
+    // A completed node must not accept any new children nodes.
+    // A completed syntax node may or may not have an associated semantic node.
+    // The associated semantic node may or may have been completed when this is called.
+    // The children nodes must have been completed (to be validated).
+    completeSyntaxNode: fn(context: *NodeOperationsContext, value: SyntaxNodeCompletionContext) NodeOperationsError!void,
+
+    // The given node is to be linked with the given other existing node.
+    // The other node must not be deleted before this.
+    // This shows that the new node is sharing contextual information with the other node.
+    linkSemanticParent: fn(context: *NodeOperationsContext, value: SyntaxNodeSemanticLinkContext) NodeOperationsError!void,
+
+    // Creates a semantic node, associating it with the given syntax node if its id is valid.
+    // The value given is the initial value and might be changed later.
+    createSemanticNode: fn(context: *NodeOperationsContext, value: SemanticNodeCreationContext) NodeOperationsError!ast.SemanticNodeId,
+
+    // Updates the value of a semantic node.
+    setSemanticNodeValue: fn(context: *NodeOperationsContext, value: SemanticNodeContext) NodeOperationsError!void,
 };
 
-const NodeOperationsFatPointer = struct
+const NodeOperations = struct
 {
     context: *NodeOperationsContext,
-    vtable: NodeOperationsVtable,
+    vtable: *NodeOperationsVtable,
 
-    pub fn createNode(self: NodeOperationsFatPointer) !ast.NodeId
+    pub fn createNode(self: NodeOperations, value: SyntaxNodeCreationContext) NodeOperationsError!ast.NodeId
     {
-        const result = self.vtable.createNode(self.context);
+        const result = self.vtable.createNode(self.context, value);
         return result;
     }
 
-    pub fn completeNode(self: NodeOperationsFatPointer, id: ast.NodeId, data: ast.NodeData) !void
+    pub fn completeNode(self: NodeOperations, value: SyntaxNodeCompletionContext) NodeOperationsError!void
     {
-        const result = self.vtable.completeNode(self.context, id, data);
+        const result = self.vtable.completeNode(self.context, value);
         return result;
     }
 
-    pub fn linkSemanticParent(self: NodeOperationsFatPointer, nodeId: ast.NodeId, parentId: ast.NodeId) !void
+    pub fn linkSemanticParent(self: NodeOperations, value: SyntaxNodeSemanticLinkContext) NodeOperationsError!void
     {
-        const result = self.vtable.linkSemanticParent(self.context, nodeId, parentId);
+        const result = self.vtable.linkSemanticParent(self.context, value);
+        return result;
+    }
+
+    pub fn createSemanticNode(self: NodeOperations, value: SemanticNodeCreationContext) NodeOperationsError!ast.SemanticNodeId
+    {
+        const result = self.vtable.createSemanticNode(self.context, value);
+        return result;
+    }
+
+    pub fn setSemanticNodeValue(self: NodeOperations, value: SemanticNodeContext) NodeOperationsError!void
+    {
+        const result = self.vtable.setSemanticNodeValue(self.context, value);
         return result;
     }
 };
 
-pub fn createNodeOperationsHelper(context: anytype) NodeOperationsFatPointer
+pub fn createNodeOperations(context: anytype) NodeOperations
 {
     const Context = @TypeOf(context.*);
     const vtable = NodeOperationsVtable
@@ -80,6 +140,8 @@ pub fn createNodeOperationsHelper(context: anytype) NodeOperationsFatPointer
         .createNode = &Context.createNode,
         .completeNode = &Context.completeNode,
         .linkSemanticParent = &Context.linkSemanticParent,
+        .createSemanticNode = &Context.createSemanticNode,
+        .setSemanticNodeValue = &Context.setSemanticNodeValue,
     };
     return .{
         .vtable = vtable,
@@ -87,16 +149,23 @@ pub fn createNodeOperationsHelper(context: anytype) NodeOperationsFatPointer
     };
 }
 
-const SyntacticNode = struct
+const SyntaxNodeInfo = struct
 {
     nodeId: ast.NodeId,
+    semanticNodeId: ast.SemanticNodeId = ast.invalidSemanticNodeId,
+    nodeType: ast.NodeType = .Container,
+};
+
+pub const NodeSemanticContext = struct
+{
+    hierarchy: std.ArrayList(SyntaxNodeInfo) = .{},
 };
 
 const NodeContext = struct
 {
     allocator: std.mem.Allocator,
-    syntacticStack: std.ArrayListUnmanaged(),
-    sem
+    syntaxNodeStack: std.ArrayListUnmanaged(SyntaxNodeInfo),
+    operations: NodeOperations,
 };
 
 pub fn LevelContext(Context: type) type
@@ -120,19 +189,90 @@ pub fn LevelContext(Context: type) type
         {
             return self.data.max();
         }
+        fn nodeContext(self: Self) *NodeContext
+        {
+            return self.context.nodeContext;
+        }
 
-        pub fn push(self: Self) void
+        fn maybeCreateSyntaxNode(self: Self) 
+            NodeOperationsError!struct
+            {
+                node: *SyntaxNodeInfo,
+                created: bool,
+            }
+        {
+            const nodeContext_ = self.nodeContext();
+            const nodes = nodeContext_.syntaxNodeStack;
+            const levelIndex = self.currentLevel();
+
+            if (levelIndex > nodes.items.len)
+            {
+                unreachable;
+            }
+
+            if (levelIndex == nodes.items.len)
+            {
+                const parentId = if (levelIndex == 0)
+                        ast.invalidNodeId
+                    else
+                        nodes.items[levelIndex - 1].nodeId;
+
+                const position = self.context.getCurrentPosition();
+
+                const newNodeId = try nodeContext_.operations.createNode(.{
+                    .level = levelIndex,
+                    .parentId = parentId,
+                    .start = position,
+                });
+
+                const node = try nodes.addOne(nodeContext_.allocator, .{
+                    .nodeId = newNodeId,
+                });
+                return .{
+                    .node = node,
+                    .created = true,
+                };
+            }
+
+            return .{
+                .node = &nodes.items[levelIndex],
+                .created = false,
+            };
+        }
+
+        fn pushImpl(self: Self) void
         {
             self.current().* += 1;
             self.max().* = @max(self.current().*, self.max().*);
         }
 
-        pub fn pushInit(self: Self, callback: anytype) !void
+        pub fn push(self: Self) !void
         {
-            self.push();
+            self.pushImpl();
             errdefer self.pop();
 
-            try self.initialize(callback);
+            _ = self.maybeCreateSyntaxNode(.None);
+        }
+
+        pub fn pushInit(self: Self, callback: anytype) !void
+        {
+            self.pushImpl();
+            errdefer self.pop();
+
+            const node = self.maybeCreateSyntaxNode(.None);
+            if (!node.created)
+            {
+                return;
+            }
+
+            if (@hasDecl(callback, "execute"))
+            {
+                try callback.execute();
+            }
+            else if (@TypeOf(callback) != void)
+            {
+                try callback();
+            }
         }
 
         fn currentLevel(self: Self) u5
@@ -140,28 +280,9 @@ pub fn LevelContext(Context: type) type
             return self.current().* - 1;
         }
 
-        fn initialize(self: Self, callback: anytype) !void
+        fn currentNode(self: Self) *SyntaxNodeInfo
         {
-            const level = self.currentLevel();
-            if (!self.infoMasks().init.isSet(level))
-            {
-                if (@hasDecl(callback, "execute"))
-                {
-                    try callback.execute();
-                }
-                else if (@TypeOf(callback) != void)
-                {
-                    try callback();
-                }
-                self.infoMasks().init.set(level);
-            }
-        }
-
-        pub fn unset(self: Self) void
-        {
-            const c = self.currentLevel();
-            self.infoMasks().finalized.unset(c);
-            self.infoMasks().init.unset(c);
+            return &self.nodeContext().syntaxNodeStack.items[self.currentLevel()];
         }
 
         pub fn pop(self: Self) void
@@ -174,120 +295,153 @@ pub fn LevelContext(Context: type) type
             std.debug.assert(self.current().* == 0);
         }
 
-        pub fn finalize(self: Self) !void
+        fn completeNodeAtWithoutRemoving(self: Self, index: usize) !void
         {
-            self.infoMasks().finalized.set(self.currentLevel());
-        }
+            const nodeContext_ = self.nodeContext();
+            const node = &nodeContext_.syntaxNodeStack.items[index];
+            const position: ast.Position = self.getCurrentPosition();
 
-        pub fn advance(
-            self: Self,
-            action: anytype,
-            value: PointedToType(@TypeOf(action))) !void
-        {
-            self.unset();
-            action.* = value;
-        }
-
-        pub fn clearUnreached(self: Self) void
-        {
-            const setMask: LevelInfoMask = .{
-                .mask = (~@as(0, u32)) >> (32 - self.max()),
-            };
-            self.infoMasks().init.setIntersection(setMask);
-            self.infoMasks().finalized.setIntersection(setMask);
+            try nodeContext_.operations.completeNode(.{
+                .nodeType = node.nodeType,
+                .endExclusive = position,
+                .id = node.nodeId,
+            });
         }
 
         pub fn completeNode(self: Self) !void
         {
-            // Should set the sequence end here.
-            _ = self;
+            const nodeContext_ = self.nodeContext();
+            const nodes = &nodeContext_.syntaxNodeStack;
+            const levelIndex = self.currentLevel();
+            const node = &nodes.items[levelIndex];
+
+            if (levelIndex == nodes.items.len - 1)
+            {
+                try self.completeNodeAtWithoutRemoving(levelIndex);
+                nodes.items.len -= 1;
+            }
+            else
+            {
+                std.debug.print("The completed node must be the last in the stack." 
+                    ++ "There have been uncompleted nodes in between:\n", .{});
+
+                std.debug.print("Deleting node at level {} with type {}\n", .{
+                    levelIndex,
+                    node.nodeType,
+                });
+
+                std.debug.print("Undeleted nodes below are:\n", .{});
+
+                for (levelIndex + 1 .. nodes.items.len) |i|
+                {
+                    const childNode = &nodes.items[i];
+                    std.debug.print("Node at level {} with type {}\n", .{
+                        i,
+                        childNode.nodeType,
+                    });
+                }
+
+                unreachable;
+            }
+        }
+
+        pub fn setSemanticValue(self: Self, value: ast.NodeValue) !void
+        {
+            // TODO: Check value and type compatibility.
+            const currentNode_: *SyntaxNodeInfo = self.currentNode();
+            const nodeContext_ = self.nodeContext();
+            const ops = nodeContext_.operations; 
+            if (currentNode_.semanticNodeId == ast.invalidSemanticNodeId)
+            {
+                const semanticNodeId = ops.createSemanticNode(.{
+                    .associatedNode = currentNode_.nodeId,
+                    .value = value,
+                });
+                currentNode_.semanticNodeId = semanticNodeId;
+            }
+            else
+            {
+                nodeContext_.operations.setSemanticNodeValue(.{
+                    .value = value,
+                    .id = currentNode_.semanticNodeId,
+                });
+            }
         }
 
         pub fn completeNodeWithValue(self: Self, value: ast.NodeValue) !void
         {
-            self.completeNode();
             std.debug.print("Node {} \n", .{ value });
+            try self.setSemanticValue(value);
+            try self.completeNode();
         }
 
-        // If the semantic node is already set, this does nothing.
-        pub fn maybeCreateSemanticNode(self: Self, nodeType: ast.NodeType) !ast.NodeId
+        pub fn setNodeType(self: Self, nodeType: ast.NodeType) !void
         {
-            _ = self;
-            std.debug.print("Node {}", .{ nodeType });
-            return 0;
+            self.currentNode().nodeType = nodeType;
         }
 
-        pub fn setSemanticParent(self: Self, parentId: ast.DataId) !ast.NodeId
+        pub fn setSemanticParent(self: Self, parentId: ast.NodeId) !ast.NodeId
         {
-            _ = self;
-            std.debug.print("Node {}", .{ parentId });
+            const currentNode_ = self.currentNode();
+            try self.nodeContext().operations.linkSemanticParent(.{
+                .id = currentNode_.nodeId,
+                .semanticParentId = parentId,
+            });
             return 0;
         }
 
         // Should save the sequence start here.
         pub fn pushNode(self: Self, nodeType: ast.NodeType) !ast.NodeId
         {
-            const t = struct
+            self.pushImpl();
+            errdefer self.pop();
+
+            const r = try self.maybeCreateSyntaxNode();
+            if (r.created)
             {
-                level: Self,
-                nodeType_: ast.NodeType,
-
-                pub fn execute(s: *@This()) !void
-                {
-                    s.level.maybeCreateSemanticNode(s.nodeType_);
-                }
-            }{
-                .level = self,
-                .nodeType_ = nodeType,
-            };
-
-            try self.pushInit(t);
-        }
-
-        pub fn completeNodesInHierarchy(self: Self) !void
-        {
-            var levelData = self.data.*;
-            const level = Self
-            {
-                .context = self.context,
-                .data = &levelData,
-            };
-
-            while (level.current() != level.max())
-            {
-                level.push();
-                level.completeNode();
+                r.node.nodeType = nodeType;
+                return;
             }
+
+            std.debug.assert(r.node.nodeType == nodeType);
         }
 
+        // Implies completing the nodes as well.
         pub fn captureSemanticContextForHierarchy(
             self: Self,
-            targetContext: *ast.NodeSemanticContext)
+            targetContext: *NodeSemanticContext)
 
             std.mem.Allocator.Error!void
         {
-            var levelData = self.data.*;
-            const level = Self
-            {
-                .context = self.context,
-                .data = &levelData,
-            };
-            _ = level;
+            const nodeContext_ = self.nodeContext();
+            const levelIndex = self.currentLevel();
+            const firstChildLevelIndex = levelIndex + 1;
+            const levelCount = self.max().*;
+            const nodeCountAfterThis = levelCount - firstChildLevelIndex;
 
-            const len = self.max() - self.current();
-            try targetContext.semanticNodeIds.resize(len);
+            try targetContext.hierarchy.resize(nodeCountAfterThis);
 
-            for (targetContext.semanticNodeIds.items) |*it|
             {
-                levelData.current += 1;
-                // TODO: Copy the semantic id at that level.
-                it.* = 0;
+                const hierarchy = targetContext.hierarchy.items;
+                const nodes = nodeContext_.syntaxNodeStack.items;
+                for (0 .. nodeCountAfterThis) |i|
+                {
+                    const nodeIndex = firstChildLevelIndex + i;
+                    hierarchy[i] = nodes[nodeIndex];
+
+                    self.completeNodeAtWithoutRemoving(nodeIndex);
+                }
+
+            }
+            {
+                // Pop all of the child nodes.
+                nodeContext_.syntaxNodeStack.items.len = firstChildLevelIndex;
             }
         }
 
         pub fn applySemanticContextForHierarchy(
             self: Self,
-            target: ast.NodeSemanticContext) !void
+            target: NodeSemanticContext) !void
         {
             var levelData = self.data.*;
             const level = Self
@@ -295,10 +449,17 @@ pub fn LevelContext(Context: type) type
                 .context = self.context,
                 .data = &levelData,
             };
-            for (target.semanticNodeIds.items) |it|
+
+            const hierarchy = target.hierarchy.items;
+
+            // Create new nodes as deep as the stored hierarchy.
+            for (hierarchy) |it|
             {
-                level.push();
-                try level.setSemanticParent(it);
+                try level.pushImpl();
+                const r = try level.maybeCreateSyntaxNode();
+                r.node.nodeType = it.nodeType;
+                r.node.semanticNodeId = it.semanticNodeId;
+                try level.setSemanticParent(it.nodeId);
             }
         }
     };

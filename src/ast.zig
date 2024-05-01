@@ -1,9 +1,10 @@
 const std = @import("std");
 const pipelines = @import("pipelines.zig");
-const parser = @import("parser/parser.zig");
-const zlib = @import("zlib/zlib.zig");
-const deflate = @import("zlib/deflate.zig");
+const parser = @import("parser/module.zig");
+const zlib = parser.zlib;
+const deflate = zlib.deflate;
 const chunks = parser.chunks;
+const ast = parser.ast;
 
 const resourcesDir = "raylib/raylib/examples/text/resources/";
 
@@ -27,17 +28,17 @@ const ChildrenList = struct
 
 pub const ChunkDataNodeType = parser.ChunkType;
 
-const NodeIndex = usize;
-const DataIndex = usize;
+const NodeIndex = ast.NodeId;
+const DataIndex = ast.SemanticNodeId;
 
-const invalidNodeIndex: NodeIndex = parser.ast.invalidNodeId;
-const invalidDataIndex: DataIndex = parser.ast.invalidDataId;
+const invalidNodeIndex: NodeIndex = ast.invalidNodeId;
+const invalidDataIndex: DataIndex = ast.invalidDataId;
 
-const NodeType = parser.ast.NodeType;
-const NodeValue = parser.ast.NodeValue;
+const NodeType = ast.NodeType;
+const NodeValue = ast.NodeValue;
 
 // Maybe add a reference count here to be able to know when to delete things.
-const Data = parser.ast.NodeData;
+const Data = ast.NodeValue;
 
 const Node = struct
 {
@@ -46,16 +47,18 @@ const Node = struct
     // The idea is that there may be gaps in the range of the span,
     // but it does allow you to gauge the edges.
     // If there are no children, it's just the range of the node.
-    span: parser.ast.NodeSpan,
+    span: ast.NodeSpan,
+
+    nodeType: ast.NodeType = .Container,
     
     // Points to the root data of the semantic linked list.
     // If there's no semantic list, just points to the data.
     // There's always at least one data in that case.
-    nodeData: ?DataIndex, 
-    syntacticChildren: ChildrenList,
+    nodeData: DataIndex = invalidDataIndex, 
+    syntacticChildren: ChildrenList = .{},
     
     // This is only going to be used for the image data nodes, probably.
-    semanticChildrenList: struct
+    semanticList: struct
     {
         prev: NodeIndex = invalidNodeIndex,
         next: NodeIndex = invalidNodeIndex,

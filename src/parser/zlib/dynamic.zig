@@ -413,7 +413,7 @@ pub fn decompressSymbol(
         },
         .Distance =>
         {
-            try context.level().maybeCreateSemanticNode(.{
+            try context.level().setNodeType(.{
                 .DynamicHuffman = .{
                     .Decompression = .Distance,
                 },
@@ -452,7 +452,7 @@ pub const DecompressionNodeWriter = struct
 
     pub fn create(self: @This(), t: DecompressionValueType, value: usize) !void
     {
-        try self.context.level().maybeCreateSemanticNode(.{
+        try self.context.level().setNodeType(.{
             .DynamicHuffman = .{
                 .DecompressionValue = t,
             },

@@ -41,6 +41,13 @@ pub const Context = struct
     {
         return self.common.output;
     }
+    pub fn getCurrentNodePosition(self: *Context) helper.NodePosition
+    {
+        return .{
+           .byte = self.sequence().getStartBytePosition(),
+           .bit = self.state.bitOffset,
+        };
+    }
 };
 
 pub const State = struct

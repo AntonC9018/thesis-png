@@ -6,10 +6,10 @@ const deflate = zlib.deflate;
 const chunks = parser.png.chunks;
 
 pub const NodeId = usize;
-pub const DataId = usize;
+pub const SemanticNodeId = usize;
 
-const invalidNodeId: NodeId = @bitCast(@as(isize, -1));
-const invalidDataId: DataId = invalidNodeId;
+pub const invalidNodeId: NodeId = @bitCast(@as(isize, -1));
+pub const invalidDataId: SemanticNodeId = invalidNodeId;
 
 pub const NodeType = union(enum)
 {
@@ -38,8 +38,7 @@ pub const NodeType = union(enum)
         EncodedFrequency: void,
     },
 
-    // Data from some nodes is skipped.
-    Skipped: void,
+    Container: void,
 
     pub fn format(
         self: NodeType,
@@ -76,13 +75,6 @@ pub const NodeValue = union(enum)
     ZlibFlags: zlib.Flags,
     BlockType: deflate.BlockType,
     ZlibSymbol: deflate.Symbol,
-};
-
-// Semantic node
-pub const NodeData = struct
-{
-    type: NodeType,
-    value: NodeValue,
 };
 
 pub const NodePositionOffset = struct
@@ -240,5 +232,5 @@ pub const NodeSpan = struct
 
 pub const NodeSemanticContext = struct
 {
-    semanticNodeIds: std.ArrayListUnmanaged(DataId) = .{},
+    semanticNodeIds: std.ArrayListUnmanaged(SemanticNodeId) = .{},
 };
