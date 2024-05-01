@@ -89,7 +89,7 @@ pub fn main() !void
     const allocator = std.heap.page_allocator;
     const tree = try parseIntoTree(allocator);
 
-    raylib.SetConfigFlags(raylib.ConfigFlags{ .FLAG_WINDOW_RESIZABLE = true });
+    raylib.SetConfigFlags(.{ .FLAG_WINDOW_RESIZABLE = true });
     raylib.InitWindow(800, 800, "hello world!");
     raylib.SetTargetFPS(60);
 

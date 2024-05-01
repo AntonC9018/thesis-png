@@ -327,13 +327,15 @@ pub const TaggedChunkDataAction = union(ChunkType)
 
 pub const ChunkDataAction: type = b:
 {
-    var info = @typeInfo(TaggedChunkDataAction);
-    info.Union.tag_type = null;
-    for (info.Union.fields) |*f|
+    const UnionField = std.builtin.Type.UnionField;
+    const info = @typeInfo(TaggedChunkDataAction);
+    const u = info.Union;
+    var fields: [u.fields.len]UnionField = undefined;
+    for (&fields, u.fields) |*field, *sourceField|
     {
         const t = newType:
         {
-            const pointerOrVoid = f.type;
+            const pointerOrVoid = sourceField.type;
             if (pointerOrVoid == void)
             {
                 break :newType void;
@@ -341,9 +343,18 @@ pub const ChunkDataAction: type = b:
             const pointerInfo = @typeInfo(pointerOrVoid);
             break :newType pointerInfo.Pointer.child;
         };
+        var f = sourceField.*;
         f.type = t;
+        field.* = f;
     }
-    break :b @Type(info);
+    break :b @Type(.{
+        .Union = .{
+            .tag_type = null,
+            .fields = &fields,
+            .layout = info.Union.layout,
+            .decls = &.{},
+        },
+    });
 };
 
 pub const TaggedChunkDataStatePointer = union(ChunkType)
