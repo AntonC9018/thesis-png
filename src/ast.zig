@@ -1,6 +1,6 @@
 const std = @import("std");
-const pipelines = @import("pipelines.zig");
 const parser = @import("parser/module.zig");
+const pipelines = parser.pipelines;
 const zlib = parser.zlib;
 const deflate = zlib.deflate;
 const chunks = parser.chunks;

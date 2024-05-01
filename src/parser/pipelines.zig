@@ -611,7 +611,7 @@ const EOFState = enum {
     AlreadySignaled,
 };
 
-pub fn Reader(comptime ReaderType: type) type 
+pub fn Reader(ReaderType: type) type 
 {
     return struct
     {

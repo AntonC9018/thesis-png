@@ -317,8 +317,6 @@ pub const TaggedChunkDataAction = union(ChunkType)
     PaletteHistogram: void,
     LastModificationTime: void,
 
-    _: void,
-
     // TODO:
     pub fn isEmpty(self: TaggedChunkDataAction) bool
     {
@@ -333,7 +331,7 @@ pub const ChunkDataAction: type = b:
     info.Union.tag_type = null;
     for (info.Union.fields) |*f|
     {
-        f.type = newType:
+        const t = newType:
         {
             const pointerOrVoid = f.type;
             if (pointerOrVoid == void)
@@ -343,6 +341,7 @@ pub const ChunkDataAction: type = b:
             const pointerInfo = @typeInfo(pointerOrVoid);
             break :newType pointerInfo.Pointer.child;
         };
+        f.type = t;
     }
     break :b @Type(info);
 };
@@ -1036,7 +1035,7 @@ pub fn getActiveChunkDataState(state: *const common.ChunkState) TaggedChunkDataS
     unreachable;
 }
 
-const ast = @import("ast.zig");
+const ast = common.ast;
 
 fn mapDataActionToNodeType(action: TaggedChunkDataAction) ast.NodeType.ChunkData
 {

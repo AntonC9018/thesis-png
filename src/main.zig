@@ -82,6 +82,8 @@ fn parseIntoTree(allocator: std.mem.Allocator) !ast.AST
     return tree;
 }
 
+const raylib = @import("raylib");
+
 pub fn main() !void
 {
     const allocator = std.heap.page_allocator;
@@ -106,7 +108,7 @@ pub fn main() !void
         const Context = struct
         {
             currentPosition: raylib.Vector2i,
-            tree: AST,
+            tree: *ast.AST,
             allocator: std.mem.Allocator,
 
             fn drawTextLine(context: *@This(), s: [:0]const u8) void
@@ -119,7 +121,7 @@ pub fn main() !void
         var context = Context
         {
             .currentPosition = .{ .x = 10, .y = 30 + 10 },
-            .tree = tree,
+            .tree = &tree,
             .allocator = allocator,
         };
 
@@ -127,7 +129,7 @@ pub fn main() !void
         {
             fn f(nodeIndex: usize, context_: *Context) !void
             {
-                const node: Node = context_.tree.nodes.items[nodeIndex];
+                const node: *ast.Node = &context_.tree.syntaxNodes.items[nodeIndex];
 
                 var writerBuf = std.ArrayList(u8).init(context_.allocator);
                 defer writerBuf.clearAndFree();
@@ -149,15 +151,9 @@ pub fn main() !void
 
                 if (node.nodeData) |dataIndex|
                 {
-                    const data = context_.tree.nodeData.items[dataIndex];
+                    const data = context_.tree.nodeDatas.items[dataIndex];
 
-                    try writer.print(", Type: {}, ", .{ data.type });
-                    _ = try writer.write("Value: ");
-                    try switch (data.value)
-                    {
-                        .string => |s| writer.print("{s}", .{ s }),
-                        .number => |n| writer.print("{d}", .{ n }),
-                    };
+                    try writer.print("Data: {}", data);
                 }
                 try writer.writeByte(0);
 

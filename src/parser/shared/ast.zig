@@ -13,8 +13,8 @@ pub const invalidNodeDataId: NodeDataId = invalidNodeId;
 
 pub const NodeType = union(enum)
 {
-    TopLevel: parser.Action,
-    Chunk: parser.ChunkAction,
+    TopLevel: parser.png.Action,
+    Chunk: parser.png.ChunkAction,
     RGBColor: void,
     RGBComponent: chunks.RGBAction,
 

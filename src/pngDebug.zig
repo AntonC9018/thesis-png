@@ -6,7 +6,7 @@ const png = parser.png;
 pub const TestReaderContext = struct
 {
     directory: std.fs.Dir,
-    reader: pipelines.Reader(@TypeOf(std.fs.File.Reader)),
+    reader: pipelines.Reader(std.fs.File.Reader),
 
     pub fn deinit(self: *TestReaderContext) void
     {
