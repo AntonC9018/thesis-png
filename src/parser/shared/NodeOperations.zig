@@ -2,7 +2,7 @@ const std = @import("std");
 const ast = @import("ast.zig");
 
 context: *Context,
-vtable: *Vtable,
+vtable: *const Vtable,
 
 const NodeOperations = @This();
 
@@ -99,24 +99,24 @@ pub const Vtable = struct
     // May discard the level information.
     // The returned node is to be treated as an opaque value 
     // (the caller is not to be concerned with its structure).
-    createSyntaxNode: *fn(context: *Context, value: SyntaxNodeCreationParams) Error!ast.NodeId,
+    createSyntaxNode: *const fn(context: *Context, value: SyntaxNodeCreationParams) Error!ast.NodeId,
 
     // A completed node must not accept any new children nodes.
     // A completed syntax node may or may not have an associated semantic node.
     // The associated semantic node may or may not have been completed when this is called.
     // The children nodes must have been completed (to be validated).
-    completeSyntaxNode: *fn(context: *Context, value: SyntaxNodeCompletionParams) Error!void,
+    completeSyntaxNode: *const fn(context: *Context, value: SyntaxNodeCompletionParams) Error!void,
 
     // The given node is to be linked with the given other existing node.
     // The other node must not be deleted before this.
     // This shows that the new node is sharing contextual information with the other node.
-    linkSemanticParent: *fn(context: *Context, value: SyntaxNodeSemanticLinkParams) Error!void,
+    linkSemanticParent: *const fn(context: *Context, value: SyntaxNodeSemanticLinkParams) Error!void,
 
     // Creates a semantic node, associating it with the given syntax node if its id is valid.
     // The value given is the initial value and might be changed later.
-    createNodeData: *fn(context: *Context, value: NodeDataCreationParams) Error!ast.NodeDataId,
+    createNodeData: *const fn(context: *Context, value: NodeDataCreationParams) Error!ast.NodeDataId,
 
     // Updates the value of a semantic node.
-    setNodeDataValue: *fn(context: *Context, value: NodeDataParams) Error!void,
+    setNodeDataValue: *const fn(context: *Context, value: NodeDataParams) Error!void,
 };
 

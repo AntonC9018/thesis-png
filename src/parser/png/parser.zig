@@ -387,11 +387,10 @@ pub fn parseChunkItem(context: *Context) !bool
 }
 
 
-pub fn createParserState(semanticContextAllocator: std.mem.Allocator) State
+pub fn createParserState() State
 {
     return .{
         .chunk = createChunkParserState(),
-        .imageData = common.ImageData.create(semanticContextAllocator),
     };
 }
 

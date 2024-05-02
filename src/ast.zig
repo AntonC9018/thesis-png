@@ -16,7 +16,7 @@ const resourcesDir = "raylib/raylib/examples/text/resources/";
 // 6. Deleting invisible parts of the tree
 //
 
-const SyntaxChildrenList = struct
+pub const SyntaxChildrenList = struct
 {
     array: std.ArrayListUnmanaged(usize) = .{},
 
@@ -28,25 +28,25 @@ const SyntaxChildrenList = struct
 
 pub const ChunkDataNodeType = parser.ChunkType;
 
-const NodeIndex = ast.NodeId;
-const DataIndex = ast.NodeDataId;
+pub const NodeIndex = ast.NodeId;
+pub const DataIndex = ast.NodeDataId;
 
-const invalidNodeIndex: NodeIndex = ast.invalidNodeId;
-const invalidDataIndex: DataIndex = ast.invalidNodeDataId;
+pub const invalidNodeIndex: NodeIndex = ast.invalidNodeId;
+pub const invalidDataIndex: DataIndex = ast.invalidNodeDataId;
 
-const NodeType = ast.NodeType;
-const NodeValue = ast.NodeData;
+pub const NodeType = ast.NodeType;
+pub const NodeValue = ast.NodeData;
 
 // Maybe add a reference count here to be able to know when to delete things.
-const NodeData = ast.NodeData;
+pub const NodeData = ast.NodeData;
 
-const SemanticListNode = struct
+pub const SemanticListNode = struct
 {
     next: NodeIndex = invalidNodeIndex,
     prev: NodeIndex = invalidNodeIndex,
 };
 
-const Node = struct
+pub const Node = struct
 {
     // In case there are child nodes, includes the position of the start
     // of the first child node, and the end position of the last child node.

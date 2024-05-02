@@ -184,7 +184,7 @@ pub fn readZlibData(
     const isDone = try zlib.decode(&zlibContext);
     if (isDone)
     {
-        context.level().completeNode();
+        try context.level().completeNode();
         return true;
     }
     return false;
@@ -296,7 +296,7 @@ pub fn readPngU32Dimension(sequence: *pipelines.Sequence) !u32
 
 pub fn skipBytes(context: *Context, chunk: *common.ChunkState) !bool
 {
-    const bytesSkipped = &chunk.dataState.bytesSkipped;
+    const bytesSkipped = &chunk.dataState.value.bytesSkipped;
     const totalBytes = chunk.object.dataByteLen;
 
     std.debug.assert(bytesSkipped.* <= totalBytes);

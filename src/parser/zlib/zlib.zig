@@ -259,7 +259,7 @@ pub fn decode(context: *Context) !bool
             if (doneWithBlock)
             {
                 try context.level().completeNode();
-                decompressor.action.* = deflate.Action.Initial;
+                decompressor.action = deflate.Action.Initial;
             }
         },
         .Adler32Checksum =>

@@ -41,10 +41,10 @@ pub const State = struct
     isData: bool = false,
     paletteLen: ?u32 = null,
 
-    imageData: ImageData,
+    imageData: ImageData = .{},
 };
 
-pub fn isParserStateTerminal(context: *const Context) bool 
+pub fn isParserStateTerminal(context: *Context) bool 
 {
     return context.state.action == .Chunk
         and context.level().depth() == 0
@@ -130,14 +130,7 @@ pub const ImageData = struct
     zlib: zlib.State = .{},
     carryOverData: CarryOverSegment = .{},
     dataId: ast.NodeDataId = ast.invalidNodeDataId,
-    zlibStreamSemanticContext: levels.NodeSemanticContext,
-
-    pub fn create(semanticContextAllocator: std.mem.Allocator) ImageData
-    {
-        return .{
-            .zlibStreamSemanticContext = semanticContextAllocator,
-        };
-    }
+    zlibStreamSemanticContext: levels.NodeSemanticContext = .{},
 };
 
 pub const CyclicRedundancyCheck = struct

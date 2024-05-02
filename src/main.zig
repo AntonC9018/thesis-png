@@ -11,7 +11,7 @@ fn parseIntoTree(allocator: std.mem.Allocator) !ast.AST
     defer testContext.deinit();
 
     const reader = &testContext.reader;
-    var parserState = png.createParserState(allocator);
+    var parserState = png.createParserState();
     const parserSettings = png.Settings
     {
         .logChunkStart = true,
@@ -72,7 +72,7 @@ fn parseIntoTree(allocator: std.mem.Allocator) !ast.AST
                 std.debug.print("Not all input consumed. Remaining length: {}\n", .{remaining});
             }
 
-            if (!png.isStateTerminal(context.state))
+            if (!png.isStateTerminal(&context))
             {
                 std.debug.print("Ended in a non-terminal state.\n", .{});
             }
@@ -91,7 +91,7 @@ const raylib = @import("raylib");
 pub fn main() !void
 {
     const allocator = std.heap.page_allocator;
-    const tree = try parseIntoTree(allocator);
+    var tree = try parseIntoTree(allocator);
 
     raylib.SetConfigFlags(.{ .FLAG_WINDOW_RESIZABLE = true });
     raylib.InitWindow(800, 800, "hello world!");
@@ -153,9 +153,9 @@ pub fn main() !void
                         });
                 }
 
-                if (node.nodeData) |dataIndex|
+                if (node.data != ast.invalidDataIndex)
                 {
-                    const data = context_.tree.nodeDatas.items[dataIndex];
+                    const data = context_.tree.nodeDatas.items[node.data];
 
                     try writer.print("Data: {}", data);
                 }
@@ -163,13 +163,13 @@ pub fn main() !void
 
                 context_.drawTextLine(writerBuf.items[0 .. writerBuf.items.len - 1: 0]);
 
-                if (node.children.len() > 0)
+                if (node.syntaxChildren.len() > 0)
                 {
                     const offsetSize = 20;
                     context_.currentPosition.x += offsetSize;
                     defer context_.currentPosition.x -= offsetSize;
 
-                    for (node.children.array.items) |childNodeIndex|
+                    for (node.syntaxChildren.array.items) |childNodeIndex|
                     {
                         try f(childNodeIndex, context_);
                     }

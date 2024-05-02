@@ -215,9 +215,13 @@ pub fn deflate(context: *Context) !bool
                             else => unreachable,
                         };
 
-                        try context.level().completeNodeWithValue(.{
-                            .ZlibSymbol = symbol_,
-                        });
+                        if (symbol_) |symbol__|
+                        {
+                            try context.level().completeNodeWithValue(.{
+                                .ZlibSymbol = symbol__,
+                            });
+                        }
+
                         break :symbol symbol_;
                     };
                     const done = try helper.writeSymbolToOutput(context, symbol);

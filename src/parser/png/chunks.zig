@@ -932,21 +932,15 @@ const TransparencyBytesProcessor = struct
     alphaValues: *std.ArrayListUnmanaged(u8),
     allocator: std.mem.Allocator,
 
-    pub fn sequence(self: *const TransparencyBytesProcessor, seq: pipelines.Sequence) !void
-    {
-        const len = seq.len();
-        const newItems = try self.alphaValues.addManyAsSlice(self.allocator, len);
-        seq.copyTo(newItems);
-    }
-
     pub fn each(self: *const TransparencyBytesProcessor, byte: u8) !void
     {
         // TODO: needs to be done BEFORE reading.
-        try self.context.level().pushInit({});
+        try self.context.level().push();
         defer self.context.level().pop();
 
         try self.alphaValues.append(self.allocator, byte);
-        self.context.level().completeNodeWithValue(.{
+
+        try self.context.level().completeNodeWithValue(.{
             .Number = byte,
         });
     }
@@ -1203,7 +1197,7 @@ fn parseImageData(context: *Context, state: *ImageDataState) !bool
 
 
             {
-                context.level().captureSemanticContextForHierarchy(&imageData.zlibStreamSemanticContext);
+                try context.level().captureSemanticContextForHierarchy(&imageData.zlibStreamSemanticContext);
             }
 
             {
@@ -1418,6 +1412,7 @@ pub fn parseChunkData(context: *Context) !bool
                     const bytesRead = &t.state.bytesRead;
                     const functor = TransparencyBytesProcessor
                     {
+                        .context = context,
                         .alphaValues = alphaValues,
                         .allocator = context.allocator(),
                     };
@@ -1429,7 +1424,7 @@ pub fn parseChunkData(context: *Context) !bool
                 .gray => |*gray|
                 {
                     // Should this have a type?
-                    try context.level().pushInit({});
+                    try context.level().push();
                     defer context.level().pop();
 
                     const value = try pipelines.readNetworkUnsigned(context.sequence(), u16);
@@ -1479,7 +1474,7 @@ pub fn parseChunkData(context: *Context) !bool
             data.gamma = gamma;
 
             // Completes the node on the level above.
-            context.level().completeNode(.{
+            try context.level().completeNodeWithValue(.{
                 .U32 = gamma,
             });
 
@@ -1488,9 +1483,8 @@ pub fn parseChunkData(context: *Context) !bool
         .PrimaryChrom => |t|
         {
             // TODO: What is up with this one?
-            const primaryChroms = &data.primaryChroms;
             try context.level().pushNode(.{
-                .PrimaryChrom = primaryChroms.*
+                .PrimaryChrom = t.state.*,
             });
             defer context.level().pop();
 
@@ -1498,7 +1492,7 @@ pub fn parseChunkData(context: *Context) !bool
 
             const vector = t.state.vector();
             const index = t.state.coord();
-            const targetPointer = &primaryChroms.values[vector].values[index];
+            const targetPointer = &data.primaryChroms.values[vector].values[index];
             targetPointer.* = value;
 
             try context.level().completeNodeWithValue(.{
@@ -1591,12 +1585,12 @@ pub fn parseChunkData(context: *Context) !bool
             {
                 .Keyword =>
                 {
-                    try utils.readKeywordText(context, &node.keyword, &t.bytesRead);
+                    try utils.readKeywordText(context, &node.keyword, &t.state.bytesRead);
                     try context.level().completeNodeWithValue(.{
                         .OwnedString = common.move(&node.keyword),
                     });
 
-                    t.action = .Text;
+                    t.action.* = .Text;
                     return false;
                 },
                 .Text =>
@@ -1628,11 +1622,11 @@ pub fn parseChunkData(context: *Context) !bool
             });
             defer context.level().pop();
 
-            switch (t.action)
+            switch (t.action.*)
             {
                 .Keyword =>
                 {
-                    try utils.readKeywordText(context, &node.keyword, &t.bytesRead);
+                    try utils.readKeywordText(context, &node.keyword, &t.state.bytesRead);
                     try context.level().completeNodeWithValue(.{
                         .OwnedString = common.move(&node.keyword),
                     });
@@ -1658,7 +1652,7 @@ pub fn parseChunkData(context: *Context) !bool
                     if (isDone)
                     {
                         try context.level().completeNodeWithValue(.{
-                            .OwnedString = &node.text,
+                            .OwnedString = common.move(&node.text),
                         });
                     }
                     return isDone;

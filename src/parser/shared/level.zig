@@ -18,7 +18,7 @@ const SyntaxNodeInfo = struct
 
 pub const NodeSemanticContext = struct
 {
-    hierarchy: std.ArrayList(SyntaxNodeInfo),
+    hierarchy: std.ArrayListUnmanaged(SyntaxNodeInfo) = .{},
 };
 
 pub const NodeContext = struct
@@ -39,7 +39,7 @@ pub fn LevelContext(Context: type) type
 
         pub fn current(self: Self) *u5
         {
-            return self.data.current;
+            return &self.data.current;
         }
         fn nodeContext(self: Self) *NodeContext
         {
@@ -280,7 +280,9 @@ pub fn LevelContext(Context: type) type
             const levelCount = nodes.len;
             const nodeCountAfterThis = levelCount - firstChildLevelIndex;
 
-            try targetContext.hierarchy.resize(nodeCountAfterThis);
+            try targetContext.hierarchy.resize(
+                self.context.allocator(),
+                nodeCountAfterThis);
 
             {
                 const hierarchy = targetContext.hierarchy.items;
@@ -289,7 +291,7 @@ pub fn LevelContext(Context: type) type
                     const nodeIndex = firstChildLevelIndex + i;
                     hierarchy[i] = nodes.*[nodeIndex];
 
-                    self.completeNodeAtWithoutRemoving(nodeIndex);
+                    try self.completeNodeAtWithoutRemoving(nodeIndex);
                 }
 
             }

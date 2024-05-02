@@ -373,6 +373,11 @@ pub fn decompressSymbol(
     try context.level().push();
     defer context.level().pop();
 
+    var createNode = DecompressionNodeWriter
+    {
+        .context = context,
+    };
+
     switch (state.action)
     {
         .LiteralOrLen =>
@@ -381,61 +386,49 @@ pub fn decompressSymbol(
                 .tree = &state.literalOrLenTree,
                 .currentBitCount = &state.currentBitCount,
             });
-            var createNode = DecompressionNodeWriter
-            {
-                .context = context,
-                .value = value,
-            };
 
             switch (value)
             {
                 // TODO: Share these constants with the fixed module.
                 0 ... 255 =>
                 {
-                    try createNode.create(.Literal);
+                    try createNode.create(.Literal, value);
                     return .{ .LiteralValue = @intCast(value) };
                 },
                 256 =>
                 {
-                    try createNode.create(.EndBlock);
+                    try createNode.create(.EndBlock, value);
                     return .{ .EndBlock = { } };
                 },
                 257 ... 285 =>
                 {
                     const len: u5 = @intCast(value - 257);
-                    createNode.value_ = len;
-                    try createNode.create(.Len);
                     state.action = .Distance;
                     state.len = len;
+                    try createNode.create(.Len, len);
+                    return null;
                 },
                 else => unreachable,
             }
         },
         .Distance =>
         {
-            try context.level().setNodeType(.{
-                .DynamicHuffman = .{
-                    .Decompression = .Distance,
-                },
-            });
             const distance = try helper.readAndDecodeCharacter(context, .{
                 .tree = &state.distanceTree,
                 .currentBitCount = &state.currentBitCount,
             });
             state.action = .LiteralOrLen;
-            try context.level().completeNodeWithValue(.{
-                .Number = distance,
-            });
+
+            try createNode.create(.Distance, distance);
 
             return .{
                 .BackReference = .{
                     .distance = distance,
                     .len = state.len,
-                }
+                },
             };
         },
     }
-    return null;
 }
 
 pub const DecompressionValueType = enum

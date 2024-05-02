@@ -16,7 +16,7 @@ pub const SymbolDecompressionState = struct
 {
     action: SymbolDecompressionAction = .Code,
     codeLen: CodeState = 7,
-    lenCodeLen: u9,
+    lenCode: u8,
     len: u8,
     distanceLenCode: u5,
     distance: u16,
@@ -87,7 +87,7 @@ const baseLengthLookup = l:
     break :l result;
 };
 
-fn getBaseLength(code: u8) u8
+fn getBaseLength(code: u9) u8
 {
     return baseLengthLookup[code];
 }
@@ -213,10 +213,10 @@ pub fn decompressSymbol(
                         if (code.bits <= lengthCodeUpperLimit)
                         {
                             code.apply(context);
-                            state.lenCodeLen = @intCast(code.bits - 1);
+                            state.lenCode = @intCast(code.bits - 1);
                             state.action = .Len;
 
-                            try nodeCreator.create(.LenCodeLen, state.lenCodeLen);
+                            try nodeCreator.create(.LenCodeLen, state.lenCode);
 
                             return null;
                         }
@@ -239,7 +239,7 @@ pub fn decompressSymbol(
                             code.apply(context);
 
                             const codeRemapped = code.bits - lengthLowerLimit2 + lengthCodeUpperLimit;
-                            state.lenCodeLen = @intCast(codeRemapped);
+                            state.lenCode = @intCast(codeRemapped);
                             state.action = .Len;
 
                             try nodeCreator.create(.LenCodeLen, codeRemapped);
@@ -272,13 +272,13 @@ pub fn decompressSymbol(
         },
         .Len =>
         {
-            const lengthBitCount = getLengthBitCount(state.lenCodeLen);
+            const lengthBitCount = getLengthBitCount(state.lenCode);
             const extraBits = if (lengthBitCount == 0)
                     0
                 else
                     try helper.readNBits(context, lengthBitCount);
 
-            const baseLength = getBaseLength(state.lenCodeLen);
+            const baseLength = getBaseLength(state.lenCode);
             const len = baseLength + extraBits;
             state.len = @intCast(len);
 
@@ -308,7 +308,7 @@ pub fn decompressSymbol(
                     try helper.readNBits(context, distanceBitCount);
 
             const baseDistance = getBaseDistance(state.distanceLenCode);
-            const distance = baseDistance + extraBits;
+            const distance = baseDistance + @as(u16, @intCast(extraBits));
             state.distance = distance;
 
             try nodeCreator.create(.Distance, distance);
@@ -316,9 +316,6 @@ pub fn decompressSymbol(
             state.action = .Code;
 
             return .{
-                // TODO: 
-                // This has to be a semantic node as well.
-                // They should allow trees probably also, not just lists?
                 .BackReference = .{
                     .distance = @intCast(distance + 1),
                     .len = @as(u16, state.len) + 3,
