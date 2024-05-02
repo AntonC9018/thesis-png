@@ -5,9 +5,10 @@ pub const utils = @import("utils.zig");
 const parser = @import("../module.zig");
 usingnamespace parser;
 
+pub const ast = parser.ast;
 pub const zlib = parser.zlib;
 pub const pipelines = parser.pipelines;
-const Settings = parser.Settings;
+pub const Settings = parser.Settings;
 
 const levels = parser.level;
 usingnamespace levels;
@@ -40,7 +41,7 @@ pub const State = struct
     isData: bool = false,
     paletteLen: ?u32 = null,
 
-    imageData: ImageData = .{},
+    imageData: ImageData,
 };
 
 pub fn isParserStateTerminal(context: *const Context) bool 
@@ -121,8 +122,6 @@ pub const CarryOverSegment = struct
     }
 };
 
-const ast = parser.ast;
-
 // Of course, this will need to be reworked once I do the tree range optimizations
 pub const ImageData = struct
 {
@@ -131,7 +130,14 @@ pub const ImageData = struct
     zlib: zlib.State = .{},
     carryOverData: CarryOverSegment = .{},
     dataId: ast.NodeDataId = ast.invalidNodeDataId,
-    zlibStreamSemanticContext: levels.NodeSemanticContext = .{},
+    zlibStreamSemanticContext: levels.NodeSemanticContext,
+
+    pub fn create(semanticContextAllocator: std.mem.Allocator) ImageData
+    {
+        return .{
+            .zlibStreamSemanticContext = semanticContextAllocator,
+        };
+    }
 };
 
 pub const CyclicRedundancyCheck = struct

@@ -6,6 +6,6 @@ const Settings = parser.Settings;
 
 sequence: *pipelines.Sequence,
 allocator: std.mem.Allocator,
-settings: *Settings,
+settings: *const Settings,
 nodeContext: *parser.level.NodeContext,
 level: LevelContextData = .{},

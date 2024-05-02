@@ -38,7 +38,7 @@ const NodeType = ast.NodeType;
 const NodeValue = ast.NodeData;
 
 // Maybe add a reference count here to be able to know when to delete things.
-const SemanticNode = ast.NodeData;
+const NodeData = ast.NodeData;
 
 const SemanticListNode = struct
 {
@@ -88,16 +88,30 @@ pub const AST = struct
 {
     rootNodes: std.ArrayList(NodeIndex),
     syntaxNodes: std.ArrayList(Node),
-    nodeDatas: std.ArrayList(SemanticNode),
+    nodeDatas: std.ArrayList(NodeData),
 
     const NodeOperations = parser.NodeOperations;
+
+    pub fn create(allocators:
+        struct {
+            rootNode: std.mem.Allocator,
+            syntaxNode: std.mem.Allocator,
+            nodeData: std.mem.Allocator,
+        }) AST
+    {
+        return .{
+            .rootNodes = std.ArrayList(NodeIndex).init(allocators.rootNode),
+            .syntaxNodes = std.ArrayList(Node).init(allocators.syntaxNode),
+            .nodeDatas = std.ArrayList(NodeData).init(allocators.nodeData),
+        };
+    }
 
     pub fn childrenAllocator(self: *AST) std.mem.Allocator
     {
         return self.syntaxNodes.allocator;
     }
 
-    pub fn createNode(self: *AST, params: NodeOperations.SyntaxNodeCreationParams)
+    pub fn createSyntaxNode(self: *AST, params: NodeOperations.SyntaxNodeCreationParams)
         NodeOperations.Error!ast.NodeId
     {
         const childIndex = self.syntaxNodes.items.len;
@@ -126,7 +140,7 @@ pub const AST = struct
         return nodeIndexToId(childIndex);
     }
 
-    pub fn completeNode(self: *AST, params: NodeOperations.SyntaxNodeCompletionParams)
+    pub fn completeSyntaxNode(self: *AST, params: NodeOperations.SyntaxNodeCompletionParams)
         NodeOperations.Error!void
     {
         const nodeIndex = nodeIdToIndex(params.id);
@@ -248,7 +262,7 @@ pub fn createTestTree(allocator: std.mem.Allocator) !AST
     var tree: AST = .{
         .rootNodes = std.ArrayList(usize).init(allocator),
         .nodes = std.ArrayList(Node).init(allocator),
-        .nodeData = std.ArrayList(SemanticNode).init(allocator),
+        .nodeData = std.ArrayList(NodeData).init(allocator),
     };
     const data = try tree.nodeDatas.addManyAsArray(10);
     const defaultType = NodeType { .TopLevel = .Chunk };

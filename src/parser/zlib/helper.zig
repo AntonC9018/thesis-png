@@ -1,4 +1,5 @@
-const parser = @import("../module.zig");
+pub const parser = @import("../module.zig");
+
 const deflate = @import("deflate.zig");
 pub const pipelines = parser.pipelines;
 pub const DeflateContext = deflate.Context;
@@ -6,8 +7,8 @@ pub const std = @import("std");
 pub const huffman = @import("huffmanTree.zig");
 
 pub const levels = parser.level;
-usingnamespace levels;
 
+pub const LevelContext = levels.LevelContext;
 pub const Settings = parser.Settings;
 const SharedCommonContext = parser.CommonContext;
 pub const NodePosition = parser.ast.Position;
@@ -159,6 +160,7 @@ const BitsTestContext = struct
     state: deflate.State = .{},
     common: CommonContext = undefined,
     settings: Settings,
+    nodeContext: parser.NodeContext = undefined,
 
     pub fn reset(self: *BitsTestContext) void
     {
@@ -168,9 +170,14 @@ const BitsTestContext = struct
 
     pub fn init(self: *BitsTestContext) void
     {
+        self.nodeContext = undefined;
         self.common = .{
-            .sequence = &self.sequence,
-            .allocator = self.allocator,
+            .common = .{
+                .sequence = &self.sequence,
+                .allocator = self.allocator,
+                .nodeContext = &self.nodeContext,
+                .settings = &self.settings,
+            },
             .output = undefined,
         };
         self.sequence = pipelines.Sequence.create(&self.buffer);
@@ -193,6 +200,9 @@ fn createTestContext() !BitsTestContext
     {
         .allocator = allocator,
         .buffer = buffer,
+        .settings = .{
+            .logChunkStart = false,
+        },
     };
     return result;
 }
@@ -204,16 +214,18 @@ test "ApplyHelper works"
     var testContext = try createTestContext();
     testContext.init();
 
-    const newStart = testContext.sequence().getPosition(4);
+    const newStart = testContext.sequence.getPosition(4);
     const newOffset = 3;
     const helper = PeekApplyHelper
     {
         .nextBitOffset = newOffset,
         .nextSequenceStart = newStart,
     };
-    helper.apply(&testContext.context());
 
-    const start = testContext.sequence().start();
+    var ctx = testContext.context();
+    helper.apply(&ctx);
+
+    const start = testContext.sequence.start();
     try expectEqual(newStart.offset, start.offset);
     try expectEqual(newStart.segment, start.segment);
     try expectEqual(newOffset, testContext.state.bitOffset);
@@ -225,20 +237,20 @@ test "Peek bits test"
     var testContext = try createTestContext();
     testContext.init();
 
-    const context = &testContext.context();
+    var context = testContext.context();
 
     {
         const r = try peekNBits(.{
             .bitsCount = 4,
-            .context = context,
+            .context = &context,
         });
 
         try expectEqual(1, r.bits);
         // Advance bit count by 4.
         // Now reading the 0.
-        r.apply(context);
+        r.apply(&context);
 
-        try expectEqual(0, testContext.sequence().start().offset);
+        try expectEqual(0, testContext.sequence.start().offset);
         try expectEqual(4, testContext.state.bitOffset);
     }
 
@@ -246,27 +258,27 @@ test "Peek bits test"
     {
         const r = try peekNBits(.{
             .bitsCount = 8,
-            .context = context,
+            .context = &context,
         });
 
         try expectEqual(0x30, r.bits);
 
         // Move on to the 2.
-        r.apply(context);
+        r.apply(&context);
     }
 
     // Num bits > 8
     {
         const r = try peekNBits(.{
             .bitsCount = 13,
-            .context = context,
+            .context = &context,
         });
 
         // 2, 4, 5, lower 1 bits of 7
         // 7 = 0111
         try expectEqual(0x1_45_2, r.bits);
 
-        r.apply(context);
+        r.apply(&context);
     }
 
     testContext.reset();
@@ -275,11 +287,11 @@ test "Peek bits test"
     {
         const r = try peekNBits(.{
             .bitsCount = 32,
-            .context = context,
+            .context = &context,
         });
 
         try expectEqual(0x67_45_23_01, r.bits);
-        r.apply(context);
+        r.apply(&context);
     }
 
     // Reading just a single bit
@@ -287,10 +299,10 @@ test "Peek bits test"
     {
         const r = try peekNBits(.{
             .bitsCount = 1,
-            .context = context,
+            .context = &context,
         });
         try expectEqual(1, r.bits);
-        r.apply(context);
+        r.apply(&context);
     }
 
     // Reading one bit at an odd position
@@ -298,7 +310,7 @@ test "Peek bits test"
     {
         const r = try peekNBits(.{
             .bitsCount = 1,
-            .context = context,
+            .context = &context,
         });
         try expectEqual(0, r.bits);
     }
@@ -308,7 +320,7 @@ test "Peek bits test"
     {
         const r = try peekNBits(.{
             .bitsCount = 1,
-            .context = context,
+            .context = &context,
         });
         // 8 -> 1000, reading the MSB
         try expectEqual(1, r.bits);
@@ -321,7 +333,7 @@ test "Peek bits test"
     {
         const r = try peekNBits(.{
             .bitsCount = 16,
-            .context = context,
+            .context = &context,
             .reverse = true,
         });
 
@@ -451,11 +463,18 @@ pub fn readArrayElement(
     currentNumberOfElements: *usize,
     bitsCount: u5) !bool
 {
+    try context.level().pushNode(.DeflateCode);
+    defer context.level().pop();
+
     if (currentNumberOfElements.* < array.len)
     {
         const value = try readNBits(context, bitsCount);
         array[currentNumberOfElements.*] = @intCast(value);
         currentNumberOfElements.* += 1;
+
+        try context.level().completeNodeWithValue(.{
+            .Number = value,
+        });
     }
     if (currentNumberOfElements.* == array.len)
     {

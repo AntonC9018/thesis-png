@@ -11,13 +11,17 @@ fn parseIntoTree(allocator: std.mem.Allocator) !ast.AST
     defer testContext.deinit();
 
     const reader = &testContext.reader;
-    var parserState = png.createParserState();
+    var parserState = png.createParserState(allocator);
     const parserSettings = png.Settings
     {
         .logChunkStart = true,
     };
 
-    var tree: ast.AST = .{};
+    var tree = ast.AST.create(.{
+        .nodeData = allocator,
+        .rootNode = allocator,
+        .syntaxNode = allocator,
+    });
     var nodeContext = parser.NodeContext
     {
         .allocator = allocator,

@@ -6,15 +6,15 @@ vtable: *Vtable,
 
 const NodeOperations = @This();
 
-pub fn createNode(self: NodeOperations, params: SyntaxNodeCreationParams) Error!ast.NodeId
+pub fn createSyntaxNode(self: NodeOperations, params: SyntaxNodeCreationParams) Error!ast.NodeId
 {
-    const result = self.vtable.createNode(self.context, params);
+    const result = self.vtable.createSyntaxNode(self.context, params);
     return result;
 }
 
-pub fn completeNode(self: NodeOperations, params: SyntaxNodeCompletionParams) Error!void
+pub fn completeSyntaxNode(self: NodeOperations, params: SyntaxNodeCompletionParams) Error!void
 {
-    const result = self.vtable.completeNode(self.context, params);
+    const result = self.vtable.completeSyntaxNode(self.context, params);
     return result;
 }
 
@@ -43,8 +43,8 @@ pub fn create(context: anytype) NodeOperations
         const ContextT = @TypeOf(context.*);
         const vtable = Vtable
         {
-            .createNode = ContextT.createNode,
-            .completeNode = ContextT.completeNode,
+            .createSyntaxNode = ContextT.createSyntaxNode,
+            .completeSyntaxNode = ContextT.completeSyntaxNode,
             .linkSemanticParent = ContextT.linkSemanticParent,
             .createNodeData = ContextT.createNodeData,
             .setNodeDataValue = ContextT.setNodeDataValue,
@@ -99,24 +99,24 @@ pub const Vtable = struct
     // May discard the level information.
     // The returned node is to be treated as an opaque value 
     // (the caller is not to be concerned with its structure).
-    createSyntaxNode: fn(context: *Context, value: SyntaxNodeCreationParams) Error!ast.NodeId,
+    createSyntaxNode: *fn(context: *Context, value: SyntaxNodeCreationParams) Error!ast.NodeId,
 
     // A completed node must not accept any new children nodes.
     // A completed syntax node may or may not have an associated semantic node.
     // The associated semantic node may or may not have been completed when this is called.
     // The children nodes must have been completed (to be validated).
-    completeSyntaxNode: fn(context: *Context, value: SyntaxNodeCompletionParams) Error!void,
+    completeSyntaxNode: *fn(context: *Context, value: SyntaxNodeCompletionParams) Error!void,
 
     // The given node is to be linked with the given other existing node.
     // The other node must not be deleted before this.
     // This shows that the new node is sharing contextual information with the other node.
-    linkSemanticParent: fn(context: *Context, value: SyntaxNodeSemanticLinkParams) Error!void,
+    linkSemanticParent: *fn(context: *Context, value: SyntaxNodeSemanticLinkParams) Error!void,
 
     // Creates a semantic node, associating it with the given syntax node if its id is valid.
     // The value given is the initial value and might be changed later.
-    createNodeData: fn(context: *Context, value: NodeDataCreationParams) Error!ast.NodeDataId,
+    createNodeData: *fn(context: *Context, value: NodeDataCreationParams) Error!ast.NodeDataId,
 
     // Updates the value of a semantic node.
-    setNodeDataValue: fn(context: *Context, value: NodeDataParams) Error!void,
+    setNodeDataValue: *fn(context: *Context, value: NodeDataParams) Error!void,
 };
 

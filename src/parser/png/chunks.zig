@@ -841,12 +841,12 @@ const ColorStateInitializer = struct
     context: *Context,
     colors: *std.ArrayListUnmanaged(RGB),
 
-    fn execute(self: *ColorStateInitializer) !void
+    pub fn execute(self: *const ColorStateInitializer) !void
     {
         // TODO: We're gonna have a memory leak if we don't move the list.
         _ = try self.colors.addOne(self.context.allocator());
 
-        try self.context.level().maybeCreateSemanticNode(.RGBColor);
+        try self.context.level().setNodeType(.RGBColor);
     }
 };
 
@@ -864,7 +864,7 @@ fn readRgbComponentNode(
 
         const colorByte = colorByte:
         {
-            switch (action)
+            switch (action.*)
             {
                 .R => break :colorByte &color.r,
                 .G => break :colorByte &color.g,
@@ -921,7 +921,7 @@ const PaletteBytesProcessor = struct
         if (readFully)
         {
             // TODO: Maybe complete with a separate color?
-            self.context.level().completeNode();
+            try self.context.level().completeNode();
         }
     }
 };
@@ -1104,7 +1104,7 @@ fn parseImageData(context: *Context, state: *ImageDataState) !bool
         hijackedStartSegment.data.items = hijackedStartSegment.data.items[replacedStart.offset ..];
 
         break :segments .{
-            .carryOverFirst = .{},
+            .carryOverFirst = undefined,
             .hijackedStart = hijackedStartSegment,
         };
     };
@@ -1169,7 +1169,7 @@ fn parseImageData(context: *Context, state: *ImageDataState) !bool
         }
     }
 
-    const readContext = readContext:
+    var readContext = readContext:
     {
         var c = context.*;
         c.common.sequence = &sequence;
@@ -1185,7 +1185,7 @@ fn parseImageData(context: *Context, state: *ImageDataState) !bool
     // Specifically, setting a semantic id for a node to be created,
     // and then having the create code actually check that first.
     // But in that case, make sure it's empty first.
-    _ = utils.readZlibData(readContext, &imageData.zlib, &imageData.bytes)
+    _ = utils.readZlibData(&readContext, &imageData.zlib, &imageData.bytes)
         catch |err|
         {
             if (err != error.NotEnoughBytes)
@@ -1253,7 +1253,7 @@ pub fn parseChunkData(context: *Context) !bool
                     const value = try utils.readPngU32Dimension(context.sequence());
 
                     ihdr.width = value;
-                    context.level().completeNodeWithValue(.{
+                    try context.level().completeNodeWithValue(.{
                         .Number = value,
                     });
 
@@ -1264,7 +1264,7 @@ pub fn parseChunkData(context: *Context) !bool
                     const value = try utils.readPngU32Dimension(context.sequence());
 
                     ihdr.height = value;
-                    context.level().completeNodeWithValue(.{
+                    try context.level().completeNodeWithValue(.{
                         .Number = value,
                     });
 
@@ -1367,8 +1367,8 @@ pub fn parseChunkData(context: *Context) !bool
             const functor = PaletteBytesProcessor
             {
                 .context = context,
-                .plteState = t.state,
-                .plteNode = plteNode,
+                .state = t.state,
+                .data = plteNode,
             };
 
             const done = try utils.removeAndProcessNextByte(
@@ -1391,7 +1391,7 @@ pub fn parseChunkData(context: *Context) !bool
         },
         .ImageData => |t|
         {
-            context.level().pushInit(struct
+            try context.level().pushInit(struct
             {
                 context_: *Context,
 
@@ -1401,6 +1401,8 @@ pub fn parseChunkData(context: *Context) !bool
                     try self.context_.level()
                         .applySemanticContextForHierarchy(imageData.zlibStreamSemanticContext);
                 }
+            }{
+                .context_ = context,
             });
             defer context.level().pop();
 

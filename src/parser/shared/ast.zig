@@ -27,6 +27,7 @@ pub const NodeType = union(enum)
 
     Zlib: zlib.Action,
     Deflate: deflate.Action,
+    DeflateCode: void,
     NoCompression: deflate.noCompression.InitStateAction,
     FixedHuffmanDecompression: deflate.fixed.DecompressionValueType,
     ZlibSymbol: void,

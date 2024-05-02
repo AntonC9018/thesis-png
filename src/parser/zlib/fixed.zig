@@ -4,24 +4,24 @@ const std = helper.std;
 pub const SymbolDecompressionAction = enum
 {
     Code,
-    InvalidCode,
     Len,
     DistanceCode,
     Distance,
 };
 
-pub const CodeState = 7 || 8 || 9;
+// 7 || 8 || 9
+pub const CodeState = u4;
 
 pub const SymbolDecompressionState = struct
 {
     action: SymbolDecompressionAction = .Code,
     codeLen: CodeState = 7,
-    lenCode: u9,
+    lenCodeLen: u9,
     len: u8,
     distanceLenCode: u5,
     distance: u16,
 
-    pub const Initial: SymbolDecompressionState = std.mem.zeroInit(.{
+    pub const Initial = std.mem.zeroInit(SymbolDecompressionState, .{
         .codeLen = 7,
         .action = .Code,
     });
@@ -213,9 +213,10 @@ pub fn decompressSymbol(
                         if (code.bits <= lengthCodeUpperLimit)
                         {
                             code.apply(context);
-                            state.lenCode = code.bits - 1;
-                            try nodeCreator.create(.LenLen, state.codeLen);
-                            state.action = .Length;
+                            state.lenCodeLen = @intCast(code.bits - 1);
+                            state.action = .Len;
+
+                            try nodeCreator.create(.LenCodeLen, state.lenCodeLen);
 
                             return null;
                         }
@@ -230,7 +231,7 @@ pub fn decompressSymbol(
 
                             try nodeCreator.create(.Literal, value);
 
-                            return .{ .LiteralValue = value };
+                            return .{ .LiteralValue = @intCast(value) };
                         }
 
                         if (code.bits >= lengthLowerLimit2 and code.bits <= lengthUpperLimit2)
@@ -238,11 +239,11 @@ pub fn decompressSymbol(
                             code.apply(context);
 
                             const codeRemapped = code.bits - lengthLowerLimit2 + lengthCodeUpperLimit;
-                            state.lenCode = codeRemapped;
+                            state.lenCodeLen = @intCast(codeRemapped);
+                            state.action = .Len;
 
-                            try nodeCreator.create(.LenCode, codeRemapped);
+                            try nodeCreator.create(.LenCodeLen, codeRemapped);
 
-                            state.action = .Length;
                             if (codeRemapped >= adjustStart(286))
                             {
                                 return error.LengthCodeTooLarge;
@@ -254,29 +255,30 @@ pub fn decompressSymbol(
                     {
                         code.apply(context);
 
-                        if (code >= literalLowerLimit2)
+                        if (code.bits >= literalLowerLimit2)
                         {
                             const literalOffset2 = 144;
-                            const value = code - literalLowerLimit2 + literalOffset2;
+                            const value = code.bits - literalLowerLimit2 + literalOffset2;
                             try nodeCreator.create(.Literal, value);
                             return .{ .LiteralValue = @intCast(value) };
                         }
 
                         return error.DisallowedDeflateCodeValue;
                     },
+                    else => unreachable,
                 }
                 state.codeLen += 1;
             }
         },
         .Len =>
         {
-            const lengthBitCount = getLengthBitCount(state.codeRemapped);
+            const lengthBitCount = getLengthBitCount(state.lenCodeLen);
             const extraBits = if (lengthBitCount == 0)
                     0
                 else
                     try helper.readNBits(context, lengthBitCount);
 
-            const baseLength = getBaseLength(state.codeRemapped);
+            const baseLength = getBaseLength(state.lenCodeLen);
             const len = baseLength + extraBits;
             state.len = @intCast(len);
 
@@ -290,7 +292,7 @@ pub fn decompressSymbol(
             state.action = .Distance;
             state.distanceLenCode = distanceCode;
 
-            try nodeCreator.create(.LenCode, distanceCode);
+            try nodeCreator.create(.DistanceLenCode, distanceCode);
 
             if (distanceCode >= 30)
             {
@@ -336,7 +338,7 @@ pub const DecompressionValueType = enum
     Distance,
 
     // TODO: allow semantic nodes to store more useful data.
-    LenCode,
+    LenCodeLen,
     DistanceLenCode,
 };
 
@@ -347,7 +349,7 @@ const DecompressionNodeWriter = struct
     pub fn create(self: @This(), t: DecompressionValueType, value: usize) !void
     {
         try self.context.level().setNodeType(.{
-            .FixedDecompressionValue = t,
+            .FixedHuffmanDecompression = t,
         });
         try self.context.level().completeNodeWithValue(.{
             .Number = value,

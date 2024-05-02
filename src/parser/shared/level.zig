@@ -18,7 +18,7 @@ const SyntaxNodeInfo = struct
 
 pub const NodeSemanticContext = struct
 {
-    hierarchy: std.ArrayList(SyntaxNodeInfo) = .{},
+    hierarchy: std.ArrayList(SyntaxNodeInfo),
 };
 
 pub const NodeContext = struct
@@ -74,9 +74,9 @@ pub fn LevelContext(Context: type) type
                     else
                         nodes.items[levelIndex - 1].nodeId;
 
-                const position = self.context.getCurrentPosition();
+                const position = self.context.getStartBytePosition();
 
-                const newNodeId = try nodeContext_.operations.createNode(.{
+                const newNodeId = try nodeContext_.operations.createSyntaxNode(.{
                     .level = levelIndex,
                     .parentId = parentId,
                     .start = position,
@@ -107,7 +107,7 @@ pub fn LevelContext(Context: type) type
             self.pushImpl();
             errdefer self.pop();
 
-            _ = self.maybeCreateSyntaxNode();
+            _ = try self.maybeCreateSyntaxNode();
         }
 
         pub fn pushInit(self: Self, callback: anytype) !void
@@ -115,17 +115,17 @@ pub fn LevelContext(Context: type) type
             self.pushImpl();
             errdefer self.pop();
 
-            const node = self.maybeCreateSyntaxNode();
+            const node = try self.maybeCreateSyntaxNode();
             if (!node.created)
             {
                 return;
             }
 
-            if (@hasDecl(callback, "execute"))
+            if (@hasDecl(@TypeOf(callback), "execute"))
             {
                 try callback.execute();
             }
-            else if (@TypeOf(callback) != void)
+            else
             {
                 try callback();
             }
@@ -155,9 +155,9 @@ pub fn LevelContext(Context: type) type
         {
             const nodeContext_ = self.nodeContext();
             const node = &nodeContext_.syntaxNodeStack.items[index];
-            const position: ast.Position = self.getCurrentPosition();
+            const position: ast.Position = self.context.getStartBytePosition();
 
-            try nodeContext_.operations.completeNode(.{
+            try nodeContext_.operations.completeSyntaxNode(.{
                 .nodeType = node.nodeType,
                 .endExclusive = position,
                 .id = node.nodeId,
@@ -210,7 +210,7 @@ pub fn LevelContext(Context: type) type
             const ops = nodeContext_.operations; 
             if (currentNode_.dataId == ast.invalidNodeDataId)
             {
-                const semanticNodeId = ops.createNodeData(.{
+                const semanticNodeId = try ops.createNodeData(.{
                     .associatedNode = currentNode_.nodeId,
                     .value = value,
                 });
@@ -218,7 +218,7 @@ pub fn LevelContext(Context: type) type
             }
             else
             {
-                nodeContext_.operations.setNodeDataValue(.{
+                try nodeContext_.operations.setNodeDataValue(.{
                     .value = value,
                     .id = currentNode_.dataId,
                 });
@@ -237,18 +237,22 @@ pub fn LevelContext(Context: type) type
             self.currentNode().nodeType = nodeType;
         }
 
-        pub fn setSemanticParent(self: Self, parentId: ast.NodeId) !ast.NodeId
+        pub fn getNodeId(self: Self) ast.NodeId
+        {
+            return self.currentNode().nodeId;
+        }
+
+        pub fn setSemanticParent(self: Self, parentId: ast.NodeId) !void
         {
             const currentNode_ = self.currentNode();
             try self.nodeContext().operations.linkSemanticParent(.{
                 .id = currentNode_.nodeId,
                 .semanticParentId = parentId,
             });
-            return 0;
         }
 
         // Should save the sequence start here.
-        pub fn pushNode(self: Self, nodeType: ast.NodeType) !ast.NodeId
+        pub fn pushNode(self: Self, nodeType: ast.NodeType) !void
         {
             self.pushImpl();
             errdefer self.pop();
@@ -257,10 +261,9 @@ pub fn LevelContext(Context: type) type
             if (r.created)
             {
                 r.node.nodeType = nodeType;
-                return;
             }
 
-            std.debug.assert(r.node.nodeType == nodeType);
+            std.debug.assert(std.meta.eql(r.node.nodeType, nodeType));
         }
 
         // Implies completing the nodes as well.
@@ -312,7 +315,7 @@ pub fn LevelContext(Context: type) type
             // Create new nodes as deep as the stored hierarchy.
             for (hierarchy) |it|
             {
-                try level.pushImpl();
+                level.pushImpl();
                 const r = try level.maybeCreateSyntaxNode();
                 r.node.nodeType = it.nodeType;
                 r.node.dataId = it.dataId;

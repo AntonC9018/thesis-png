@@ -74,11 +74,6 @@ pub const CodeDecodingState = struct
 
     const Self = @This();
 
-    pub fn initArrayElement(context: *DeflateContext, self: *CodeDecodingState) !void
-    {
-        try helper.initState(context, &self.arrayElementInitialized);
-    }
-
     pub fn getLiteralOrLenCodeCount(self: *const Self) usize
     {
         return @as(usize, self.literalOrLenCodeCount) + 257;
@@ -164,8 +159,6 @@ pub fn decodeCodes(
         },
         .CodeLens =>
         {
-            try state.initArrayElement(context);
-
             const readAllArray = try helper.readArrayElement(
                 context,
                 state.codeLenCodeLens[0 .. state.getLenCodeCount()],
@@ -205,6 +198,7 @@ pub fn decodeCodes(
                     .tree = tree,
                 });
             }
+            return true;
         },
         .LiteralOrLenCodeLens =>
         {
@@ -222,6 +216,7 @@ pub fn decodeCodes(
             state.readListItemCount = 0;
 
             try context.level().completeNode();
+            return true;
         },
         .DistanceCodeLens =>
         {

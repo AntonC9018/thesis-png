@@ -20,7 +20,7 @@ pub const BlockType = enum(u2)
 pub const Context = struct
 {
     state: *State,
-    common: *const helper.CommonContext,
+    common: *helper.CommonContext,
 
     pub fn level(self: *Context) helper.LevelContext(Context)
     {
@@ -41,7 +41,7 @@ pub const Context = struct
     {
         return self.common.output;
     }
-    pub fn getCurrentNodePosition(self: *Context) helper.NodePosition
+    pub fn getStartBytePosition(self: *Context) helper.NodePosition
     {
         return .{
            .byte = self.sequence().getStartBytePosition(),
@@ -60,15 +60,13 @@ pub const State = struct
 
     dataBytesRead: u16 = 0,
 
-    symbolDecompressionInitialized: bool,
-
     blockState: union(BlockType)
     {
         NoCompression: noCompression.State,
         FixedHuffman: fixed.SymbolDecompressionState,
         DynamicHuffman: dynamic.State,
         Reserved: void,
-    } = .{ .Reserved = {} },
+    } = .Reserved,
 };
 
 pub const Action = enum
@@ -184,7 +182,7 @@ pub fn deflate(context: *Context) !bool
                     const done = try dynamic.decodeCodes(context, &s.codeDecoding);
                     if (done)
                     {
-                        try dynamic.initializeDecompressionState(s, context.allocator()());
+                        try dynamic.initializeDecompressionState(s, context.allocator());
                         try context.level().completeNode();
                         state.action = .DecompressionLoop;
                     }
@@ -213,7 +211,8 @@ pub fn deflate(context: *Context) !bool
                         const symbol_ = switch (mechanism)
                         {
                             .DynamicHuffman => try dynamic.decompressSymbol(context, &s.decompression),
-                            .FixedHuffman => try fixed.decompressSymbol(context, s.key),
+                            .FixedHuffman => try fixed.decompressSymbol(context, s),
+                            else => unreachable,
                         };
 
                         try context.level().completeNodeWithValue(.{

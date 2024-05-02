@@ -162,7 +162,7 @@ pub fn readZlibData(
     output: *std.ArrayListUnmanaged(u8)) !bool
 {
     // Maybe wrap the zlib stream.
-    try context.level().pushInit({});
+    try context.level().push();
     defer context.level().pop();
 
     var outputBuffer = zlib.OutputBuffer
@@ -171,12 +171,12 @@ pub fn readZlibData(
         .array = output,
         .windowSize = &state.windowSize,
     };
-    const c = zlib.CommonContext
+    var c = zlib.CommonContext
     {
         .common = context.common,
         .output = &outputBuffer,
     };
-    const zlibContext = zlib.Context
+    var zlibContext = zlib.Context
     {
         .common = &c,
         .state = state,

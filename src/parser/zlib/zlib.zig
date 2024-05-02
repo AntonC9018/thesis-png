@@ -1,9 +1,11 @@
 pub const deflate = @import("deflate.zig");
 const helper = @import("helper.zig");
+const parser = helper.parser;
 const std = @import("std");
-const pipelines = helper.pipelines;
+const pipelines = parser.pipelines;
 
 pub const OutputBuffer = deflate.OutputBuffer;
+const LevelContext = parser.level.LevelContext;
 
 const Header = struct
 {
@@ -130,10 +132,10 @@ pub const CommonContext = helper.CommonContext;
 
 pub const Context = struct
 {
-    common: *const CommonContext,
+    common: *CommonContext,
     state: *State,
 
-    pub fn level(self: *Context) *helper.LevelContext(Context)
+    pub fn level(self: *Context) *LevelContext(Context)
     {
         return .{
             .data = self.common.levelData(),
@@ -148,14 +150,14 @@ pub const Context = struct
     {
         return self.common.sequence();
     }
-    pub fn getStartBytePosition(self: *Context) helper.NodePosition
+    pub fn getStartBytePosition(self: *Context) parser.ast.Position
     {
         return .{
             .byte = self.sequence().getStartBytePosition(),
             .bit = 0,
         };
     }
-    pub fn nodeContext(self: *Context) *helper.NodeContext
+    pub fn nodeContext(self: *Context) *parser.NodeContext
     {
         return self.common.nodeContext();
     }
@@ -225,7 +227,7 @@ pub fn decode(context: *Context) !bool
         {
             const value = try pipelines.readNetworkUnsigned(context.sequence(), u32);
             state.data = .{ .dictionaryId = value };
-            try context.level().CompleteNodeWithValue(.{
+            try context.level().completeNodeWithValue(.{
                 .Number = value,
             });
             state.action = .CompressedData;
@@ -242,7 +244,7 @@ pub fn decode(context: *Context) !bool
                 state.adler32.update(addedBytes);
             }
 
-            const deflateContext = deflate.Context
+            var deflateContext = deflate.Context
             {
                 .common = context.common,
                 .state = decompressor,

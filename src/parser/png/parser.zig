@@ -198,10 +198,10 @@ const TopLevelInitializer = struct
 {
     context: *Context,
 
-    fn execute(self: @This()) !void
+    pub fn execute(self: @This()) !void
     {
         const action = self.context.state.action;
-        self.context.level().setNodeType(.{ .TopLevel = action });
+        try self.context.level().setNodeType(.{ .TopLevel = action });
 
         switch (action)
         {
@@ -216,20 +216,20 @@ const TopLevelInitializer = struct
 
 pub fn parseNextItem(context: *Context) !bool
 {
-    try context.level().pushInit(context, TopLevelInitializer
+    try context.level().pushInit(TopLevelInitializer
     {
-        .state = context.state,
+        .context = context,
     });
     defer context.level().pop();
 
     const action = &context.state.action;
-    switch (action)
+    switch (action.*)
     {
         .Signature =>
         {
             try validateSignature(context.sequence());
             try context.level().completeNodeWithValue(.{
-                .String = pngFileSignature,
+                .LiteralString = pngFileSignature,
             });
             action.* = .Chunk;
             return true;
@@ -273,16 +273,16 @@ const ChunkItemNodeInitializer = struct
         if (isImageData)
         {
             const dataId = &self.context.state.imageData.dataId;
-            if (dataId != common.ast.invalidNodeDataId)
+            if (dataId.* != common.ast.invalidNodeDataId)
             {
-                try self.context.level().setSemanticParent(dataId);
+                try self.context.level().setSemanticParent(dataId.*);
                 return;
             }
 
-            const parentId = try self.context.level().setNodeType(.{
+            try self.context.level().setNodeType(.{
                 .Chunk = state.action,
             });
-            dataId.* = parentId;
+            dataId.* = self.context.level().getNodeId();
         }
         else
         {
@@ -387,10 +387,11 @@ pub fn parseChunkItem(context: *Context) !bool
 }
 
 
-pub fn createParserState() State
+pub fn createParserState(semanticContextAllocator: std.mem.Allocator) State
 {
     return .{
         .chunk = createChunkParserState(),
+        .imageData = common.ImageData.create(semanticContextAllocator),
     };
 }
 
