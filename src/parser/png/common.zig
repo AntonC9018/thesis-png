@@ -65,11 +65,11 @@ pub const Context = struct
     }
     pub fn sequence(self: *Context) *pipelines.Sequence
     {
-        return &self.common.sequence;
+        return self.common.sequence;
     }
-    pub fn settings(self: *Context) *Settings
+    pub fn settings(self: *Context) *const Settings
     {
-        return &self.common.settings;
+        return self.common.settings;
     }
     pub fn allocator(self: *Context) std.mem.Allocator
     {

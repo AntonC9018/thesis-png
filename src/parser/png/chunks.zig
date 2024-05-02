@@ -380,7 +380,6 @@ pub const TaggedChunkDataStatePointer = union(ChunkType)
     SuggestedPalette: void,
     PaletteHistogram: void,
     LastModificationTime: void,
-    _: void,
 };
 
 pub fn ActionAndState(Action: type, State: type) type
@@ -399,7 +398,7 @@ const TransparencyAction = union(enum)
 };
 
 // Not generated with reflection, for better LSP experience.
-const TaggedNodeDataActionAndState = union(enum)
+const TaggedNodeDataActionAndState = union(ChunkType)
 {
     ImageHeader: ActionAndState(*ImageHeaderAction, void),
     Palette: ActionAndState(void, *PaletteState), // Only RGB
@@ -1001,7 +1000,7 @@ pub fn getActiveChunkDataActionAndState(state: *const common.ChunkState) TaggedN
                     });
                 }
             }
-        }
+        },
     }
 }
 

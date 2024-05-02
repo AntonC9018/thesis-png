@@ -59,7 +59,7 @@ pub fn LevelContext(Context: type) type
             }
         {
             const nodeContext_ = self.nodeContext();
-            const nodes = nodeContext_.syntaxNodeStack;
+            const nodes = &nodeContext_.syntaxNodeStack;
             const levelIndex = self.currentLevel();
 
             if (levelIndex > nodes.items.len)
@@ -82,9 +82,10 @@ pub fn LevelContext(Context: type) type
                     .start = position,
                 });
 
-                const node = try nodes.addOne(nodeContext_.allocator, .{
+                const node = try nodes.addOne(nodeContext_.allocator);
+                node.* = .{
                     .nodeId = newNodeId,
-                });
+                };
                 return .{
                     .node = node,
                     .created = true,
