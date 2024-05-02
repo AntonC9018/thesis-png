@@ -76,6 +76,16 @@ pub const NodeData = union(enum)
     ZlibFlags: zlib.Flags,
     BlockType: deflate.BlockType,
     ZlibSymbol: deflate.Symbol,
+
+//     pub fn format(
+//         self: @This(),
+//         comptime _: []const u8,
+//         _: std.fmt.FormatOptions,
+//         writer: anytype) !void
+//     {
+//         _ = self;
+//         try writer.print("placeholder?", .{});
+//     }
 };
 
 pub const NodePositionOffset = struct

@@ -173,15 +173,15 @@ pub fn exhaustive(t: anytype) ExhaustiveVariant(@TypeOf(t))
     return @enumFromInt(@intFromEnum(t));
 }
 
-pub fn nameOfEnumMember(e: anytype) []const u8
+pub fn nameOfEnumMember(e: anytype) ?[]const u8
 {
-    const info = @typeInfo(@Type(e)); 
+    const info = @typeInfo(@TypeOf(e)); 
     inline for (info.Enum.fields) |f|
     {
-        if (f.value == e)
+        if (f.value == @intFromEnum(e))
         {
             return f.name;
         }
     }
-    unreachable;
+    return null;
 }

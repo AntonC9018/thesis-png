@@ -277,7 +277,7 @@ fn contains(arr: []const u8, value: u8) bool
 
 pub const ChunkDataState = struct
 {
-    action: ChunkDataAction,
+    action: ChunkDataAction = undefined,
     value: union
     {
         none: void,
@@ -954,26 +954,20 @@ const TextBytesProcessor = struct
     }
 };
 
-pub fn getActiveDataAction(state: *const common.ChunkState) TaggedChunkDataAction
+pub fn getActiveDataAction(state: *common.ChunkState) TaggedChunkDataAction
 {
     switch (common.exhaustive(state.object.type))
     {
         inline else => |key|
         {
-            const resultInfo = @typeInfo(TaggedChunkDataAction);
-            inline for (resultInfo.Union.fields) |f|
-            {
-                if (common.exhaustive(@field(ChunkType, f.name)) == key)
-                {
-                    const value = &@field(state.dataState.action, f.name);
-                    return @unionInit(TaggedChunkDataAction, f.name, value);
-                }
-            }
+            const fieldName = @tagName(key);
+            const value = @field(state.dataState.action, fieldName);
+            return @unionInit(TaggedChunkDataAction, fieldName, value);
         }
     }
 }
 
-pub fn getActiveChunkDataActionAndState(state: *const common.ChunkState) TaggedNodeDataActionAndState
+pub fn getActiveChunkDataActionAndState(state: *common.ChunkState) TaggedNodeDataActionAndState
 {
     const action = getActiveDataAction(state);
     const state_ = getActiveChunkDataState(state);
@@ -981,7 +975,7 @@ pub fn getActiveChunkDataActionAndState(state: *const common.ChunkState) TaggedN
     {
         inline else => |k|
         {
-            const name = common.nameOfEnumMember(k);
+            const name = @tagName(k);
             return @unionInit(TaggedNodeDataActionAndState, name, .{
                 .action = @field(action, name),
                 .state = @field(state_, name),
@@ -990,57 +984,50 @@ pub fn getActiveChunkDataActionAndState(state: *const common.ChunkState) TaggedN
     }
 }
 
-pub fn getActiveChunkDataState(state: *const common.ChunkState) TaggedChunkDataStatePointer
+pub fn getActiveChunkDataState(state: *common.ChunkState) TaggedChunkDataStatePointer
 {
-    const chunkStateInfo = @typeInfo(@TypeOf(ChunkDataState.value));
-    const taggedPointerInfo = @typeInfo(TaggedChunkDataStatePointer);
-    for (taggedPointerInfo.Union.fields) |pointerField|
+    const chunkStateInfo = comptime @typeInfo(@TypeOf(state.dataState.value));
+    switch (common.exhaustive(state.object.type))
     {
-        const pointerFieldInfo = @typeInfo(pointerField.type);
-        const fieldType = pointerFieldInfo.Pointer.child;
-
-        const fieldName = comptime fieldName:
+        inline else => |k|
         {
-            for (chunkStateInfo.Union.fields) |chunkStateField|
+            const fieldName = @tagName(k);
+            const fieldPointerType = @TypeOf(@field(@as(TaggedChunkDataStatePointer, undefined), fieldName));
+
+            const dataFieldName: ?[:0]const u8 = comptime dataFieldName:
             {
-                if (chunkStateField.type == fieldType
-                    and state.object.type == @field(ChunkType, pointerField.name))
+                if (fieldPointerType == void)
                 {
-                    break :fieldName chunkStateField.name;
+                    break :dataFieldName null;
                 }
-            }
-            break :fieldName null;
-        };
 
-        if (fieldName) |fieldName_|
-        {
-            const pointer = &@field(state.dataState, fieldName_);
-            return @unionInit(TaggedChunkDataStatePointer, pointerField, pointer);
-        }
-        else
-        {
-            return @unionInit(TaggedChunkDataStatePointer, pointerField, {});
+                const fieldTypeInfo = @typeInfo(fieldPointerType);
+                const fieldType = fieldTypeInfo.Pointer.child;
+
+                for (chunkStateInfo.Union.fields) |chunkStateField|
+                {
+                    if (chunkStateField.type == fieldType)
+                    {
+                        break :dataFieldName chunkStateField.name;
+                    }
+                }
+                break :dataFieldName null;
+            };
+
+            if (dataFieldName) |dataFieldName_|
+            {
+                const data = &@field(state.dataState.value, dataFieldName_);
+                return @unionInit(TaggedChunkDataStatePointer, fieldName, data);
+            }
+            else
+            {
+                return @unionInit(TaggedChunkDataStatePointer, fieldName, {});
+            }
         }
     }
-
-    unreachable;
 }
 
 const ast = common.ast;
-
-fn mapDataActionToNodeType(action: TaggedChunkDataAction) ast.NodeType.ChunkData
-{
-    const mappingToType = ast.ChunkData;
-
-    switch (action)
-    {
-        inline else => |*value, key|
-        {
-            const name = comptime common.nameOfEnumMember(common.exhaustive(key));
-            return @unionInit(mappingToType, name, value);
-        }
-    }
-}
 
 fn parseImageData(context: *Context, state: *ImageDataState) !bool
 {

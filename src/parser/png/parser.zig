@@ -396,11 +396,11 @@ pub fn createParserState() State
 
 fn createChunkParserState() common.ChunkState
 {
-    return std.mem.zeroInit(common.ChunkState, .{
+    return .{
         .object = std.mem.zeroInit(common.Chunk, .{
             .data = .{ .none = {} },
         }),
-        .dataState = .{ .none = {} },
-    });
+        .dataState = undefined,
+    };
 }
 

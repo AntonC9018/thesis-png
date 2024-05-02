@@ -157,7 +157,7 @@ pub fn main() !void
                 {
                     const data = context_.tree.nodeDatas.items[node.data];
 
-                    try writer.print("Data: {}", data);
+                    try writer.print("Data: {}", .{ data });
                 }
                 try writer.writeByte(0);
 
