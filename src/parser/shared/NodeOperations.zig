@@ -40,19 +40,44 @@ pub fn create(context: anytype) NodeOperations
 {
     const storage = struct
     {
+        fn WrappedFuncType(FuncType: type) type
+        {
+            var info = @typeInfo(FuncType);
+            const params = info.Fn.params;
+
+            std.debug.assert(@typeInfo(params[0].type.?) == .Pointer);
+
+            var newParams = params[0 .. params.len].*;
+            newParams[0] = .{
+                .is_generic = false,
+                .is_noalias = false,
+                .type = *Context,
+            };
+            
+            info.Fn.params = &newParams;
+            const resultFuncType = @Type(info);
+
+            return *const resultFuncType;
+        }
+
+        fn wrappedFunc(comptime func: anytype) WrappedFuncType(@TypeOf(func))
+        {
+            return @ptrCast(&func);
+        }
+
         const ContextT = @TypeOf(context.*);
         const vtable = Vtable
         {
-            .createSyntaxNode = ContextT.createSyntaxNode,
-            .completeSyntaxNode = ContextT.completeSyntaxNode,
-            .linkSemanticParent = ContextT.linkSemanticParent,
-            .createNodeData = ContextT.createNodeData,
-            .setNodeDataValue = ContextT.setNodeDataValue,
+            .createSyntaxNode = wrappedFunc(ContextT.createSyntaxNode),
+            .completeSyntaxNode = wrappedFunc(ContextT.completeSyntaxNode),
+            .linkSemanticParent = wrappedFunc(ContextT.linkSemanticParent),
+            .createNodeData = wrappedFunc(ContextT.createNodeData),
+            .setNodeDataValue = wrappedFunc(ContextT.setNodeDataValue),
         };
     };
     return .{
         .vtable = &storage.vtable,
-        .context = context,
+        .context = @ptrCast(context),
     };
 }
 
