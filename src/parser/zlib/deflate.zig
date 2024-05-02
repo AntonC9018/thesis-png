@@ -2,6 +2,7 @@ const helper = @import("helper.zig");
 const std = helper.std;
 const huffman = helper.huffman;
 const pipelines = helper.pipelines;
+const parser = helper.parser;
 
 pub const OutputBuffer = helper.OutputBuffer;
 pub const noCompression = @import("noCompression.zig");
@@ -47,6 +48,10 @@ pub const Context = struct
            .byte = self.sequence().getStartBytePosition(),
            .bit = self.state.bitOffset,
         };
+    }
+    pub fn nodeContext(self: *Context) *parser.NodeContext
+    {
+        return self.common.nodeContext();
     }
 };
 

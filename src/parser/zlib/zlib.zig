@@ -135,7 +135,7 @@ pub const Context = struct
     common: *CommonContext,
     state: *State,
 
-    pub fn level(self: *Context) *LevelContext(Context)
+    pub fn level(self: *Context) LevelContext(Context)
     {
         return .{
             .data = self.common.levelData(),

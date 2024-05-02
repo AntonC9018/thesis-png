@@ -170,7 +170,7 @@ pub const AST = struct
         if (dataIndex != invalidDataIndex)
         {
             const data = &self.nodeDatas.items[dataIndex];
-            if (data == .None)
+            if (data.* == .None)
             {
                 std.debug.print("Data was created but is empty on node completion."
                     ++ "Something might be wrong. The node type is {}", 
@@ -217,7 +217,7 @@ pub const AST = struct
 
         if (node) |n|
         {
-            n.data = data.*;
+            n.data = dataIndex;
         }
 
         return dataIndexToId(dataIndex);
@@ -231,7 +231,7 @@ pub const AST = struct
         const data = &self.nodeDatas.items[dataIndex];
         
         // Changing the type halfway is disallowed, unless it's not been set yet.
-        if (data != .None)
+        if (data.* != .None)
         {
             const currentTag = @intFromEnum(data.*);
             const newTag = @intFromEnum(params.value);

@@ -159,3 +159,29 @@ pub fn move(t: anytype) @TypeOf(t.*)
     t.* = .{};
     return result;
 }
+
+pub fn ExhaustiveVariant(t: type) type
+{
+    var info = @typeInfo(t);
+    info.Enum.is_exhaustive = true;
+    info.Enum.decls = &.{};
+    return @Type(info);
+}
+
+pub fn exhaustive(t: anytype) ExhaustiveVariant(@TypeOf(t))
+{
+    return @enumFromInt(@intFromEnum(t));
+}
+
+pub fn nameOfEnumMember(e: anytype) []const u8
+{
+    const info = @typeInfo(@Type(e)); 
+    inline for (info.Enum.fields) |f|
+    {
+        if (f.value == e)
+        {
+            return f.name;
+        }
+    }
+    unreachable;
+}
