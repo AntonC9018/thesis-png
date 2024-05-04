@@ -34,7 +34,7 @@ pub const State = struct
     chunk: ChunkState,
     action: TopLevelAction = .Signature,
 
-    imageHeader: ?chunks.ImageHeader = null,
+    imageHeader: chunks.ImageHeader = .{},
     // True after the IEND chunk has been parsed.
     isEnd: bool = false,
     // True after the first IDAT chunk data start being parsed.
@@ -142,7 +142,6 @@ pub const Chunk = struct
 {
     dataByteLen: u32,
     type: chunks.ChunkType,
-    data: chunks.ChunkData,
     crc: CyclicRedundancyCheck,
 };
 

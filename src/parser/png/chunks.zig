@@ -9,14 +9,6 @@ const Context = common.Context;
 pub const ChunkData = union
 { 
     none: void,
-    imageHeader: ImageHeader,
-    palette: Palette,
-    transparency: TransparencyData,
-    gamma: Gamma,
-    primaryChroms: PrimaryChroms,
-    renderingIntent: RenderingIntent,
-    iccProfile: ICCProfile,
-    text: TextData,
 };
 
 pub const TextData = struct
@@ -86,13 +78,6 @@ pub fn GenericRGB(comptime t: type) type
 }
 
 const RGB16 = GenericRGB(u16);
-
-pub const TransparencyData = union(enum)
-{
-    paletteEntryAlphaValues: std.ArrayListUnmanaged(u8),
-    gray: u16,
-    rgb: RGB16,
-};
 
 pub const Gamma = u32;
 
@@ -277,14 +262,14 @@ fn contains(arr: []const u8, value: u8) bool
 
 pub const ChunkDataState = struct
 {
-    action: ChunkDataAction = undefined,
+    action: ChunkDataAction,
     value: union
     {
         none: void,
         bytesSkipped: u32,
         palette: PaletteState,
         transparency: TransparencyState,
-        primaryChrom: PrimaryChromState,
+        primaryChroms: PrimaryChroms,
         iccProfile: ICCProfileState,
         text: TextState,
         compressedText: CompressedTextState,
@@ -301,7 +286,7 @@ pub const TaggedChunkDataAction = union(ChunkType)
 
     Transparency: *TransparencyAction, // Only RGB
     Gamma: void, // Only value
-    PrimaryChrom: void, // TODO: I don't remember what it does
+    PrimaryChrom: *PrimaryChromAction,
     ColorSpace: void, // Only rendering intent
     ICCProfile: *ICCProfileAction,
 
@@ -357,7 +342,7 @@ pub const TaggedChunkDataStatePointer = union(ChunkType)
 
     Transparency: *TransparencyState,
     Gamma: void,
-    PrimaryChrom: *PrimaryChromState,
+    PrimaryChrom: *PrimaryChromAction,
     ColorSpace: void,
     ICCProfile: *ICCProfileState,
 
@@ -398,7 +383,7 @@ const TaggedNodeDataActionAndState = union(ChunkType)
 
     Transparency: ActionAndState(*TransparencyAction, *TransparencyState), // Only RGB
     Gamma: ActionAndState(void, void), // Only value
-    PrimaryChrom: ActionAndState(void, *PrimaryChromState), // TODO: I don't remember what it does
+    PrimaryChrom: ActionAndState(*PrimaryChromAction, *PrimaryChroms),
     ColorSpace: ActionAndState(void, void), // Only rendering intent
     ICCProfile: ActionAndState(*ICCProfileAction, *ICCProfileState),
 
@@ -451,6 +436,7 @@ pub const CompressedTextState = struct
 {
     bytesRead: u32 = 0,
     zlib: zlib.State,
+    buffer: std.ArrayListUnmanaged(u8) = .{},
 };
 
 pub const TextAction = enum
@@ -462,7 +448,7 @@ pub const TextAction = enum
 pub const TextState = struct
 {
     bytesRead: u32 = 0,
-    text: std.ArrayListUnmanaged(u8) = .{},
+    buffer: std.ArrayListUnmanaged(u8) = .{},
 };
 
 pub const ICCProfileAction = enum
@@ -482,25 +468,31 @@ pub const ICCProfileState = struct
 pub const TransparencyState = struct
 {
     bytesRead: u32,
+    stuff: union(TransparencyKind)
+    {
+        IndexedColor: void,
+        Grayscale: void,
+        TrueColor: RGB16,
+    },
 };
 
-pub const PrimaryChromState = struct
+pub const PrimaryChromAction = struct
 {
     value: u8,
 
-    pub fn vector(self: PrimaryChromState) u8
+    pub fn vector(self: PrimaryChromAction) u8
     {
         return self.value / 2;
     }
-    pub fn coord(self: PrimaryChromState) u8
+    pub fn coord(self: PrimaryChromAction) u8
     {
         return self.value % 2;
     }
-    pub fn done(self: PrimaryChromState) bool
+    pub fn done(self: PrimaryChromAction) bool
     {
         return self.value == 8;
     }
-    pub fn advance(self: *PrimaryChromState) void
+    pub fn advance(self: *PrimaryChromAction) void
     {
         self.value += 1;
     }
@@ -523,6 +515,8 @@ pub const PaletteState = struct
 {
     bytesRead: u32,
     rgbAction: RGBAction = .R,
+    // Needed to produce the color node.
+    color: RGB,
 };
 
 pub const RGBAction = enum
@@ -652,12 +646,12 @@ pub fn initChunkDataNode(context: *Context, chunkType: ChunkType) !void
         .ImageHeader =>
         {
             chunk.dataState = .{ .imageHeader = ImageHeaderAction.Initial };
-            chunk.object.data = .{ .imageHeader = std.mem.zeroes(ImageHeader) };
         },
         .Palette =>
         {
             chunk.dataState = .{ .palette = std.mem.zeroes(PaletteState) };
             chunk.object.data = .{ .palette = std.mem.zeroes(Palette) };
+
 
             if (chunk.object.dataByteLen % 3 != 0)
             {
@@ -676,6 +670,7 @@ pub fn initChunkDataNode(context: *Context, chunkType: ChunkType) !void
 
             const representableRange = @as(u32, 1) << @as(u5, @intCast(header.bitDepth));
             const numColors = chunk.object.dataByteLen / 3;
+            context.state.paletteLen = numColors;
             if (numColors > representableRange)
             {
                 return error.PaletteUnrepresentableWithBitDepth;
@@ -819,25 +814,11 @@ pub const DataNodeParserState = union
     plte: PaletteState, 
     none: void,
     transparency: TransparencyState,
-    primaryChrom: PrimaryChromState,
+    primaryChrom: PrimaryChromAction,
     iccProfile: ICCProfileState,
     text: TextState,
     compressedText: CompressedTextState,
     imageData: ImageDataState,
-};
-
-const ColorStateInitializer = struct
-{
-    context: *Context,
-    colors: *std.ArrayListUnmanaged(RGB),
-
-    pub fn execute(self: *const ColorStateInitializer) !void
-    {
-        // TODO: We're gonna have a memory leak if we don't move the list.
-        _ = try self.colors.addOne(self.context.allocator());
-
-        try self.context.level().setNodeType(.RGBColor);
-    }
 };
 
 fn readRgbComponentNode(
@@ -884,24 +865,15 @@ const PaletteBytesProcessor = struct
 {
     context: *Context,
     state: *PaletteState,
-    data: *Palette,
 
     pub fn each(self: *const PaletteBytesProcessor, byte: u8) !void
     {
         const action = &self.state.rgbAction;
 
-        try self.context.level().pushInit(ColorStateInitializer
-        {
-            .context = self.context,
-            .colors = &self.data.colors,
-        });
+        try self.context.level().pushNode(.RGBColor);
         defer self.context.level().pop();
 
-        const color = color:
-        {
-            const items = self.data.colors.items;
-            break :color &items[items.len - 1];
-        };
+        const color = &self.state.color;
         const readFully = try readRgbComponentNode(
             self.context,
             action,
@@ -910,8 +882,9 @@ const PaletteBytesProcessor = struct
         
         if (readFully)
         {
-            // TODO: Maybe complete with a separate color?
-            try self.context.level().completeNode();
+            try self.context.level().completeNodeWithValue(.{
+                .RGB = color.*,
+            });
         }
     }
 };
@@ -919,7 +892,6 @@ const PaletteBytesProcessor = struct
 const TransparencyBytesProcessor = struct
 {
     context: *Context,
-    alphaValues: *std.ArrayListUnmanaged(u8),
     allocator: std.mem.Allocator,
 
     pub fn each(self: *const TransparencyBytesProcessor, byte: u8) !void
@@ -927,8 +899,6 @@ const TransparencyBytesProcessor = struct
         // TODO: needs to be done BEFORE reading.
         try self.context.level().push();
         defer self.context.level().pop();
-
-        try self.alphaValues.append(self.allocator, byte);
 
         try self.context.level().completeNodeWithValue(.{
             .Number = byte,
@@ -1189,7 +1159,6 @@ fn parseImageData(context: *Context, state: *ImageDataState) !bool
 pub fn parseChunkData(context: *Context) !bool
 {
     const chunk = &context.state.chunk;
-    const data = &chunk.object.data;
 
     const activeActionAndState = getActiveChunkDataActionAndState(chunk);
 
@@ -1204,36 +1173,47 @@ pub fn parseChunkData(context: *Context) !bool
             });
             defer context.level().pop();
 
-            const ihdr = &data.imageHeader;
+            // We have to save that for error checking.
+            const ihdr = &context.state.imageHeader;
+
             switch (t.action.*)
             {
+                // The structure is the same on these and could be abstracted.
+                // 1. read
+                // 2. (optional) convert
+                // 3. save data for future validation
+                // 4. update the action
+                // 5. set the node value
+                // 6. do validation
                 .Width => 
                 {
                     const value = try utils.readPngU32Dimension(context.sequence());
 
                     ihdr.width = value;
+                    t.action.* = .Height;
+
                     try context.level().completeNodeWithValue(.{
                         .Number = value,
                     });
-
-                    t.action.* = .Height;
                 },
                 .Height =>
                 {
                     const value = try utils.readPngU32Dimension(context.sequence());
 
                     ihdr.height = value;
+                    t.action.* = .BitDepth;
+
                     try context.level().completeNodeWithValue(.{
                         .Number = value,
                     });
-
-                    t.action.* = .BitDepth;
                 },
                 .BitDepth =>
                 {
                     const value = try pipelines.removeFirst(context.sequence());
 
                     ihdr.bitDepth = value;
+                    t.action.* = .ColorType;
+
                     try context.level().completeNodeWithValue(.{
                         .Number = value,
                     });
@@ -1242,7 +1222,6 @@ pub fn parseChunkData(context: *Context) !bool
                     {
                         return error.InvalidBitDepth;
                     }
-                    t.action.* = .ColorType;
                 },
                 .ColorType =>
                 {
@@ -1250,6 +1229,9 @@ pub fn parseChunkData(context: *Context) !bool
 
                     const colorType = .{ .flags = value };
                     ihdr.colorType = colorType;
+
+                    t.action.* = .CompressionMethod;
+
                     try context.level().completeNodeWithValue(.{
                         .ColorType = colorType,
                     });
@@ -1262,7 +1244,6 @@ pub fn parseChunkData(context: *Context) !bool
                     {
                         return error.ColorTypeNotAllowedForBitDepth;
                     }
-                    t.action.* = .CompressionMethod;
                 },
                 .CompressionMethod =>
                 {
@@ -1270,6 +1251,9 @@ pub fn parseChunkData(context: *Context) !bool
 
                     const compressionMethod = value;
                     ihdr.compressionMethod = compressionMethod;
+
+                    t.action.* = .FilterMethod;
+
                     try context.level().completeNodeWithValue(.{
                         .CompressionMethod = compressionMethod,
                     });
@@ -1279,7 +1263,6 @@ pub fn parseChunkData(context: *Context) !bool
                         return error.InvalidCompressionMethod;
                     }
 
-                    t.action.* = .FilterMethod;
                 },
                 .FilterMethod =>
                 {
@@ -1287,6 +1270,9 @@ pub fn parseChunkData(context: *Context) !bool
 
                     const filterMethod = value;
                     ihdr.filterMethod = filterMethod;
+
+                    t.action.* = .InterlaceMethod;
+
                     try context.level().completeNodeWithValue(.{
                         .FilterMethod = filterMethod,
                     });
@@ -1295,8 +1281,6 @@ pub fn parseChunkData(context: *Context) !bool
                     {
                         return error.InvalidFilterMethod;
                     }
-
-                    t.action.* = .InterlaceMethod;
                 },
                 .InterlaceMethod =>
                 {
@@ -1304,6 +1288,7 @@ pub fn parseChunkData(context: *Context) !bool
 
                     const enumValue: InterlaceMethod = @enumFromInt(value);
                     ihdr.interlaceMethod = enumValue;
+
                     try context.level().completeNodeWithValue(.{
                         .InterlaceMethod = enumValue,
                     });
@@ -1313,7 +1298,6 @@ pub fn parseChunkData(context: *Context) !bool
                         .None, .Adam7 => {},
                         _ => return error.InvalidInterlaceMethod,
                     }
-                    context.state.imageHeader = ihdr.*;
                     return true;
                 },
             }
@@ -1321,25 +1305,17 @@ pub fn parseChunkData(context: *Context) !bool
         },
         .Palette => |t|
         {
-            const plteNode = &data.palette;
-
             const functor = PaletteBytesProcessor
             {
                 .context = context,
                 .state = t.state,
-                .data = plteNode,
             };
 
+            // TODO: Remove bytesRead (update the sequence prior instead).
             const done = try utils.removeAndProcessNextByte(
                 context,
                 &t.state.bytesRead,
                 functor);
-
-            if (done)
-            {
-                // This can be computed prior though.
-                context.state.paletteLen = @intCast(plteNode.colors.items.len);
-            }
 
             return done;
         },
@@ -1370,38 +1346,30 @@ pub fn parseChunkData(context: *Context) !bool
         .Transparency => |*t|
         {
             // TODO: Figure out how the nodes should be.
-            switch (chunk.object.data.transparency)
+            switch (t.state.stuff)
             {
-                .paletteEntryAlphaValues => |*alphaValues|
+                .IndexedColor =>
                 {
                     const bytesRead = &t.state.bytesRead;
                     const functor = TransparencyBytesProcessor
                     {
                         .context = context,
-                        .alphaValues = alphaValues,
                         .allocator = context.allocator(),
                     };
 
-                    // const result = try utils.removeAndProcessAsManyBytesAsAvailable(context, bytesRead, functor);
                     const done = try utils.removeAndProcessNextByte(context, bytesRead, functor);
                     return done;
                 },
-                .gray => |*gray|
+                .Grayscale =>
                 {
-                    // Should this have a type?
-                    try context.level().push();
-                    defer context.level().pop();
-
                     const value = try pipelines.readNetworkUnsigned(context.sequence(), u16);
-
-                    gray.* = value;
                     try context.level().completeNodeWithValue(.{
                         .Number = value,
                     });
 
                     return true;
                 },
-                .rgb => |*rgb|
+                .TrueColor => |*rgb|
                 {
                     try context.level().pushNode(.RGBColor);
                     defer context.level().pop();
@@ -1426,7 +1394,9 @@ pub fn parseChunkData(context: *Context) !bool
                     }
                     else
                     {
-                        try context.level().completeNode();
+                        try context.level().completeNodeWithValue(.{
+                            .RGB16 = rgb,
+                        });
                         return true;
                     }
                 },
@@ -1434,9 +1404,10 @@ pub fn parseChunkData(context: *Context) !bool
         },
         .Gamma =>
         {
-            // The spec doesn't say anything about this value being limited.
+            // The spec doesn't say anything about this value being limited,
+            // which is why the regular "read unsigned" function is used, and not the
+            // specialized png one.
             const gamma = try pipelines.readNetworkUnsigned(context.sequence(), u32);
-            data.gamma = gamma;
 
             // Completes the node on the level above.
             try context.level().completeNodeWithValue(.{
@@ -1447,26 +1418,26 @@ pub fn parseChunkData(context: *Context) !bool
         },
         .PrimaryChrom => |t|
         {
-            // TODO: What is up with this one?
             try context.level().pushNode(.{
-                .PrimaryChrom = t.state.*,
+                .PrimaryChrom = t.action.*,
             });
             defer context.level().pop();
 
             const value = try pipelines.readNetworkUnsigned(context.sequence(), u32);
 
-            const vector = t.state.vector();
-            const index = t.state.coord();
-            const targetPointer = &data.primaryChroms.values[vector].values[index];
+            // This is probably not needed. We probably don't want to save this.
+            const vector = t.action.vector();
+            const index = t.action.coord();
+            const targetPointer = &t.state.values[vector].values[index];
             targetPointer.* = value;
+
+            t.action.advance();
 
             try context.level().completeNodeWithValue(.{
                 .U32 = value,
             });
 
-            t.state.advance();
-
-            const done = t.state.done();
+            const done = t.action.done();
             return done;
         },
         .ColorSpace =>
@@ -1475,8 +1446,8 @@ pub fn parseChunkData(context: *Context) !bool
             defer context.level().pop();
 
             const value = try pipelines.removeFirst(context.sequence());
+
             const e: RenderingIntent = @enumFromInt(value);
-            data.renderingIntent = e;
             try context.level().completeNodeWithValue(.{
                 .RenderingIntent = e,
             });
@@ -1489,24 +1460,20 @@ pub fn parseChunkData(context: *Context) !bool
         },
         .ICCProfile => |t|
         {
-            const node = &data.iccProfile;
-
             switch (t.action.*)
             {
                 .ProfileName =>
                 {
                     const maxNameLen = 80;
-                    try utils.readNullTerminatedText(context, &node.name, maxNameLen);
+                    const name = &t.state.bytes;
+                    try utils.readNullTerminatedText(context, name, maxNameLen);
 
-                    // TODO:
-                    // We don't want to store the value in the node, since it's not essential.
-                    // Right?
-                    // If that's needed, we'll have to replicate that functionality outside the parser.
+                    t.action.* = .CompressionMethod;
+
                     try context.level().completeNodeWithValue(.{
-                        .OwnedString = common.move(&node.name),
+                        .OwnedString = common.move(name),
                     });
                     
-                    t.action.* = .CompressionMethod;
                     return false;
                 },
                 .CompressionMethod =>
@@ -1524,14 +1491,15 @@ pub fn parseChunkData(context: *Context) !bool
                 },
                 .CompressedData =>
                 {
-                    const isDone = try utils.readZlibData(context, &t.state.zlib, &node.decompressedProfile);
+                    const decompressedBuffer = &t.state.bytes;
+                    const isDone = try utils.readZlibData(context, &t.state.zlib, decompressedBuffer);
                     // TODO:
                     // Make higher level nodes that represent structure in the decoded buffer.
                     // Currently since it's a string it's easy enough.
                     if (isDone)
                     {
                         try context.level().completeNodeWithValue(.{
-                            .OwnedString = common.move(&node.decompressedProfile),
+                            .OwnedString = common.move(decompressedBuffer),
                         });
                     }
                     return isDone;
@@ -1540,7 +1508,6 @@ pub fn parseChunkData(context: *Context) !bool
         },
         .Text => |t|
         {
-            const node = &data.text;
             try context.level().pushNode(.{
                 .TextAction = t.action.*,
             });
@@ -1550,20 +1517,25 @@ pub fn parseChunkData(context: *Context) !bool
             {
                 .Keyword =>
                 {
-                    try utils.readKeywordText(context, &node.keyword, &t.state.bytesRead);
-                    try context.level().completeNodeWithValue(.{
-                        .OwnedString = common.move(&node.keyword),
-                    });
+                    const keyword = &t.state.buffer;
+                    try utils.readKeywordText(context, keyword, &t.state.bytesRead);
 
                     t.action.* = .Text;
+
+                    try context.level().completeNodeWithValue(.{
+                        .OwnedString = common.move(keyword),
+                    });
+
                     return false;
                 },
                 .Text =>
                 {
                     const bytesRead = &t.state.bytesRead;
+                    const buffer = &t.state.buffer;
+
                     const functor = TextBytesProcessor
                     {
-                        .text = &node.text,
+                        .text = buffer,
                         .allocator = context.allocator(),
                     };
 
@@ -1571,7 +1543,7 @@ pub fn parseChunkData(context: *Context) !bool
                     if (done)
                     {
                         try context.level().completeNodeWithValue(.{
-                            .OwnedString = common.move(&node.text),
+                            .OwnedString = common.move(buffer),
                         });
                     }
                     return done;
@@ -1580,8 +1552,6 @@ pub fn parseChunkData(context: *Context) !bool
         },
         .CompressedText => |t|
         {
-            const node = &data.text;
-
             try context.level().pushNode(.{
                 .CompressedText = t.action.*,
             });
@@ -1591,33 +1561,39 @@ pub fn parseChunkData(context: *Context) !bool
             {
                 .Keyword =>
                 {
-                    try utils.readKeywordText(context, &node.keyword, &t.state.bytesRead);
-                    try context.level().completeNodeWithValue(.{
-                        .OwnedString = common.move(&node.keyword),
-                    });
+                    const keyword = &t.state.buffer;
+                    try utils.readKeywordText(context, keyword, &t.state.bytesRead);
+
                     t.action.* = .CompressionMethod;
+
+                    try context.level().completeNodeWithValue(.{
+                        .OwnedString = common.move(keyword),
+                    });
                     return false;
                 },
                 .CompressionMethod =>
                 {
                     const value = try pipelines.removeFirst(context.sequence());
+                    t.action.* = .Text;
+
                     try context.level().completeNodeWithValue(.{
                         .CompressionMethod = value,
                     });
+
                     if (value != 0)
                     {
                         return error.UnsupportedCompressionMethod;
                     }
-                    t.action.* = .Text;
                     return false;
                 },
                 .Text =>
                 {
-                    const isDone = try utils.readZlibData(context, &t.state.zlib, &node.text);
+                    const buffer = &t.state.buffer;
+                    const isDone = try utils.readZlibData(context, &t.state.zlib, buffer);
                     if (isDone)
                     {
                         try context.level().completeNodeWithValue(.{
-                            .OwnedString = common.move(&node.text),
+                            .OwnedString = common.move(buffer),
                         });
                     }
                     return isDone;

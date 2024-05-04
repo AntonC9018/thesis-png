@@ -65,6 +65,8 @@ pub const NodeData = union(enum)
     U32: u32,
     Bool: bool,
     ChunkType: parser.png.ChunkType,
+    RGB: chunks.RGB,
+    RGB16: chunks.RGB16(u16),
 
     ColorType: chunks.ColorType,
     CompressionMethod: chunks.CompressionMethod,

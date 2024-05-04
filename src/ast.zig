@@ -152,7 +152,7 @@ pub const AST = struct
         const node = &self.syntaxNodes.items[nodeIndex];
         node.span.endInclusive = end:
         {
-            const comparison = node.span.start.compareTo(params.endExclusive);
+            const comparison = params.endExclusive.compareTo(node.span.start);
             std.debug.assert(comparison >= 0);
 
             if (comparison == 0)

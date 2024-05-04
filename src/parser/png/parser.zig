@@ -205,7 +205,7 @@ const TopLevelInitializer = struct
 
         switch (action)
         {
-            .Signature => unreachable,
+            .Signature => {},
             .Chunk =>
             {
                 self.context.state.chunk = createChunkParserState();
@@ -246,21 +246,6 @@ pub fn parseNextItem(context: *Context) !bool
     return false;
 }
 
-pub fn initChunkItem(
-    context: *Context,
-    key: ChunkAction) !void
-{
-    const chunk = &context.state.chunk;
-    switch (key)
-    {
-        else => {},
-        .Data =>
-        {
-            try chunks.initChunkDataNode(context, chunk.object.type);
-        },
-    }
-}
-
 const ChunkItemNodeInitializer = struct
 {
     context: *Context,
@@ -268,27 +253,31 @@ const ChunkItemNodeInitializer = struct
     pub fn execute(self: ChunkItemNodeInitializer) !void
     {
         const state = self.context.state.chunk;
-        const isImageData = state.action == .Data and state.object.type == .ImageData;
 
-        if (isImageData)
+        try self.context.level().setNodeType(.{
+            .Chunk = state.action,
+        });
+
+        switch (state.action)
         {
-            const dataId = &self.context.state.imageData.dataId;
-            if (dataId.* != common.ast.invalidNodeDataId)
+            .Data =>
             {
-                try self.context.level().setSemanticParent(dataId.*);
-                return;
-            }
+                const chunkType = state.object.type;
+                try chunks.initChunkDataNode(self.context, chunkType);
 
-            try self.context.level().setNodeType(.{
-                .Chunk = state.action,
-            });
-            dataId.* = self.context.level().getNodeId();
-        }
-        else
-        {
-            try self.context.level().setNodeType(.{
-                .Chunk = state.action,
-            });
+                if (chunkType == .ImageData)
+                {
+                    const dataId = &self.context.state.imageData.dataId;
+                    if (dataId.* != common.ast.invalidNodeDataId)
+                    {
+                        try self.context.level().setSemanticParent(dataId.*);
+                        return;
+                    }
+
+                    dataId.* = self.context.level().getNodeId();
+                }
+            },
+            else => {},
         }
     }
 };

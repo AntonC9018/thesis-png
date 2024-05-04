@@ -48,6 +48,8 @@ fn parseIntoTree(allocator: std.mem.Allocator) !ast.AST
 
         innerLoop: while (true)
         {
+            defer context.level().assertPopped();
+
             const isDone = png.parseNextItem(&context) catch |err|
             {
                 if (err != error.NotEnoughBytes)
