@@ -41,7 +41,7 @@ pub const State = struct
     isData: bool = false,
     paletteLen: ?u32 = null,
 
-    imageData: ImageData = .{},
+    imageData: ImageDataState = .{},
 };
 
 pub fn isParserStateTerminal(context: *Context) bool 
@@ -55,6 +55,12 @@ pub const Context = struct
 {
     common: @import("../shared/CommonContext.zig"),
     state: *State,
+
+    // Indicates that the sequence slice currently contained in sequence()
+    // is the last one for this chunk, meaning the functions that e.g. skip all bytes
+    // in the chunk, or read all bytes in the chunk should look at this bool
+    // to determine if they're completely done after having processed all of the sequence.
+    isLastChunkSequenceSlice: bool = undefined,
 
     pub fn level(self: *Context) levels.LevelContext(Context)
     {
@@ -123,7 +129,7 @@ pub const CarryOverSegment = struct
 };
 
 // Of course, this will need to be reworked once I do the tree range optimizations
-pub const ImageData = struct
+pub const ImageDataState = struct
 {
     // Just read the raw bytes for now
     bytes: std.ArrayListUnmanaged(u8) = .{},
@@ -142,6 +148,7 @@ pub const Chunk = struct
 {
     dataByteLen: u32,
     type: chunks.ChunkType,
+    isKnownType: bool,
     crc: CyclicRedundancyCheck,
 };
 
@@ -150,6 +157,7 @@ pub const ChunkState = struct
     action: ChunkAction = .Length,
     object: Chunk,
     dataState: chunks.ChunkDataState,
+    bytesRead: u32,
 };
 
 pub fn move(t: anytype) @TypeOf(t.*)

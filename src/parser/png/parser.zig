@@ -282,6 +282,56 @@ const ChunkItemNodeInitializer = struct
     }
 };
 
+const SliceHelper = struct
+{
+    // NOTE:
+    // Could generalize it a little (take the sizes as parameters,
+    // write to the context through an interface, etc),
+    // but there's no point currently.
+    context: *Context,
+    initialSequencePtr: *pipelines.Sequence,
+    sequence: pipelines.Sequence,
+    initialLen: u32,
+    isLast: bool,
+
+    fn create(context: *Context) SliceHelper
+    {
+        const chunk = &context.state.chunk;
+        const s = context.sequence();
+        const allLen = s.len();
+        const chunkLen = chunk.object.dataByteLen;
+        const leftToRead = chunkLen - chunk.bytesRead;
+        const readLen = @min(leftToRead, allLen);
+        const isLastChunkDataRead = readLen == allLen;
+        const newSequence = s.sliceToExclusive(s.getPosition(readLen));
+        return .{
+            .context = context,
+            .sequence = newSequence,
+            .initialLen = readLen,
+            .isLast = isLastChunkDataRead,
+            .initialSequencePtr = s,
+        };
+    }
+
+    fn apply(self: *SliceHelper) void
+    {
+        self.context.common.sequence = &self.sequence;
+        self.context.isLastChunkSequenceSlice = self.isLast;
+    }
+
+    fn unapply(self: *SliceHelper) void
+    {
+        const s = self.initialSequencePtr.*;
+        s.* = s.sliceFrom(self.sequence.start());
+        self.common.sequence = s;
+
+        const chunk = &self.context.state.chunk;
+        chunk.bytesRead -= self.sequence.len() - self.initialLen;
+
+        self.context.isLastChunkSequenceSlice = undefined;
+    }
+};
+
 pub fn parseChunkItem(context: *Context) !bool
 {
     const chunk = &context.state.chunk;
@@ -353,6 +403,10 @@ pub fn parseChunkItem(context: *Context) !bool
         },
         .Data =>
         {
+            var sliceHelper = SliceHelper.create(context);
+            sliceHelper.apply();
+            defer sliceHelper.unapply();
+
             const done = try chunks.parseChunkData(context);
             if (done)
             {

@@ -5,12 +5,6 @@ const zlib = common.zlib;
 const utils = common.utils;
 const Context = common.Context;
 
-// TODO: Remove this completely. Move this logic to a separate module if necessary.
-pub const ChunkData = union
-{ 
-    none: void,
-};
-
 pub const TextData = struct
 {
     keyword: std.ArrayListUnmanaged(u8) = .{},
@@ -421,8 +415,6 @@ const TaggedNodeDataActionAndState = union(ChunkType)
 
 pub const ImageDataState = struct
 {
-    // TODO: Unite this logic, making the sequence automatically cut.
-    bytesRead: u32 = 0,
 };
 
 pub const CompressedTextAction = enum
@@ -434,7 +426,6 @@ pub const CompressedTextAction = enum
 
 pub const CompressedTextState = struct
 {
-    bytesRead: u32 = 0,
     zlib: zlib.State,
     buffer: std.ArrayListUnmanaged(u8) = .{},
 };
@@ -447,7 +438,6 @@ pub const TextAction = enum
 
 pub const TextState = struct
 {
-    bytesRead: u32 = 0,
     buffer: std.ArrayListUnmanaged(u8) = .{},
 };
 
@@ -467,7 +457,6 @@ pub const ICCProfileState = struct
 
 pub const TransparencyState = struct
 {
-    bytesRead: u32,
     stuff: union(TransparencyKind)
     {
         IndexedColor: void,
@@ -513,7 +502,6 @@ pub const ImageHeaderAction = enum(u32)
 
 pub const PaletteState = struct
 {
-    bytesRead: u32,
     rgbAction: RGBAction = .R,
     // Needed to produce the color node.
     color: RGB,
@@ -999,17 +987,11 @@ pub fn getActiveChunkDataState(state: *common.ChunkState) TaggedChunkDataStatePo
 
 const ast = common.ast;
 
-fn parseImageData(context: *Context, state: *ImageDataState) !bool
+fn parseImageData(context: *Context) !bool
 {
     const imageData = &context.state.imageData;
-    const bytesRead = &state.bytesRead;
-    const bytesLeftToRead = context.state.chunk.object.dataByteLen - bytesRead.*;
 
     var sequence = context.sequence().*;
-    const newLen = @min(sequence.len(), bytesLeftToRead);
-    const isLastLoopForChunk = newLen == bytesLeftToRead;
-    sequence = sequence.sliceToExclusive(sequence.getPosition(newLen));
-
     const carryOverData = &imageData.carryOverData;
     const usesCarryOverSegment = carryOverData.isActive();
 
@@ -1092,8 +1074,6 @@ fn parseImageData(context: *Context, state: *ImageDataState) !bool
 
         if (maybeNewStart) |newStart|
         {
-            const lenChange = newLen - sequence.len();
-            bytesRead.* += @intCast(lenChange);
             context.sequence().* = context.sequence().sliceFrom(newStart);
         }
     }
@@ -1122,12 +1102,12 @@ fn parseImageData(context: *Context, state: *ImageDataState) !bool
                 return err;
             }
 
-            if (!isLastLoopForChunk)
+            if (!context.isLastChunkSequenceSlice)
             {
                 return error.NotEnoughBytes;
             }
 
-            // Not implemented yet.
+            // Double carry overs are not implemented yet.
             std.debug.assert(!usesCarryOverSegment);
 
 
@@ -1153,14 +1133,24 @@ fn parseImageData(context: *Context, state: *ImageDataState) !bool
 
             return true;
         };
-    return isLastLoopForChunk and sequence.len() == 0;
+
+    return context.isLastChunkSequenceSlice and sequence.len() == 0;
 }
 
 pub fn parseChunkData(context: *Context) !bool
 {
-    const chunk = &context.state.chunk;
-
-    const activeActionAndState = getActiveChunkDataActionAndState(chunk);
+    const activeActionAndState = activeActionAndState:
+    {
+        const chunk = &context.state.chunk;
+        if (!chunk.object.isKnownType)
+        {
+            const s = context.sequence();
+            s.* = s.sliceFrom(s.end());
+            return context.isLastChunkSequenceSlice;
+        }
+        const activeActionAndState = getActiveChunkDataActionAndState(chunk);
+        break :activeActionAndState activeActionAndState;
+    };
 
     switch (activeActionAndState)
     {
@@ -1311,17 +1301,12 @@ pub fn parseChunkData(context: *Context) !bool
                 .state = t.state,
             };
 
-            // TODO: Remove bytesRead (update the sequence prior instead).
-            const done = try utils.removeAndProcessNextByte(
-                context,
-                &t.state.bytesRead,
-                functor);
-
+            const done = try utils.removeAndProcessNextByte(context, functor);
             return done;
         },
         .ImageEnd =>
         {
-            std.debug.assert(chunk.object.dataByteLen == 0);
+            std.debug.assert(context.sequence().len() == 0);
             return true;
         },
         .ImageData => |t|
@@ -1350,14 +1335,13 @@ pub fn parseChunkData(context: *Context) !bool
             {
                 .IndexedColor =>
                 {
-                    const bytesRead = &t.state.bytesRead;
                     const functor = TransparencyBytesProcessor
                     {
                         .context = context,
                         .allocator = context.allocator(),
                     };
 
-                    const done = try utils.removeAndProcessNextByte(context, bytesRead, functor);
+                    const done = try utils.removeAndProcessNextByte(context, functor);
                     return done;
                 },
                 .Grayscale =>
@@ -1518,7 +1502,7 @@ pub fn parseChunkData(context: *Context) !bool
                 .Keyword =>
                 {
                     const keyword = &t.state.buffer;
-                    try utils.readKeywordText(context, keyword, &t.state.bytesRead);
+                    try utils.readKeywordText(context, keyword);
 
                     t.action.* = .Text;
 
@@ -1530,7 +1514,6 @@ pub fn parseChunkData(context: *Context) !bool
                 },
                 .Text =>
                 {
-                    const bytesRead = &t.state.bytesRead;
                     const buffer = &t.state.buffer;
 
                     const functor = TextBytesProcessor
@@ -1539,7 +1522,7 @@ pub fn parseChunkData(context: *Context) !bool
                         .allocator = context.allocator(),
                     };
 
-                    const done = try utils.removeAndProcessAsManyBytesAsAvailable(context, bytesRead, functor);
+                    const done = try utils.removeAndProcessAsManyBytesAsAvailable(context, functor);
                     if (done)
                     {
                         try context.level().completeNodeWithValue(.{
@@ -1562,7 +1545,7 @@ pub fn parseChunkData(context: *Context) !bool
                 .Keyword =>
                 {
                     const keyword = &t.state.buffer;
-                    try utils.readKeywordText(context, keyword, &t.state.bytesRead);
+                    try utils.readKeywordText(context, keyword);
 
                     t.action.* = .CompressionMethod;
 
@@ -1601,7 +1584,6 @@ pub fn parseChunkData(context: *Context) !bool
             }
 
         },
-        // Let's just skip for now.
-        else => return try utils.skipBytes(context, chunk),
+        else => unreachable,
     }
 }

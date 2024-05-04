@@ -192,67 +192,52 @@ pub fn readZlibData(
 
 pub fn removeAndProcessNextByte(
     context: *Context,
-    bytesRead: *u32,
     functor: anytype) !bool
 {
-    const totalBytes = context.state.chunk.object.dataByteLen;
-    std.debug.assert(bytesRead.* <= totalBytes);
-
-    if (bytesRead.* == totalBytes)
+    if (context.sequence().len() == 0)
     {
-        return true;
+        std.debug.assert(!context.isLastChunkSequenceSlice);
+        return error.NotEnoughBytes;
     }
 
     const front = try pipelines.removeFirst(context.sequence());
-    bytesRead.* += 1;
 
     try functor.each(front);
 
-    return (bytesRead.* == totalBytes);
+    return context.sequence().len() == 0 and context.isLastChunkSequenceSlice;
 }
 
 pub fn removeAndProcessAsManyBytesAsAvailable(
     context: *Context,
-    bytesRead: *u32,
     // Must have a function each that takes in the byte.
     // Can have an optional function init that takes the count.
     functor: anytype) !bool
 {
-    const totalBytes = context.state.chunk.object.dataByteLen;
-    std.debug.assert(bytesRead.* <= totalBytes);
-
-    if (bytesRead.* == totalBytes)
+    const sequenceLen = context.sequence().len();
+    if (sequenceLen == 0)
     {
-        return true;
-    }
-
-    const sequenceLength = context.sequence().len();
-    if (sequenceLength == 0)
-    {
+        std.debug.assert(!context.isLastChunkSequenceSlice);
         return error.NotEnoughBytes;
     }
 
-    const maxBytesToRead = totalBytes - bytesRead.*;
-    const bytesThatWillBeRead: u32 = @intCast(@min(maxBytesToRead, sequenceLength));
-    const readPosition = context.sequence().getPosition(bytesThatWillBeRead);
-    const s = context.sequence().disect(readPosition);
+    const bytesThatWillBeRead: u32 = sequenceLen;
 
     if (@hasDecl(@TypeOf(functor), "initCount"))
     {
         try functor.initCount(bytesThatWillBeRead);
     }
 
-    bytesRead.* += bytesThatWillBeRead;
-    context.sequence().* = s.right;
+    const sequence = context.sequence().*;
+    context.sequence().* = sequence.sliceFrom(sequence.end());
 
     if (@hasDecl(@TypeOf(functor), "sequence"))
     {
-        try functor.sequence(s.left);
+        try functor.sequence(sequence);
     }
 
     if (@hasDecl(@TypeOf(functor), "each"))
     {
-        var iter = pipelines.SegmentIterator.create(&s.left).?;
+        var iter = pipelines.SegmentIterator.create(&sequence).?;
         while (true)
         {
             const slice = iter.current();
@@ -267,7 +252,7 @@ pub fn removeAndProcessAsManyBytesAsAvailable(
         }
     }
 
-    return (bytesRead.* == totalBytes);
+    return context.isLastChunkSequenceSlice;
 }
 
 pub fn readPngU32(sequence: *pipelines.Sequence) !u32
@@ -320,11 +305,8 @@ pub fn skipBytes(context: *Context, chunk: *common.ChunkState) !bool
 
 pub fn readKeywordText(
     context: *Context,
-    keyword: *std.ArrayListUnmanaged(u8),
-    bytesRead: *u32) !void
+    keyword: *std.ArrayListUnmanaged(u8)) !void
 {
     const maxLen = 80;
     try readNullTerminatedText(context, keyword, maxLen);
-    // TODO: This is kind of dumb. It should be kept track of at a higher level.
-    bytesRead.* = @intCast(keyword.items.len + 1);
 }
