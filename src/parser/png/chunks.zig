@@ -289,7 +289,7 @@ pub const TaggedChunkDataAction = union(ChunkType)
 
     // TODO:
     Background: void,
-    PhysicalPixelDimensions: void,
+    PhysicalPixelDimensions: *PhysicalPixedDimensionsAction,
     SignificantBits: void,
     SuggestedPalette: void,
     PaletteHistogram: void,
@@ -354,6 +354,19 @@ pub fn ActionAndState(Action: type, State: type) type
     };
 }
 
+pub const PhysicalPixedDimensionsAction = enum
+{
+    PixelPerUnitX,
+    PixelPerUnitY,
+    UnitSpecifier,
+};
+
+pub const PixelUnitSpecifier = enum(u8)
+{
+    Unknown = 0,
+    Meter = 1,
+};
+
 const TransparencyAction = union(enum)
 {
     RGB: RGBAction,
@@ -380,7 +393,7 @@ const TaggedNodeDataActionAndState = union(ChunkType)
 
     // TODO:
     Background: ActionAndState(void, void),
-    PhysicalPixelDimensions: ActionAndState(void, void),
+    PhysicalPixelDimensions: ActionAndState(*PhysicalPixedDimensionsAction, void),
     SignificantBits: ActionAndState(void, void),
     SuggestedPalette: ActionAndState(void, void),
     PaletteHistogram: ActionAndState(void, void),
@@ -1616,6 +1629,55 @@ pub fn parseChunkData(context: *Context) !bool
             }
 
         },
-        else => unreachable,
+        .PhysicalPixelDimensions => |t|
+        {
+            try context.level().pushNode(.{
+                .PhysicalPixelDimensions = t.action.*,
+            });
+            defer context.level().pop();
+
+            switch (t.action.*)
+            {
+                .PixelPerUnitX =>
+                {
+                    const value = try pipelines.readNetworkUnsigned(context.sequence(), u32);
+                    try context.level().completeNodeWithValue(.{
+                        .Number = value,
+                    });
+                    t.action.* = .PixelPerUnitY;
+                    return false;
+                },
+                .PixelPerUnitY =>
+                {
+                    const value = try pipelines.readNetworkUnsigned(context.sequence(), u32);
+                    try context.level().completeNodeWithValue(.{
+                        .Number = value,
+                    });
+                    t.action.* = .UnitSpecifier;
+                    return false;
+                },
+                .UnitSpecifier =>
+                {
+                    const value = try pipelines.removeFirst(context.sequence());
+                    if (value != 0 and value != 1)
+                    {
+                        try context.level().completeNodeWithValue(.{
+                            .Number = value,
+                        });
+                        return error.UnkownUnitSpecifier;
+                    }
+                    const unitSpecifier: PixelUnitSpecifier = @enumFromInt(value);
+
+                    try context.level().completeNodeWithValue(.{
+                        .PixelUnitSpecifier = unitSpecifier,
+                    });
+                    return true;
+                },
+            }
+        },
+        else => 
+        {
+            unreachable;
+        },
     }
 }

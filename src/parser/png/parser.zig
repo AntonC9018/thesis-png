@@ -228,7 +228,6 @@ const ChunkItemNodeInitializer = struct
                     if (dataId.* != common.ast.invalidNodeDataId)
                     {
                         try self.context.level().setSemanticParent(dataId.*);
-                        return;
                     }
 
                     dataId.* = self.context.level().getNodeId();

@@ -158,6 +158,8 @@ pub fn LevelContext(Context: type) type
             const node = &nodeContext_.syntaxNodeStack.items[index];
             const position: ast.Position = self.context.getStartBytePosition();
 
+            std.debug.print("Completing node with type {}", .{node.nodeType});
+
             try nodeContext_.operations.completeSyntaxNode(.{
                 .nodeType = node.nodeType,
                 .endExclusive = position,
@@ -171,10 +173,14 @@ pub fn LevelContext(Context: type) type
             const nodeContext_ = self.nodeContext();
             const nodes = &nodeContext_.syntaxNodeStack;
             const levelIndex = self.currentLevel();
+
+            if (levelIndex >= nodes.items.len)
+            {
+                std.debug.print("Completing already completed node (this is fine) \n", .{});
+                return;
+            }
+
             const node = &nodes.items[levelIndex];
-
-            std.debug.print("Completing Node {} \n", .{ node.nodeType });
-
             if (levelIndex == nodes.items.len - 1)
             {
                 try self.completeNodeAtWithoutRemoving(levelIndex);
@@ -277,31 +283,38 @@ pub fn LevelContext(Context: type) type
             std.mem.Allocator.Error!void
         {
             const nodeContext_ = self.nodeContext();
-            const levelIndex = self.currentLevel();
-            const firstChildLevelIndex = levelIndex + 1;
             const nodes = &nodeContext_.syntaxNodeStack.items;
-            const levelCount = nodes.len;
-            const nodeCountAfterThis = levelCount - firstChildLevelIndex;
+            const firstChildIndex = self.current().*;
+            const poppedNodes = nodes.*[firstChildIndex .. nodes.len];
 
             try targetContext.hierarchy.resize(
                 self.context.allocator(),
-                nodeCountAfterThis);
+                poppedNodes.len);
 
+            const hierarchy = targetContext.hierarchy.items;
+            for (hierarchy, poppedNodes) |*mem, *popped|
             {
-                const hierarchy = targetContext.hierarchy.items;
-                for (0 .. nodeCountAfterThis) |i|
-                {
-                    const nodeIndex = firstChildLevelIndex + i;
-                    hierarchy[i] = nodes.*[nodeIndex];
-
-                    try self.completeNodeAtWithoutRemoving(nodeIndex);
-                }
-
+                mem.* = popped.*;
             }
+
+            try self.completeHierarchy();
+        }
+
+        pub fn completeHierarchy(self: Self) !void
+        {
+            const nodeContext_ = self.nodeContext();
+            const nodes = &nodeContext_.syntaxNodeStack.items;
+            const firstChildIndex = self.current().*;
+            const poppedNodes = nodes.*[firstChildIndex .. nodes.len];
+
+            for (0 .. poppedNodes.len) |i|
             {
-                // Pop all of the child nodes.
-                nodes.len = firstChildLevelIndex;
+                const nodeIndex = firstChildIndex + i;
+                try self.completeNodeAtWithoutRemoving(nodeIndex);
             }
+
+            // Pop all of the child nodes.
+            nodes.len = firstChildIndex;
         }
 
         pub fn applySemanticContextForHierarchy(

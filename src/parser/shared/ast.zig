@@ -24,6 +24,8 @@ pub const NodeType = union(enum)
     TextAction: chunks.TextAction,
     CompressedText: chunks.CompressedTextAction,
     RenderingIntent: void,
+    PhysicalPixelDimensions: chunks.PhysicalPixedDimensionsAction,
+
 
     Zlib: zlib.Action,
     Deflate: deflate.Action,
@@ -73,6 +75,7 @@ pub const NodeData = union(enum)
     FilterMethod: chunks.FilterMethod,
     InterlaceMethod: chunks.InterlaceMethod,
     RenderingIntent: chunks.RenderingIntent,
+    PixelUnitSpecifier: chunks.PixelUnitSpecifier,
 
     CompressionMethodAndFlags: zlib.CompressionMethodAndFlags,
     ZlibFlags: zlib.Flags,

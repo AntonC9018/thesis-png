@@ -38,9 +38,14 @@ fn parseIntoTree(allocator: std.mem.Allocator) !ast.AST
         },
         .state = &parserState,
     };
+    defer
+    {
+        // Complete all of the nodes in case the tree is returned while there's an error.
+    }
 
     outerLoop: while (true)
     {
+        std.debug.print("Reading sequence\n", .{});
         const readResult = reader.read() catch unreachable;
 
         var sequence = readResult.sequence;
@@ -79,11 +84,14 @@ fn parseIntoTree(allocator: std.mem.Allocator) !ast.AST
                 std.debug.print("Ended in a non-terminal state.\n", .{});
             }
 
-            return error.InvalidFile;
+            break :outerLoop;
         }
 
         try reader.advance(sequence.start());
     }
+
+    try context.level().completeHierarchy();
+    context.level().assertPopped();
 
     return tree;
 }
@@ -95,11 +103,17 @@ pub fn main() !void
     const allocator = std.heap.page_allocator;
     var tree = try parseIntoTree(allocator);
 
+    var currentPosition: raylib.Vector2 = .{ .x = 10, .y = 30 + 10 };
+
     raylib.SetConfigFlags(.{ .FLAG_WINDOW_RESIZABLE = true });
-    raylib.InitWindow(800, 800, "hello world!");
+    raylib.InitWindow(1200, 1200, "hello world!");
     raylib.SetTargetFPS(60);
 
     defer raylib.CloseWindow();
+
+    const fontSize = 20;
+    const lineHeight = 30;
+    const fontTtf = raylib.LoadFontEx("resources/monofonto.otf", fontSize, null, 250);
 
     while (!raylib.WindowShouldClose())
     {
@@ -107,28 +121,69 @@ pub fn main() !void
         defer raylib.EndDrawing();
         
         raylib.ClearBackground(raylib.BLACK);
-        raylib.DrawFPS(10, 10);
+        // raylib.DrawFPS(10, 10);
 
-        const fontSize = 20;
-        const lineHeight = 30;
+        {
+            const scrollSpeed: f32 = 40;
+            currentPosition.y += raylib.GetMouseWheelMove() * scrollSpeed;
+        }
+        {
+            const moveSpeed: f32 = 20;
+            const helper = .{
+                .{
+                    .key = .KEY_LEFT,
+                    .value = .{ .x = 1, .y = 0 },
+                },
+                .{
+                    .key = .KEY_RIGHT,
+                    .value = .{ .x = -1, .y = 0 },
+                },
+                .{
+                    .key = .KEY_UP,
+                    .value = .{ .x = 0, .y = 1 },
+                },
+                .{
+                    .key = .KEY_DOWN,
+                    .value = .{ .x = 0, .y = -1 },
+                },
+            };
+            inline for (helper) |h|
+            {
+                if (raylib.IsKeyDown(h.key))
+                {
+                    const vector: raylib.Vector2 = h.value;
+                    const translation = vector.scale(moveSpeed);
+                    currentPosition = currentPosition.add(translation);
+                }
+            }
+        }
+
         const Context = struct
         {
-            currentPosition: raylib.Vector2i,
+            currentPosition: raylib.Vector2,
             tree: *ast.AST,
             allocator: std.mem.Allocator,
+            font: raylib.Font,
 
-            fn drawTextLine(context: *@This(), s: [:0]const u8) void
+            fn drawTextLine(context: *@This(), string: [:0]const u8) void
             {
-                const p = &context.currentPosition;
-                raylib.DrawText(s, p.x, p.y, fontSize, raylib.WHITE);
-                p.y += lineHeight;
+                const spacing = 2;
+                raylib.DrawTextEx(
+                    context.font,
+                    string,
+                    context.currentPosition,
+                    fontSize,
+                    spacing,
+                    raylib.WHITE);
+                context.currentPosition.y += lineHeight;
             }
         };
         var context = Context
         {
-            .currentPosition = .{ .x = 10, .y = 30 + 10 },
+            .currentPosition = currentPosition,
             .tree = &tree,
             .allocator = allocator,
+            .font = fontTtf,
         };
 
         const draw = struct
@@ -145,9 +200,8 @@ pub fn main() !void
                     const start = node.span.start;
                     const end = node.span.endInclusive;
                     try writer.print(
-                        "Node {d}, Range [{d},{d}:{d},{d}]",
+                        "Range[{d},{d}:{d},{d}]",
                         .{
-                            nodeIndex,
                             start.byte,
                             start.bit,
                             end.byte,
@@ -157,9 +211,58 @@ pub fn main() !void
 
                 if (node.data != ast.invalidDataIndex)
                 {
-                    const data = context_.tree.nodeDatas.items[node.data];
+                    const printString = struct
+                    {
+                        fn f(writer_: anytype, string: []const u8) !void
+                        {
+                            for (string) |ch|
+                            {
 
-                    try writer.print("Data: {}", .{ data });
+                                const specialCh = switch (ch)
+                                {
+                                    '\n' => "\\n",
+                                    '\r' => "\\r",
+                                    0 => "\\0",
+                                    else => null,
+                                };
+                                if (specialCh) |special|
+                                {
+                                    _ = try writer_.print("{s}", .{ special });
+                                }
+                                else
+                                {
+                                    _ = try writer_.print("{}", .{ ch });
+                                }
+                            }
+                        }
+
+                    }.f;
+                    const data = context_.tree.nodeDatas.items[node.data];
+                    try writer.print(", Value: ", .{});
+                    switch (data)
+                    {
+                        .LiteralString => |s|
+                        {
+                            try printString(writer, s);
+                        },
+                        .OwnedString => |s|
+                        {
+                            try printString(writer, s.items);
+                        },
+                        .ChunkType => |t|
+                        {
+                            try printString(writer, &t.getString());
+                        },
+                        inline else => |d| try writer.print("{}", .{ d }),
+                    }
+                }
+                if (node.nodeType != .Container)
+                {
+                    try writer.print(", Type: ", .{});
+                    switch (node.nodeType)
+                    {
+                        inline else => |t| try writer.print("{}", .{ t }),
+                    }
                 }
                 try writer.writeByte(0);
 
