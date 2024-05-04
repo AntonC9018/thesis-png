@@ -445,7 +445,7 @@ pub const DecompressionNodeWriter = struct
 
     pub fn create(self: @This(), t: DecompressionValueType, value: usize) !void
     {
-        try self.context.level().setNodeType(.{
+        self.context.level().setNodeType(.{
             .DynamicHuffman = .{
                 .DecompressionValue = t,
             },

@@ -29,63 +29,6 @@ fn validateSignature(slice: *pipelines.Sequence) !void
     slice.* = copy;
 }
 
-pub fn printStepName(writer: anytype, parserState: *const State) !void
-{
-    switch (parserState.action)
-    {
-        .Signature => try writer.print("Signature", .{}),
-        .Chunk =>
-        {
-            const chunk = &parserState.chunk;
-            try writer.print("Chunk ", .{});
-            switch (chunk.action)
-            {
-                .Length => try writer.print("Length", .{}),
-                .ChunkType => try writer.print("Type", .{}),
-                .Data =>
-                {
-                    try writer.print("Data ", .{});
-
-                    switch (chunk.object.type)
-                    {
-                        .ImageHeader =>
-                        {
-                            switch (chunk.dataState.imageHeader)
-                            {
-                                .Width => try writer.print("Width", .{}),
-                                .Height => try writer.print("Height", .{}),
-                                .BitDepth => try writer.print("BitDepth", .{}),
-                                .ColorType => try writer.print("ColorType", .{}),
-                                .CompressionMethod => try writer.print("CompressionMethod", .{}),
-                                .FilterMethod => try writer.print("FilterMethod", .{}),
-                                .InterlaceMethod => try writer.print("InterlaceMethod", .{}),
-                            }
-                        },
-                        .Palette =>
-                        {
-                            const byte = chunk.dataState.palette.bytesRead;
-                            try writer.print("PLTE byte {x} (color index {}, state {})", .{
-                                byte,
-                                byte / 3,
-                                chunk.dataState.palette.action.key,
-                            });
-                        },
-                        .ImageData =>
-                        {
-                            const z = &parserState.imageData.zlib;
-                            try printZlibState(z, writer);
-                        },
-                        else => |x| try writer.print("{any}", .{ x }),
-                        // _ => try writer.print("?", .{}),
-                    }
-                },
-                .CyclicRedundancyCheck => try writer.print("CyclicRedundancyCheck", .{}),
-            }
-        },
-    }
-    try writer.print("\n", .{});
-}
-
 fn printZlibState(z: *const zlib.State, writer: anytype) !void
 {
     switch (z.action)
@@ -135,12 +78,23 @@ fn printZlibState(z: *const zlib.State, writer: anytype) !void
 
 fn debugPrintInfo(context: *Context) !void
 {
-    if (!context.settings.logChunkStart)
+    if (!context.settings().logChunkStart)
     {
         return;
     }
     const outputStream = std.io.getStdOut().writer();
-    try printStepName(outputStream, context.state);
+    {
+        const nodeContext = context.nodeContext();
+        for (0 .., nodeContext.syntaxNodeStack.items) |i, it|
+        {
+            try outputStream.print("({})", .{ it.nodeType });
+            if (i != 0)
+            {
+                try outputStream.print(" -> ", .{});
+            }
+        }
+        try outputStream.print("\n", .{});
+    }
     const offset = context.sequence().getStartBytePosition();
     try outputStream.print("Offset: {x}", .{ offset });
 
@@ -201,7 +155,7 @@ const TopLevelInitializer = struct
     pub fn execute(self: @This()) !void
     {
         const action = self.context.state.action;
-        try self.context.level().setNodeType(.{ .TopLevel = action });
+        self.context.level().setNodeType(.{ .TopLevel = action });
 
         switch (action)
         {
@@ -222,6 +176,8 @@ pub fn parseNextItem(context: *Context) !bool
     });
     defer context.level().pop();
 
+    try debugPrintInfo(context);
+
     const action = &context.state.action;
     switch (action.*)
     {
@@ -239,6 +195,7 @@ pub fn parseNextItem(context: *Context) !bool
             const isDone = try parseChunkItem(context);
             if (isDone)
             {
+                try context.level().completeNode();
                 return true;
             }
         },
@@ -254,7 +211,7 @@ const ChunkItemNodeInitializer = struct
     {
         const state = self.context.state.chunk;
 
-        try self.context.level().setNodeType(.{
+        self.context.level().setNodeType(.{
             .Chunk = state.action,
         });
 
@@ -321,12 +278,12 @@ const SliceHelper = struct
 
     fn unapply(self: *SliceHelper) void
     {
-        const s = self.initialSequencePtr.*;
+        const s = self.initialSequencePtr;
         s.* = s.sliceFrom(self.sequence.start());
-        self.common.sequence = s;
+        self.context.common.sequence = s;
 
         const chunk = &self.context.state.chunk;
-        chunk.bytesRead -= self.sequence.len() - self.initialLen;
+        chunk.bytesRead += @intCast(self.initialLen - self.sequence.len());
 
         self.context.isLastChunkSequenceSlice = undefined;
     }
@@ -421,9 +378,11 @@ pub fn parseChunkItem(context: *Context) !bool
             const value = try pipelines.readNetworkUnsigned(context.sequence(), u32);
             const crc = .{ .value = value };
             chunk.object.crc = crc;
+
             try context.level().completeNodeWithValue(.{
                 .U32 = value,
             });
+
             return true;
         },
     }
@@ -440,9 +399,7 @@ pub fn createParserState() State
 fn createChunkParserState() common.ChunkState
 {
     return .{
-        .object = std.mem.zeroInit(common.Chunk, .{
-            .data = .{ .none = {} },
-        }),
+        .object = std.mem.zeroes(common.Chunk),
         .dataState = undefined,
     };
 }

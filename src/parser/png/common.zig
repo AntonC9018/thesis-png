@@ -34,7 +34,7 @@ pub const State = struct
     chunk: ChunkState,
     action: TopLevelAction = .Signature,
 
-    imageHeader: chunks.ImageHeader = .{},
+    imageHeader: ?chunks.ImageHeader = null,
     // True after the IEND chunk has been parsed.
     isEnd: bool = false,
     // True after the first IDAT chunk data start being parsed.
@@ -157,7 +157,7 @@ pub const ChunkState = struct
     action: ChunkAction = .Length,
     object: Chunk,
     dataState: chunks.ChunkDataState,
-    bytesRead: u32,
+    bytesRead: u32 = 0,
 };
 
 pub fn move(t: anytype) @TypeOf(t.*)

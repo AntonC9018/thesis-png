@@ -220,7 +220,7 @@ pub fn removeAndProcessAsManyBytesAsAvailable(
         return error.NotEnoughBytes;
     }
 
-    const bytesThatWillBeRead: u32 = sequenceLen;
+    const bytesThatWillBeRead = sequenceLen;
 
     if (@hasDecl(@TypeOf(functor), "initCount"))
     {
@@ -277,30 +277,6 @@ pub fn readPngU32Dimension(sequence: *pipelines.Sequence) !u32
         return error.DimensionValueIsZero;
     }
     return value;
-}
-
-pub fn skipBytes(context: *Context, chunk: *common.ChunkState) !bool
-{
-    const bytesSkipped = &chunk.dataState.value.bytesSkipped;
-    const totalBytes = chunk.object.dataByteLen;
-
-    std.debug.assert(bytesSkipped.* <= totalBytes);
-
-    if (bytesSkipped.* < totalBytes)
-    {
-        const bytesLeftToSkip = totalBytes - bytesSkipped.*;
-        const bytesToSkipNowCount = @min(bytesLeftToSkip, context.sequence().len());
-        if (bytesToSkipNowCount == 0)
-        {
-            return error.NotEnoughBytes;
-        }
-        bytesSkipped.* += @intCast(bytesToSkipNowCount);
-
-        const newStart = context.sequence().getPosition(bytesToSkipNowCount);
-        context.sequence().* = context.sequence().sliceFrom(newStart);
-    }
-
-    return (bytesSkipped.* == totalBytes);
 }
 
 pub fn readKeywordText(

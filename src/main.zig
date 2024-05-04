@@ -79,7 +79,7 @@ fn parseIntoTree(allocator: std.mem.Allocator) !ast.AST
                 std.debug.print("Ended in a non-terminal state.\n", .{});
             }
 
-            break;
+            return error.InvalidFile;
         }
 
         try reader.advance(sequence.start());

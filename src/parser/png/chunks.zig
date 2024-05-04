@@ -71,7 +71,7 @@ pub fn GenericRGB(comptime t: type) type
     };
 }
 
-const RGB16 = GenericRGB(u16);
+pub const RGB16 = GenericRGB(u16);
 
 pub const Gamma = u32;
 
@@ -267,14 +267,13 @@ pub const ChunkDataState = struct
         iccProfile: ICCProfileState,
         text: TextState,
         compressedText: CompressedTextState,
-        imageData: ImageDataState,
     },
 };
 
 pub const TaggedChunkDataAction = union(ChunkType)
 {
     ImageHeader: *ImageHeaderAction,
-    Palette: void, // Only RGB
+    Palette: void,
     ImageData: void, // Only Zlib
     ImageEnd: void, // No bytes
 
@@ -295,13 +294,6 @@ pub const TaggedChunkDataAction = union(ChunkType)
     SuggestedPalette: void,
     PaletteHistogram: void,
     LastModificationTime: void,
-
-    // TODO:
-    pub fn isEmpty(self: TaggedChunkDataAction) bool
-    {
-        _ = self;
-        return true;
-    }
 };
 
 pub const ChunkDataAction: type = b:
@@ -324,6 +316,7 @@ pub const ChunkDataAction: type = b:
     }
     info.Union.tag_type = null;
     info.Union.decls = &.{};
+    info.Union.fields = &fields;
     break :b @Type(info);
 };
 
@@ -331,12 +324,12 @@ pub const TaggedChunkDataStatePointer = union(ChunkType)
 {
     ImageHeader: void,
     Palette: *PaletteState,
-    ImageData: *ImageDataState,
+    ImageData: void,
     ImageEnd: void,
 
     Transparency: *TransparencyState,
     Gamma: void,
-    PrimaryChrom: *PrimaryChromAction,
+    PrimaryChrom: *PrimaryChroms,
     ColorSpace: void,
     ICCProfile: *ICCProfileState,
 
@@ -372,7 +365,7 @@ const TaggedNodeDataActionAndState = union(ChunkType)
 {
     ImageHeader: ActionAndState(*ImageHeaderAction, void),
     Palette: ActionAndState(void, *PaletteState), // Only RGB
-    ImageData: ActionAndState(void, *ImageDataState), // Only Zlib
+    ImageData: ActionAndState(void, void),
     ImageEnd: ActionAndState(void, void), // No bytes
 
     Transparency: ActionAndState(*TransparencyAction, *TransparencyState), // Only RGB
@@ -413,10 +406,6 @@ const TaggedNodeDataActionAndState = union(ChunkType)
     }
 };
 
-pub const ImageDataState = struct
-{
-};
-
 pub const CompressedTextAction = enum
 {
     Keyword,
@@ -455,14 +444,11 @@ pub const ICCProfileState = struct
 };
 
 
-pub const TransparencyState = struct
+pub const TransparencyState = union(TransparencyKind)
 {
-    stuff: union(TransparencyKind)
-    {
-        IndexedColor: void,
-        Grayscale: void,
-        TrueColor: RGB16,
-    },
+    IndexedColor: void,
+    Grayscale: void,
+    TrueColor: RGB16,
 };
 
 pub const PrimaryChromAction = struct
@@ -496,13 +482,11 @@ pub const ImageHeaderAction = enum(u32)
     CompressionMethod,
     FilterMethod,
     InterlaceMethod,
-
-    pub const Initial = .Width;
 };
 
 pub const PaletteState = struct
 {
-    rgbAction: RGBAction = .R,
+    rgbAction: RGBAction,
     // Needed to produce the color node.
     color: RGB,
 };
@@ -606,6 +590,58 @@ pub const ChunkType = enum(u32)
     }
 };
 
+const KnownChunkType = common.ExhaustiveVariant(ChunkType);
+
+fn asKnown(chunkType: ChunkType) KnownChunkType
+{
+    return common.exhaustive(chunkType);
+}
+
+
+fn isKnownChunkType(chunkType: ChunkType) bool
+{
+    _ = std.meta.intToEnum(KnownChunkType, @intFromEnum(chunkType))
+        catch return false;
+    return true;
+}
+
+
+fn ActionType(comptime chunkType: anytype) type
+{
+    const result = @TypeOf(
+        @field(@as(ChunkDataAction, undefined),
+            @tagName(chunkType)));
+    return result;
+}
+
+fn StateType(comptime chunkType: KnownChunkType) type
+{
+    const fieldName = getChunkDataFieldName(chunkType)
+        orelse return void;
+    return @TypeOf(@field(@as(ChunkDataState, undefined).value, fieldName));
+}
+
+fn setChunkDataAction(
+    data: *ChunkDataState,
+    comptime chunkType: KnownChunkType,
+    value: ActionType(chunkType)) void
+{
+    const actionFieldName = @tagName(chunkType);
+    data.action = @unionInit(@TypeOf(data.action), actionFieldName, value);
+}
+
+fn setChunkData(
+    data: *ChunkDataState,
+    comptime chunkType: KnownChunkType,
+    value: StateType(chunkType)) void
+{
+    const name = comptime getChunkDataFieldName(chunkType) orelse {
+        @compileLog(chunkType);
+        unreachable;
+    };
+    data.value = @unionInit(@TypeOf(data.value), name, value);
+}
+
 // TODO:
 // Check if the size specified matches the expected size.
 // If the size of the chunk is dynamic, resize
@@ -613,34 +649,85 @@ pub const ChunkType = enum(u32)
 pub fn initChunkDataNode(context: *Context, chunkType: ChunkType) !void
 {
     const chunk = &context.state.chunk;
-    const h = struct
-    {
-        fn skipChunkBytes(chunk_: *common.ChunkState) void
-        {
-            chunk_.dataState = .{ .bytesSkipped = 0 };
-            chunk_.object.data = .{ .none = {} };
-        }
+    const dataState = &chunk.dataState;
 
-        fn setTransparencyData(chunk_: *common.ChunkState, data: TransparencyData) void
+    if (!isKnownChunkType(chunkType))
+    {
+        chunk.object.isKnownType = false;
+        dataState.* = undefined;
+        return;
+    }
+
+    chunk.object.isKnownType = true;
+
+    // Initialize the data state
+    switch (common.exhaustive(chunkType))
+    {
+        .Transparency =>
         {
-            chunk_.object.data = .{
-                .transparency = data,
+            const kind: TransparencyKind = switch (context.state.imageHeader.?.colorType.flags)
+            {
+                ColorType.ColorUsed | ColorType.PalleteUsed => .IndexedColor,
+                0 => .Grayscale,
+                ColorType.ColorUsed => .TrueColor,
+                else => return error.BadColorTypeForTransparencyChunk,
             };
-        }
-    };
-
-    switch (chunkType)
-    {
+            const state: TransparencyState = switch (kind)
+            {
+                .TrueColor => .{ .TrueColor = std.mem.zeroes(RGB16) },
+                inline else => |k| k,
+            };
+            setChunkData(dataState, .Transparency, state);
+            setChunkDataAction(dataState, .Transparency, switch (kind)
+            {
+                .IndexedColor => .{ .RGB = .R },
+                else => .none,
+            });
+        },
         .ImageHeader =>
         {
-            chunk.dataState = .{ .imageHeader = ImageHeaderAction.Initial };
+            context.state.imageHeader = std.mem.zeroes(ImageHeader);
+            dataState.action = .{ .ImageHeader = .Width };
+            dataState.value = undefined;
         },
+        inline
+        .ImageData,
+        .ImageEnd,
+        .Gamma,
+        .PrimaryChrom,
+        .ColorSpace,
+        .InternationalText,
+        .Background,
+        .PhysicalPixelDimensions,
+        .SignificantBits,
+        .SuggestedPalette,
+        .PaletteHistogram,
+        .LastModificationTime => |t|
+        {
+            setChunkDataAction(dataState, t, std.mem.zeroes(ActionType(t)));
+            dataState.value = undefined;
+        },
+        inline
+        .ICCProfile,
+        .CompressedText => |t|
+        {
+            setChunkData(dataState, t, .{
+                .zlib = .{}
+            });
+            setChunkDataAction(dataState, t, std.mem.zeroes(ActionType(t)));
+        },
+        inline else => |t|
+        {
+            setChunkData(dataState, t, std.mem.zeroes(StateType(t)));
+            setChunkDataAction(dataState, t, std.mem.zeroes(ActionType(t)));
+        },
+    }
+
+    // Validate preconditions
+    switch (getActiveChunkDataState(dataState, asKnown(chunkType)))
+    {
         .Palette =>
         {
-            chunk.dataState = .{ .palette = std.mem.zeroes(PaletteState) };
-            chunk.object.data = .{ .palette = std.mem.zeroes(Palette) };
-
-
             if (chunk.object.dataByteLen % 3 != 0)
             {
                 return error.PaletteLengthNotDivisibleByThree;
@@ -673,7 +760,6 @@ pub fn initChunkDataNode(context: *Context, chunkType: ChunkType) !void
             }
 
             context.state.isEnd = true;
-            h.skipChunkBytes(chunk);
         },
         .ImageData =>
         {
@@ -681,14 +767,13 @@ pub fn initChunkDataNode(context: *Context, chunkType: ChunkType) !void
             {
                 context.state.isData = true;
             }
-            chunk.dataState = .{ .imageData = .{} };
         },
-        .Transparency =>
+        .Transparency => |s|
         {
-            const length = chunk.object.dataByteLen;
-            switch (context.state.imageHeader.?.colorType.flags)
+            const len = chunk.object.dataByteLen;
+            switch (s.*)
             {
-                ColorType.ColorUsed | ColorType.PalleteUsed =>
+                .IndexedColor =>
                 {
                     if (context.state.paletteLen == null)
                     {
@@ -696,97 +781,28 @@ pub fn initChunkDataNode(context: *Context, chunkType: ChunkType) !void
                     }
 
                     const maxLength = context.state.paletteLen.?;
-                    if (length > maxLength)
+                    if (len > maxLength)
                     {
                         return error.TransparencyLengthExceedsPalette;
                     }
-
-                    h.setTransparencyData(chunk, .{ .paletteEntryAlphaValues = .{} });
-
-                    chunk.dataState = .{ 
-                        .transparency = .{ 
-                            .bytesRead = 0,
-                        }
-                    };
                 },
-                // Grayscale
-                0 =>
+                .Grayscale =>
                 {
-                    if (length != 2)
+                    if (len != 2)
                     {
                         return error.GrayscaleTransparencyLengthMustBe2;
                     }
-                    h.setTransparencyData(chunk, .{ .gray = 0 });
-
-                    chunk.dataState = .{ .none = {} };
                 },
-                // True color
-                ColorType.ColorUsed =>
+                .TrueColor =>
                 {
-                    if (length != 3 * 2)
+                    if (len != 3 * 2)
                     {
                         return error.TrueColorTransparencyLengthMustBe6;
                     }
-                    h.setTransparencyData(chunk, .{ .rgb = std.mem.zeroes(RGB16) });
-
-                    chunk.dataState = .{ 
-                        .transparency = .{ 
-                            .rgbAction = RGBAction.FirstColor,
-                        },
-                    };
-                },
-                else =>
-                {
-                    return error.BadColorTypeForTransparencyChunk;
                 },
             }
-
         },
-        .Gamma =>
-        {
-            chunk.dataState = .{ .none = {} };
-            chunk.object.data = .{ .gamma = 0 };
-        },
-        .PrimaryChrom =>
-        {
-            chunk.dataState = .{ .primaryChrom = .{ .value = 0 } };
-            chunk.object.data = .{ .primaryChroms = std.mem.zeroes(PrimaryChroms) };
-        },
-        .ColorSpace =>
-        {
-            chunk.dataState = .{ .none = {} };
-            chunk.object.data = .{ .renderingIntent = std.mem.zeroes(RenderingIntent) };
-        },
-        .ICCProfile =>
-        {
-            chunk.dataState = .{
-                .iccProfile = .{
-                    .zlib = .{},
-                },
-            };
-            chunk.object.data = .{ .iccProfile = .{} };
-        },
-        .Text =>
-        {
-            chunk.dataState = .{
-                .text = .{},
-            };
-            chunk.object.data = .{
-                .text = .{},
-            };
-        },
-        .CompressedText =>
-        {
-            chunk.dataState = .{
-                .compressedText = .{
-                    .zlib = .{},
-                },
-            };
-            chunk.object.data = .{
-                .text = .{},
-            };
-        },
-        else => h.skipChunkBytes(chunk),
+        else => {},
     }
 }
 
@@ -806,7 +822,6 @@ pub const DataNodeParserState = union
     iccProfile: ICCProfileState,
     text: TextState,
     compressedText: CompressedTextState,
-    imageData: ImageDataState,
 };
 
 fn readRgbComponentNode(
@@ -899,7 +914,7 @@ const TextBytesProcessor = struct
     text: *std.ArrayListUnmanaged(u8),
     allocator: std.mem.Allocator,
 
-    pub fn initCount(self: *const TextBytesProcessor, count: u32) !void
+    pub fn initCount(self: *const TextBytesProcessor, count: usize) !void
     {
         try self.text.ensureTotalCapacity(self.allocator, count);
     }
@@ -919,7 +934,10 @@ pub fn getActiveDataAction(state: *common.ChunkState) TaggedChunkDataAction
         inline else => |key|
         {
             const fieldName = @tagName(key);
-            const value = @field(state.dataState.action, fieldName);
+            const value = if (ActionType(key) == void) 
+                    {}
+                else
+                    &@field(state.dataState.action, fieldName);
             return @unionInit(TaggedChunkDataAction, fieldName, value);
         }
     }
@@ -928,7 +946,7 @@ pub fn getActiveDataAction(state: *common.ChunkState) TaggedChunkDataAction
 pub fn getActiveChunkDataActionAndState(state: *common.ChunkState) TaggedNodeDataActionAndState
 {
     const action = getActiveDataAction(state);
-    const state_ = getActiveChunkDataState(state);
+    const state_ = getActiveChunkDataState(&state.dataState, asKnown(state.object.type));
     switch (common.exhaustive(state.object.type))
     {
         inline else => |k|
@@ -942,10 +960,11 @@ pub fn getActiveChunkDataActionAndState(state: *common.ChunkState) TaggedNodeDat
     }
 }
 
-pub fn getActiveChunkDataState(state: *common.ChunkState) TaggedChunkDataStatePointer
+// The structure is not pretty, I supposed I should have made the union look the same.
+pub fn getChunkDataFieldName(comptime chunkType: KnownChunkType) ?[:0]const u8
 {
-    const chunkStateInfo = comptime @typeInfo(@TypeOf(state.dataState.value));
-    switch (common.exhaustive(state.object.type))
+    const chunkStateInfo = comptime @typeInfo(@TypeOf(@as(ChunkDataState, undefined).value));
+    switch (chunkType)
     {
         inline else => |k|
         {
@@ -972,14 +991,27 @@ pub fn getActiveChunkDataState(state: *common.ChunkState) TaggedChunkDataStatePo
                 break :dataFieldName null;
             };
 
+            return dataFieldName;
+        }
+    }
+}
+
+pub fn getActiveChunkDataState(state: *ChunkDataState, chunkType: KnownChunkType) TaggedChunkDataStatePointer
+{
+    switch (chunkType)
+    {
+        inline else => |t|
+        {
+            const dataFieldName = comptime getChunkDataFieldName(t);
+
             if (dataFieldName) |dataFieldName_|
             {
-                const data = &@field(state.dataState.value, dataFieldName_);
-                return @unionInit(TaggedChunkDataStatePointer, fieldName, data);
+                const data = &@field(state.value, dataFieldName_);
+                return @unionInit(TaggedChunkDataStatePointer, @tagName(t), data);
             }
             else
             {
-                return @unionInit(TaggedChunkDataStatePointer, fieldName, {});
+                return @unionInit(TaggedChunkDataStatePointer, @tagName(t), {});
             }
         }
     }
@@ -1164,7 +1196,7 @@ pub fn parseChunkData(context: *Context) !bool
             defer context.level().pop();
 
             // We have to save that for error checking.
-            const ihdr = &context.state.imageHeader;
+            const ihdr = &context.state.imageHeader.?;
 
             switch (t.action.*)
             {
@@ -1309,7 +1341,7 @@ pub fn parseChunkData(context: *Context) !bool
             std.debug.assert(context.sequence().len() == 0);
             return true;
         },
-        .ImageData => |t|
+        .ImageData =>
         {
             try context.level().pushInit(struct
             {
@@ -1326,12 +1358,12 @@ pub fn parseChunkData(context: *Context) !bool
             });
             defer context.level().pop();
 
-            return try parseImageData(context, t.state);
+            return try parseImageData(context);
         },
-        .Transparency => |*t|
+        .Transparency => |t|
         {
             // TODO: Figure out how the nodes should be.
-            switch (t.state.stuff)
+            switch (t.state.*)
             {
                 .IndexedColor =>
                 {
@@ -1379,7 +1411,7 @@ pub fn parseChunkData(context: *Context) !bool
                     else
                     {
                         try context.level().completeNodeWithValue(.{
-                            .RGB16 = rgb,
+                            .RGB16 = rgb.*,
                         });
                         return true;
                     }

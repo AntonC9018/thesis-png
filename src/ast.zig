@@ -147,7 +147,10 @@ pub const AST = struct
         const dataIndex = dataIdToIndex(params.dataId);
 
         // data exists?
-        std.debug.assert(self.nodeDatas.items.len > dataIndex);
+        if (dataIndex != invalidDataIndex)
+        {
+            std.debug.assert(self.nodeDatas.items.len > dataIndex);
+        }
 
         const node = &self.syntaxNodes.items[nodeIndex];
         node.span.endInclusive = end:

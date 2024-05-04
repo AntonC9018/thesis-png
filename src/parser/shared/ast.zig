@@ -19,7 +19,7 @@ pub const NodeType = union(enum)
     RGBComponent: chunks.RGBAction,
 
     ImageHeader: chunks.ImageHeaderAction,
-    PrimaryChrom: chunks.PrimaryChromState,
+    PrimaryChrom: chunks.PrimaryChromAction,
     ICCProfile: chunks.ICCProfileAction,
     TextAction: chunks.TextAction,
     CompressedText: chunks.CompressedTextAction,
@@ -66,7 +66,7 @@ pub const NodeData = union(enum)
     Bool: bool,
     ChunkType: parser.png.ChunkType,
     RGB: chunks.RGB,
-    RGB16: chunks.RGB16(u16),
+    RGB16: chunks.RGB16,
 
     ColorType: chunks.ColorType,
     CompressionMethod: chunks.CompressionMethod,

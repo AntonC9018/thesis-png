@@ -173,6 +173,8 @@ pub fn LevelContext(Context: type) type
             const levelIndex = self.currentLevel();
             const node = &nodes.items[levelIndex];
 
+            std.debug.print("Completing Node {} \n", .{ node.nodeType });
+
             if (levelIndex == nodes.items.len - 1)
             {
                 try self.completeNodeAtWithoutRemoving(levelIndex);
@@ -228,12 +230,12 @@ pub fn LevelContext(Context: type) type
 
         pub fn completeNodeWithValue(self: Self, value: ast.NodeData) !void
         {
-            std.debug.print("Node {} \n", .{ value });
+            std.debug.print("Node {} {} \n", .{ self.currentNode().nodeType, value });
             try self.setSemanticValue(value);
             try self.completeNode();
         }
 
-        pub fn setNodeType(self: Self, nodeType: ast.NodeType) !void
+        pub fn setNodeType(self: Self, nodeType: ast.NodeType) void
         {
             self.currentNode().nodeType = nodeType;
         }
@@ -261,7 +263,7 @@ pub fn LevelContext(Context: type) type
             const r = try self.maybeCreateSyntaxNode();
             if (r.created)
             {
-                r.node.nodeType = nodeType;
+                self.setNodeType(nodeType);
             }
 
             std.debug.assert(std.meta.eql(r.node.nodeType, nodeType));
