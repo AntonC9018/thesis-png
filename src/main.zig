@@ -160,6 +160,32 @@ fn componentwiseMult(v1: raylib.Vector2, v2: raylib.Vector2) raylib.Vector2
     };
 }
 
+fn rectFromTopLeftAndSize(topLeft: raylib.Vector2, size: raylib.Vector2) raylib.Rectangle
+{
+    return .{
+        .x = topLeft.x,
+        .y = topLeft.y,
+        .width = size.x,
+        .height = size.y,
+    };
+}
+
+fn addPaddingToRect(rect: raylib.Rectangle, padding: raylib.Vector2) raylib.Rectangle
+{
+    return .{
+        .x = rect.x - padding.x,
+        .y = rect.y - padding.y,
+        .width = rect.width + padding.x * 2,
+        .height = rect.height + padding.y * 2,
+    };
+}
+
+fn rectContainsPoint(rect: raylib.Rectangle, point: raylib.Vector2) bool
+{
+    return point.x >= rect.x and point.x <= rect.x + rect.width and
+           point.y >= rect.y and point.y <= rect.y + rect.height;
+}
+
 const raylib = @import("raylib");
 
 pub fn main() !void
@@ -225,17 +251,66 @@ pub fn main() !void
         // draw the bytes
         // We know and we want the font to be monospace.
         const textSpacing = 0;
+        const columnSpacing = 10;
         const byteTextSize = raylib.MeasureTextEx(fontTtf, "00", fontSize, textSpacing);
         const byteSpacing = raylib.Vector2
         {
-            .x = textSpacing + 10,
+            .x = textSpacing + columnSpacing,
             .y = textSpacing,
         };
         const byteTextSizePadded = byteTextSize.add(byteSpacing);
 
         {
-            var lineIndex: usize = 0;
-            var colIndex: usize = 0;
+            const mousePos = raylib.GetMousePosition();
+            const rangeSizeAsVec = (raylib.Vector2i
+            {
+                .x = @intCast(rangeSize.cols),
+                .y = @intCast(rangeSize.rows),
+            }).float();
+            const allTextRect = rectFromTopLeftAndSize(
+                raylib.Vector2.zero(),
+                componentwiseMult(rangeSizeAsVec, byteTextSizePadded));
+
+            if (rectContainsPoint(allTextRect, mousePos))
+            {
+                const relativePos = mousePos.sub(allTextRect.topLeft());
+                const gridCoord = raylib.Vector2i
+                {
+                    .x = @intFromFloat(@floor(relativePos.x / byteTextSizePadded.x)),
+                    .y = @intFromFloat(@floor(relativePos.y / byteTextSizePadded.y)),
+                };
+                const textPos = componentwiseMult(gridCoord.float(), byteTextSizePadded);
+                const textRect = rectFromTopLeftAndSize(textPos, byteTextSize);
+                const paddedRect = addPaddingToRect(textRect, .{
+                    .x = columnSpacing / 2,
+                    .y = 0,
+                });
+                raylib.DrawRectangleRec(paddedRect, raylib.GRAY);
+
+                if (raylib.IsMouseButtonReleased(.MOUSE_BUTTON_LEFT))
+                {
+                    clickedPosition = gridCoord;
+                }
+            }
+        }
+
+        if (clickedPosition) |clickedPosition_|
+        {
+            const textPos = componentwiseMult(clickedPosition_.float(), byteTextSizePadded);
+            const textRect = rectFromTopLeftAndSize(textPos, byteTextSize);
+            const paddedRect = addPaddingToRect(textRect, .{
+                .x = columnSpacing / 2,
+                .y = 0,
+            });
+            raylib.DrawRectangleRec(paddedRect, raylib.BLUE);
+        }
+
+        {
+            var gridCoord = raylib.Vector2i
+            {
+                .x = 0,
+                .y = 0,
+            };
 
             var iter = sequence.iterate().?;
             while (true)
@@ -244,13 +319,9 @@ pub fn main() !void
 
                 for (bytes) |b|
                 {
-                    std.debug.assert(colIndex < rangeSize.cols and lineIndex < rangeSize.rows);
+                    std.debug.assert(gridCoord.x < rangeSize.cols and gridCoord.y < rangeSize.rows);
 
-                    const cellPos = raylib.Vector2
-                    {
-                        .x = @floatFromInt(colIndex),
-                        .y = @floatFromInt(lineIndex),
-                    };
+                    const cellPos = gridCoord.float();
                     const pos = componentwiseMult(cellPos, byteTextSizePadded);
 
                     const hexString = hexString: {
@@ -274,11 +345,11 @@ pub fn main() !void
                         textSpacing,
                         raylib.WHITE);
 
-                    colIndex += 1;
-                    if (colIndex == rangeSize.cols)
+                    gridCoord.x += 1;
+                    if (gridCoord.x == rangeSize.cols)
                     {
-                        colIndex = 0;
-                        lineIndex += 1;
+                        gridCoord.x = 0;
+                        gridCoord.y += 1;
                     }
                 }
 
