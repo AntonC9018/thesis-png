@@ -261,7 +261,17 @@ pub fn main() !void
                     try writer.print(", Type: ", .{});
                     switch (node.nodeType)
                     {
-                        inline else => |t| try writer.print("{}", .{ t }),
+                        inline else => |t, key| 
+                        {
+                            if (@TypeOf(t) == void)
+                            {
+                                try writer.print("{s}", .{ @tagName(key) });
+                            }
+                            else
+                            {
+                                try writer.print("{}", .{ t });
+                            }
+                        }
                     }
                 }
                 try writer.writeByte(0);

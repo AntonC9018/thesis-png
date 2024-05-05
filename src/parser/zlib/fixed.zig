@@ -162,6 +162,18 @@ pub fn decompressSymbol(
     context: *DeflateContext,
     state: *SymbolDecompressionState) !?helper.Symbol
 {
+    const result = try decompressSymbolImpl(context, state);
+    if (result) |_|
+    {
+        state.* = SymbolDecompressionState.Initial;
+    }
+    return result;
+}
+
+pub fn decompressSymbolImpl(
+    context: *DeflateContext,
+    state: *SymbolDecompressionState) !?helper.Symbol
+{
     try context.level().push();
     defer context.level().pop();
 

@@ -158,8 +158,6 @@ pub fn LevelContext(Context: type) type
             const node = &nodeContext_.syntaxNodeStack.items[index];
             const position: ast.Position = self.context.getStartBytePosition();
 
-            std.debug.print("Completing node with type {}", .{node.nodeType});
-
             try nodeContext_.operations.completeSyntaxNode(.{
                 .nodeType = node.nodeType,
                 .endExclusive = position,
@@ -176,7 +174,6 @@ pub fn LevelContext(Context: type) type
 
             if (levelIndex >= nodes.items.len)
             {
-                std.debug.print("Completing already completed node (this is fine) \n", .{});
                 return;
             }
 
@@ -188,13 +185,12 @@ pub fn LevelContext(Context: type) type
             }
             else
             {
-                std.debug.print("The completed node must be the last in the stack." 
-                    ++ "There have been uncompleted nodes in between:\n", .{});
-
                 std.debug.print("Deleting node at level {} with type {}\n", .{
                     levelIndex,
-                    node.nodeType,
+                    .{ node.nodeType },
                 });
+                std.debug.print("The completed node must be the last in the stack. " 
+                    ++ "There have been uncompleted nodes in between:\n", .{});
 
                 std.debug.print("Undeleted nodes below are:\n", .{});
 

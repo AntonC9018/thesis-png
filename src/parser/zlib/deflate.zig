@@ -230,6 +230,10 @@ pub fn deflate(context: *Context) !bool
                         break :symbol symbol_;
                     };
                     const done = try helper.writeSymbolToOutput(context, symbol);
+                    if (done)
+                    {
+                        try context.level().completeNode();
+                    }
                     return done;
                 },
             }

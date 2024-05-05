@@ -47,7 +47,7 @@ pub const State = struct
 pub fn isParserStateTerminal(context: *Context) bool 
 {
     return context.state.action == .Chunk
-        and context.level().depth() == 0
+        and context.state.chunk.action == .Length
         and context.state.isEnd;
 }
 

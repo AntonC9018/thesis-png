@@ -258,7 +258,7 @@ const SliceHelper = struct
         const chunkLen = chunk.object.dataByteLen;
         const leftToRead = chunkLen - chunk.bytesRead;
         const readLen = @min(leftToRead, allLen);
-        const isLastChunkDataRead = readLen == allLen;
+        const isLastChunkDataRead = allLen >= leftToRead;
         const newSequence = s.sliceToExclusive(s.getPosition(readLen));
         return .{
             .context = context,
@@ -285,6 +285,20 @@ const SliceHelper = struct
         chunk.bytesRead += @intCast(self.initialLen - self.sequence.len());
 
         self.context.isLastChunkSequenceSlice = undefined;
+    }
+
+    fn assertConsumed(self: *SliceHelper) void
+    {
+        if (self.sequence.len() == 0)
+        {
+            return;
+        }
+
+        const chunk = &self.context.state.chunk;
+        const bytesLeft = self.sequence.len();
+        const msg = "Not all bytes consumed for chunk '{}'. Bytes left: {}";
+        std.debug.print(msg, .{ chunk.object.type, bytesLeft });
+        unreachable;
     }
 };
 
@@ -366,6 +380,7 @@ pub fn parseChunkItem(context: *Context) !bool
             const done = try chunks.parseChunkData(context);
             if (done)
             {
+                sliceHelper.assertConsumed();
                 chunk.action = .CyclicRedundancyCheck;
                 try context.level().completeNode();
             }

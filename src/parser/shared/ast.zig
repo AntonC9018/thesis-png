@@ -26,6 +26,7 @@ pub const NodeType = union(enum)
     RenderingIntent: void,
     PhysicalPixelDimensions: chunks.PhysicalPixedDimensionsAction,
 
+    ZlibContainer: void,
 
     Zlib: zlib.Action,
     Deflate: deflate.Action,

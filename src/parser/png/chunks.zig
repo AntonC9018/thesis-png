@@ -674,7 +674,7 @@ pub fn initChunkDataNode(context: *Context, chunkType: ChunkType) !void
     chunk.object.isKnownType = true;
 
     // Initialize the data state
-    switch (common.exhaustive(chunkType))
+    switch (asKnown(chunkType))
     {
         .Transparency =>
         {
@@ -719,6 +719,7 @@ pub fn initChunkDataNode(context: *Context, chunkType: ChunkType) !void
         {
             setChunkDataAction(dataState, t, std.mem.zeroes(ActionType(t)));
             dataState.value = undefined;
+            std.debug.print("Set the initial action to {}\n", .{std.mem.zeroes(ActionType(t))});
         },
         inline
         .ICCProfile,
@@ -1371,7 +1372,13 @@ pub fn parseChunkData(context: *Context) !bool
             });
             defer context.level().pop();
 
-            return try parseImageData(context);
+            const done = try parseImageData(context);
+            if (done)
+            {
+                try context.level().completeNode();
+            }
+
+            return done;
         },
         .Transparency => |t|
         {

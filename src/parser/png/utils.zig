@@ -162,7 +162,7 @@ pub fn readZlibData(
     output: *std.ArrayListUnmanaged(u8)) !bool
 {
     // Maybe wrap the zlib stream.
-    try context.level().push();
+    try context.level().pushNode(.ZlibContainer);
     defer context.level().pop();
 
     var outputBuffer = zlib.OutputBuffer
