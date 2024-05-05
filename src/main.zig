@@ -217,7 +217,6 @@ pub fn main() !void
                         {
                             for (string) |ch|
                             {
-
                                 const specialCh = switch (ch)
                                 {
                                     '\n' => "\\n",
@@ -231,7 +230,7 @@ pub fn main() !void
                                 }
                                 else
                                 {
-                                    _ = try writer_.print("{}", .{ ch });
+                                    _ = try writer_.print("{c}", .{ ch });
                                 }
                             }
                         }

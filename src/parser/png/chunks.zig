@@ -1382,7 +1382,6 @@ pub fn parseChunkData(context: *Context) !bool
         },
         .Transparency => |t|
         {
-            // TODO: Figure out how the nodes should be.
             switch (t.state.*)
             {
                 .IndexedColor =>
