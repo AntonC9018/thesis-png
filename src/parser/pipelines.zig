@@ -103,18 +103,27 @@ pub const Segment = struct
     }
 };
 
+fn ptrSub(a: anytype, b: @TypeOf(a)) usize
+{
+    return @divExact(@intFromPtr(b) - @intFromPtr(a), @sizeOf(@TypeOf(a))); 
+}
+
 pub const BufferManager = struct 
 {
     segments: std.ArrayListUnmanaged(Segment),
     totalBytes: usize,
 
+    // It's not going to delete data below this lower limit.
+    lowerLimitHint: ?usize = null,
+
     fn getFirstSegment(self: *const BufferManager) *const Segment
     {
-        if (self.segments.items.len == 0)
+        const s = self.segments.items;
+        if (s.len == 0)
         {
             return &SequencePosition.StartSentinelSegment;
         }
-        return &self.segments.items[0];
+        return &s[0];
     }
 
     pub fn getBytePosition(self: *const BufferManager, position: SequencePosition) usize
@@ -149,6 +158,171 @@ pub const BufferManager = struct
             s_[s_.len - 2].nextSegment = &s_[s_.len - 1];
         }
     }
+
+    // Returns the newStart position, projected on the updated segments array.
+    pub fn cleanUpUnneededSegments(
+        self: *BufferManager,
+        allocator: std.mem.Allocator,
+        newStart: SequencePosition) SequencePosition
+    {
+        if (self.segments.items.len == 0)
+        {
+            return newStart;
+        }
+
+        const firstSegmentToKeepInMemory = if (self.lowerLimitHint) |hint|
+        hint:
+        {
+            // TODO: Maybe binary search?
+            for (0 .., self.segments.items) |i, *s|
+            {
+                if (s.getBytePosition() + s.len() > hint)
+                {
+                    break :hint i;
+                }
+            }
+            // This means the specified byte position is already outside the segment space.
+            unreachable;
+        } 
+        else null;
+
+        const newStartSegmentIndex = segmentIndexOfStart:
+        {
+            const startAddress = &self.segments.items[0];
+            const targetAddress = newStart.segment;
+            const index = ptrSub(targetAddress, startAddress);
+
+            const isAtEndOfSegment = newStart.offset == newStart.segment.len();
+            if (isAtEndOfSegment)
+            {
+                break :segmentIndexOfStart index + 1;
+            }
+            break :segmentIndexOfStart index;
+        };
+
+        const deleteUntilSegmentIndex = if (firstSegmentToKeepInMemory) |s|
+                @min(newStartSegmentIndex, s)
+            else
+                newStartSegmentIndex;
+
+        if (deleteUntilSegmentIndex == 0)
+        {
+            return newStart;
+        }
+
+        const segs = &self.segments.items;
+        // Removed segments = from current start until the new start segment.
+        for (segs.*[0 .. deleteUntilSegmentIndex]) |*s|
+        {
+            allocator.free(s.underlyingArray());
+        }
+        for (deleteUntilSegmentIndex .. segs.len) |i|
+        {
+            segs.*[i - deleteUntilSegmentIndex] = segs.*[i];
+        }
+        segs.len -= deleteUntilSegmentIndex;
+
+        restoreConsecutiveLinks(segs.*[(deleteUntilSegmentIndex - 1) .. segs.len]);
+
+        return .{
+            .offset = newStart.offset,
+            .segment = &segs.*[newStartSegmentIndex - deleteUntilSegmentIndex],
+        };
+    }
+
+    const SegmentNotInMemoryErrorType = error{SegmentNotInMemory};
+
+    pub fn getSegmentForRange(
+        self: *const BufferManager,
+        range: ByteRange) Sequence
+    {
+        if (range.end < range.start)
+        {
+            unreachable;
+        }
+        const segs = self.segments.items;
+        if (segs.len == 0)
+        {
+            return Sequence.createEmpty(self);
+        }
+
+        const start = start:
+        {
+            for (0 .., segs) |i, *s|
+            {
+                if (s.getBytePosition() + s.len() > range.start)
+                {
+                    break :start i;
+                }
+            }
+            break :start null;
+        };
+        const end = end:
+        {
+            const startIndex = start orelse break :end null;
+
+            for (startIndex .., segs[startIndex .. segs.len]) |i, *s|
+            {
+                if (s.getBytePosition() + s.len() >= range.end)
+                {
+                    break :end i;
+                }
+            }
+            break :end null;
+        };
+        const maybeEnd = struct
+        {
+            fn f(segs_: []const Segment, index: ?usize, pos: usize) SequencePosition
+            {
+                if (index) |index_|
+                {
+                    const s = &segs_[index_];
+                    const offset = pos -| s.getBytePosition();
+                    return .{
+                        .offset = @intCast(offset),
+                        .segment = s,
+                    };
+                }
+                else
+                {
+                    // Then it's past the end.
+                    const s = &segs_[segs_.len - 1];
+                    const offset = s.len();
+                    return .{
+                        .offset = @intCast(offset),
+                        .segment = s,
+                    };
+                }
+            }
+        }.f;
+
+        const startSequencePosition = maybeEnd(segs, start, range.start);
+        const endSequencePosition = endPos:
+        {
+            if (start == null)
+            {
+                std.debug.assert(end == null);
+                break :endPos startSequencePosition;
+            }
+            break :endPos maybeEnd(segs, end, range.end);
+        };
+        const sequenceRange = SequenceRange
+        {
+            .start = startSequencePosition,
+            .end = endSequencePosition,
+            .len = @intCast(range.end - range.start),
+        };
+        return Sequence
+        {
+            .range = sequenceRange,
+        };
+    }
+};
+
+pub const ByteRange = struct
+{
+    start: usize,
+    end: usize,
 };
 
 pub const SequenceRange = struct
@@ -688,38 +862,9 @@ pub fn Reader(ReaderType: type) type
             self: *Self,
             consumedPosition: ?SequencePosition) !void
         {
-            const buffer_ = self.buffer();
-            const sequence_ = self.currentSequence();
-            const newRange_ = sequence_.range.slice(.{ .start = consumedPosition });
-            const newSequence_ = sequence_.slice(newRange_);
-
-            // Removed segments = from current start until the new start segment.
-            {
-                const removedSequence = sequence_.slice(
-                    sequence_.range.slice(.{
-                        .start = sequence_.start(),
-                        .end = newSequence_.start(),
-                    }));
-
-                const segments = &buffer_.segments.items;
-                const removedSegmentsCount = removedSequence.getWholeSegmentCount();
-
-                for (0 .. removedSegmentsCount) |i|
-                {
-                    self.allocator.free(segments.*[i].underlyingArray());
-                }
-                for (removedSegmentsCount .. segments.len) |i|
-                {
-                    segments.*[i - removedSegmentsCount] = segments.*[i];
-                }
-                segments.len -= removedSegmentsCount;
-
-                // TODO:
-                // As annoying as it is, currently we have to update the links.
-                // Ideally, it should just be a free list / ring buffer instead,
-                // but let's do that later.
-                restoreConsecutiveLinks(segments.*);
-            }
+            const desiredStart = consumedPosition orelse self.currentSequence().end();
+            const newStartPosition = self.buffer()
+                .cleanUpUnneededSegments(self.allocator, desiredStart);
 
             if (self._eofState == .NotReached)
             {
@@ -728,10 +873,10 @@ pub fn Reader(ReaderType: type) type
 
                 // You should only call advance once you've scanned all of the input.
                 // Or you know you need more.
-                try buffer_.appendSegment(newSegment, self.allocator);
+                try self.buffer().appendSegment(newSegment, self.allocator);
             }
 
-            self._consumedUntilPosition = newSequence_.start();
+            self._consumedUntilPosition = newStartPosition;
         }
 
         pub fn read(self: *Self) !ReaderResult

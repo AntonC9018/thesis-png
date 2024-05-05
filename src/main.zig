@@ -5,12 +5,27 @@ const png = parser.png;
 const debug = @import("pngDebug.zig");
 const ast = @import("ast.zig");
 
-fn parseIntoTree(allocator: std.mem.Allocator) !ast.AST
+const pipelines = parser.pipelines;
+const ByteRange = pipelines.ByteRange;
+
+const AppContext = struct
+{
+    bufferManager: pipelines.BufferManager,
+    tree: ast.AST,
+};
+
+fn parseIntoTree(allocator: std.mem.Allocator) !AppContext
 {
     var testContext = try debug.openTestReader(allocator);
     defer testContext.deinit();
 
     const reader = &testContext.reader;
+
+    // We want to keep the whole file in memory for the operations after.
+    // It's not optimal, we'd want to load parts of the file out of memory.
+    // Maybe do that later?
+    reader.buffer().lowerLimitHint = 0;
+
     var parserState = png.createParserState();
     const parserSettings = png.Settings
     {
@@ -93,7 +108,56 @@ fn parseIntoTree(allocator: std.mem.Allocator) !ast.AST
     try context.level().completeHierarchy();
     context.level().assertPopped();
 
-    return tree;
+    return .{
+        .tree = tree,
+        .bufferManager = reader._buffer,
+    };
+}
+
+fn toHexChar(ch: u4) u8
+{
+    return switch (ch)
+    {
+        0 ... 9 => @as(u8, ch) + '0',
+        0xA ... 0xF => @as(u8, ch) - 0xA + 'A',
+    };
+}
+
+const RangeSize = struct
+{
+    rows: usize,
+    cols: usize,
+
+    pub fn byteCount(self: RangeSize) usize
+    {
+        return self.rows * self.cols;
+    }
+
+    pub fn getRangeCount(
+        range: RangeSize,
+        totalSize: usize) usize
+    {
+        return totalSize / range.byteCount();
+    }
+
+    pub fn computeRange(
+        self: RangeSize,
+        index: usize) ByteRange
+    {
+        const t = self.byteCount();
+        return .{
+            .start = index * t,
+            .end = (index + 1) * t,
+        };
+    }
+};
+
+fn componentwiseMult(v1: raylib.Vector2, v2: raylib.Vector2) raylib.Vector2
+{
+    return .{
+        .x = v1.x * v2.x,
+        .y = v1.y * v2.y,
+    };
 }
 
 const raylib = @import("raylib");
@@ -101,9 +165,18 @@ const raylib = @import("raylib");
 pub fn main() !void
 {
     const allocator = std.heap.page_allocator;
-    var tree = try parseIntoTree(allocator);
+    var appContext = try parseIntoTree(allocator);
 
-    var currentPosition: raylib.Vector2 = .{ .x = 10, .y = 30 + 10 };
+    var rangeSize = RangeSize
+    {
+        .rows = 10,
+        .cols = 10,
+    };
+    var rangeIndex: usize = 0;
+    var clickedPosition: ?raylib.Vector2i = null;
+
+    var tempBuffer = std.ArrayList(u8).init(allocator);
+    defer tempBuffer.deinit();
 
     raylib.SetConfigFlags(.{ .FLAG_WINDOW_RESIZABLE = true });
     raylib.InitWindow(1200, 1200, "hello world!");
@@ -111,8 +184,7 @@ pub fn main() !void
 
     defer raylib.CloseWindow();
 
-    const fontSize = 20;
-    const lineHeight = 30;
+    const fontSize = 32;
     const fontTtf = raylib.LoadFontEx("resources/monofonto.otf", fontSize, null, 250);
 
     while (!raylib.WindowShouldClose())
@@ -121,186 +193,107 @@ pub fn main() !void
         defer raylib.EndDrawing();
         
         raylib.ClearBackground(raylib.BLACK);
-        // raylib.DrawFPS(10, 10);
 
         {
-            const scrollSpeed: f32 = 40;
-            currentPosition.y += raylib.GetMouseWheelMove() * scrollSpeed;
-        }
-        {
-            const moveSpeed: f32 = 20;
-            const helper = .{
-                .{
-                    .key = .KEY_LEFT,
-                    .value = .{ .x = 1, .y = 0 },
-                },
-                .{
-                    .key = .KEY_RIGHT,
-                    .value = .{ .x = -1, .y = 0 },
-                },
-                .{
-                    .key = .KEY_UP,
-                    .value = .{ .x = 0, .y = 1 },
-                },
-                .{
-                    .key = .KEY_DOWN,
-                    .value = .{ .x = 0, .y = -1 },
-                },
+            const newIndex = newIndex:
+            {
+                if (raylib.IsKeyPressed(.KEY_EQUAL))
+                {
+                    break :newIndex @min(rangeIndex + 1, rangeSize.getRangeCount(appContext.bufferManager.totalBytes));
+                }
+                if (raylib.IsKeyPressed(.KEY_MINUS))
+                {
+                    break :newIndex rangeIndex -| 1;
+                }
+                break :newIndex rangeIndex;
             };
-            inline for (helper) |h|
+            if (newIndex != rangeIndex)
             {
-                if (raylib.IsKeyDown(h.key))
+                rangeIndex = newIndex;
+                clickedPosition = null;
+            }
+        }
+
+        const range = rangeSize.computeRange(rangeIndex);
+        const sequence = appContext.bufferManager.getSegmentForRange(range);
+
+        // position -> node -- simple search
+        // build up a path of node ids
+        // draw the information
+
+
+        // draw the bytes
+        // We know and we want the font to be monospace.
+        const textSpacing = 0;
+        const byteTextSize = raylib.MeasureTextEx(fontTtf, "00", fontSize, textSpacing);
+        const byteSpacing = raylib.Vector2
+        {
+            .x = textSpacing + 10,
+            .y = textSpacing,
+        };
+        const byteTextSizePadded = byteTextSize.add(byteSpacing);
+
+        {
+            var lineIndex: usize = 0;
+            var colIndex: usize = 0;
+
+            var iter = sequence.iterate().?;
+            while (true)
+            {
+                const bytes = iter.current();
+
+                for (bytes) |b|
                 {
-                    const vector: raylib.Vector2 = h.value;
-                    const translation = vector.scale(moveSpeed);
-                    currentPosition = currentPosition.add(translation);
+                    std.debug.assert(colIndex < rangeSize.cols and lineIndex < rangeSize.rows);
+
+                    const cellPos = raylib.Vector2
+                    {
+                        .x = @floatFromInt(colIndex),
+                        .y = @floatFromInt(lineIndex),
+                    };
+                    const pos = componentwiseMult(cellPos, byteTextSizePadded);
+
+                    const hexString = hexString: {
+                        var result: [2:0]u8 = undefined;
+                        result[2] = 0;
+
+                        const firstHalf: u4 = @intCast(b & 0x0F);
+                        const secondHalf: u4 = @intCast((b >> 4) & 0x0F);
+
+                        result[0] = toHexChar(firstHalf);
+                        result[1] = toHexChar(secondHalf);
+
+                        break :hexString result;
+                    };
+                    
+                    raylib.DrawTextEx(
+                        fontTtf,
+                        &hexString,
+                        pos,
+                        fontSize,
+                        textSpacing,
+                        raylib.WHITE);
+
+                    colIndex += 1;
+                    if (colIndex == rangeSize.cols)
+                    {
+                        colIndex = 0;
+                        lineIndex += 1;
+                    }
+                }
+
+                if (!iter.advance())
+                {
+                    break;
                 }
             }
         }
 
-        const Context = struct
-        {
-            currentPosition: raylib.Vector2,
-            tree: *ast.AST,
-            allocator: std.mem.Allocator,
-            font: raylib.Font,
-
-            fn drawTextLine(context: *@This(), string: [:0]const u8) void
-            {
-                const spacing = 2;
-                raylib.DrawTextEx(
-                    context.font,
-                    string,
-                    context.currentPosition,
-                    fontSize,
-                    spacing,
-                    raylib.WHITE);
-                context.currentPosition.y += lineHeight;
-            }
-        };
-        var context = Context
-        {
-            .currentPosition = currentPosition,
-            .tree = &tree,
-            .allocator = allocator,
-            .font = fontTtf,
-        };
-
-        const draw = struct
-        {
-            fn f(nodeIndex: usize, context_: *Context) !void
-            {
-                const node: *ast.Node = &context_.tree.syntaxNodes.items[nodeIndex];
-
-                var writerBuf = std.ArrayList(u8).init(context_.allocator);
-                defer writerBuf.clearAndFree();
-                const writer = writerBuf.writer();
-
-                {
-                    const start = node.span.start;
-                    const end = node.span.endInclusive;
-                    try writer.print(
-                        "Range[{d},{d}:{d},{d}]",
-                        .{
-                            start.byte,
-                            start.bit,
-                            end.byte,
-                            end.bit,
-                        });
-                }
-
-                if (node.data != ast.invalidDataIndex)
-                {
-                    const printString = struct
-                    {
-                        fn f(writer_: anytype, string: []const u8) !void
-                        {
-                            for (string) |ch|
-                            {
-                                const specialCh = switch (ch)
-                                {
-                                    '\n' => "\\n",
-                                    '\r' => "\\r",
-                                    0 => "\\0",
-                                    else => null,
-                                };
-                                if (specialCh) |special|
-                                {
-                                    _ = try writer_.print("{s}", .{ special });
-                                }
-                                else
-                                {
-                                    _ = try writer_.print("{c}", .{ ch });
-                                }
-                            }
-                        }
-
-                    }.f;
-                    const data = context_.tree.nodeDatas.items[node.data];
-                    try writer.print(", Value: ", .{});
-                    switch (data)
-                    {
-                        .LiteralString => |s|
-                        {
-                            try printString(writer, s);
-                        },
-                        .OwnedString => |s|
-                        {
-                            try printString(writer, s.items);
-                        },
-                        .ChunkType => |t|
-                        {
-                            try printString(writer, &t.getString());
-                        },
-                        inline else => |d| try writer.print("{}", .{ d }),
-                    }
-                }
-                if (node.nodeType != .Container)
-                {
-                    try writer.print(", Type: ", .{});
-                    switch (node.nodeType)
-                    {
-                        inline else => |t, key| 
-                        {
-                            if (@TypeOf(t) == void)
-                            {
-                                try writer.print("{s}", .{ @tagName(key) });
-                            }
-                            else
-                            {
-                                try writer.print("{}", .{ t });
-                            }
-                        }
-                    }
-                }
-                try writer.writeByte(0);
-
-                context_.drawTextLine(writerBuf.items[0 .. writerBuf.items.len - 1: 0]);
-
-                if (node.syntaxChildren.len() > 0)
-                {
-                    const offsetSize = 20;
-                    context_.currentPosition.x += offsetSize;
-                    defer context_.currentPosition.x -= offsetSize;
-
-                    for (node.syntaxChildren.array.items) |childNodeIndex|
-                    {
-                        try f(childNodeIndex, context_);
-                    }
-                }
-           }
-        }.f;
-
-        for (tree.rootNodes.items) |rootNodeIndex|
-        {
-            try draw(rootNodeIndex, &context);
-        }
     }
 }
 
 test
 { 
-    const pipelines = parser.pipelines;
     _ = pipelines;
     _ = parser.zlib;
     _ = parser.png;
