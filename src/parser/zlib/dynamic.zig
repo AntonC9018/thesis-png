@@ -2,7 +2,9 @@ const helper = @import("helper.zig");
 const huffman = helper.huffman;
 const std = helper.std;
 
-const CodeDecodingAction = enum
+const DeflateContext = helper.DeflateContext;
+
+pub const CodeDecodingAction = enum
 {
     LiteralOrLenCodeCount,
     DistanceCodeCount,
@@ -10,19 +12,17 @@ const CodeDecodingAction = enum
     CodeLens,
     LiteralOrLenCodeLens,
     DistanceCodeLens,
-    Done,
 };
 
-const CodeFrequencyAction = enum
+pub const CodeFrequencyAction = enum
 {
     LiteralLen,
     RepeatCount,
-    Done,
 };
 
 const CodeFrequencyState = struct
 {
-    action: CodeFrequencyAction,
+    action: CodeFrequencyAction = .LiteralLen,
 
     tree: huffman.Tree,
     currentBitCount: u5,
@@ -58,7 +58,7 @@ pub const State = union
 
 pub const CodeDecodingState = struct
 {
-    action: CodeDecodingAction,
+    action: CodeDecodingAction = .LiteralOrLenCodeCount,
 
     // Reset as it's being read.
     readListItemCount: usize,
@@ -97,7 +97,7 @@ pub const CodeDecodingState = struct
     }
 };
 
-const DecompressionAction = enum
+pub const DecompressionAction = enum
 {
     LiteralOrLen,
     Distance,
@@ -114,18 +114,25 @@ const DecompressionState = struct
 };
 
 pub fn decodeCodes(
-    context: *const helper.DeflateContext,
+    context: *DeflateContext,
     state: *CodeDecodingState) !bool
 {
+    try context.level().pushNode(.{
+        .DynamicHuffman = .{
+            .CodeDecoding = state.action,
+        },
+    });
+    defer context.level().pop();
+
     switch (state.action)
     {
-        // TODO:
-        // Maybe actually really try using async here?
-        // Code like this kills me.
         .LiteralOrLenCodeCount =>
         {
             const count = try helper.readBits(.{ .context = context }, u5);
             state.literalOrLenCodeCount = count;
+            try context.level().completeNodeWithValue(.{
+                .Number = count,
+            });
             state.action = .DistanceCodeCount;
             return false;
         },
@@ -133,6 +140,9 @@ pub fn decodeCodes(
         {
             const count = try helper.readBits(.{ .context = context }, u5);
             state.distanceCodeCount = count;
+            try context.level().completeNodeWithValue(.{
+                .Number = count,
+            });
             state.action = .CodeLenCount;
             return false;
         },
@@ -140,6 +150,9 @@ pub fn decodeCodes(
         {
             const count = try helper.readBits(.{ .context = context }, u4);
             state.codeLenCodeCount = count;
+            try context.level().completeNodeWithValue(.{
+                .Number = count,
+            });
             state.action = .CodeLens;
 
             return false;
@@ -152,49 +165,58 @@ pub fn decodeCodes(
                 &state.readListItemCount,
                 3);
             
-            if (readAllArray)
+            if (!readAllArray)
             {
-                state.action = .LiteralOrLenCodeLens;
-                state.literalOrLenCodeLens = try context.allocator()
-                    .alloc(u8, state.getLiteralOrLenCodeCount());
-
-                const copy = state.codeLenCodeLens;
-                for (0 .. state.getLenCodeCount()) |i|
-                {
-                    const orderArray = &[_]u5{
-                        16, 17, 18, 0, 8,
-                        7, 9, 6, 10, 5,
-                        11, 4, 12, 3, 13,
-                        2, 14, 1, 15,
-                    };
-                    const remappedIndex = orderArray[i];
-                    state.codeLenCodeLens[remappedIndex] = copy[i];
-
-                    const tree = try huffman.createTree(
-                        @ptrCast(&state.codeLenCodeLens),
-                        context.allocator());
-                    state.codeFrequencyState = std.mem.zeroInit(CodeFrequencyState, .{
-                        .action = .LiteralLen,
-                        .tree = tree,
-                    });
-                }
+                return false;
             }
-            return false;
+
+            // TODO: Maybe a node for each code?
+            try context.level().completeNode();
+
+            state.action = .LiteralOrLenCodeLens;
+            state.literalOrLenCodeLens = try context.allocator()
+                .alloc(u8, state.getLiteralOrLenCodeCount());
+
+            const copy = state.codeLenCodeLens;
+            for (0 .. state.getLenCodeCount()) |i|
+            {
+                const orderArray = &[_]u5{
+                    16, 17, 18, 0, 8,
+                    7, 9, 6, 10, 5,
+                    11, 4, 12, 3, 13,
+                    2, 14, 1, 15,
+                };
+                const remappedIndex = orderArray[i];
+                state.codeLenCodeLens[remappedIndex] = copy[i];
+
+                // TODO: A semantic node for this? Or a higher level node?
+                const tree = try huffman.createTree(
+                    @ptrCast(&state.codeLenCodeLens),
+                    context.allocator());
+                state.codeFrequencyState = std.mem.zeroInit(CodeFrequencyState, .{
+                    .action = .LiteralLen,
+                    .tree = tree,
+                });
+            }
+            return true;
         },
         .LiteralOrLenCodeLens =>
         {
             const array = state.literalOrLenCodeLens;
             const readAllArray = try fullyReadCodeLenEncodedFrequency(context, state, array);
 
-            if (readAllArray)
+            if (!readAllArray)
             {
-                state.action = .DistanceCodeLens;
-                state.distanceCodeLens = try context.allocator()
-                    .alloc(u8, state.getDistanceCodeCount());
-                state.readListItemCount = 0;
+                return false;
             }
 
-            return false;
+            state.action = .DistanceCodeLens;
+            state.distanceCodeLens = try context.allocator()
+                .alloc(u8, state.getDistanceCodeCount());
+            state.readListItemCount = 0;
+
+            try context.level().completeNode();
+            return true;
         },
         .DistanceCodeLens =>
         {
@@ -203,23 +225,29 @@ pub fn decodeCodes(
 
             if (readAllArray)
             {
-                state.action = .Done;
+                try context.level().completeNode();
                 return true;
             }
 
             return false;
         },
-        .Done => unreachable,
     }
 }
 
 fn readCodeLenEncodedFrequency(
-    context: *const helper.DeflateContext,
+    context: *DeflateContext,
     state: *CodeDecodingState,
     outputArray: []u8) !bool
 {
     const readCount = &state.readListItemCount;
     const freqState = &state.codeFrequencyState;
+
+    try context.level().pushNode(.{
+        .DynamicHuffman = .{
+            .CodeFrequency = freqState.action,
+        },
+    });
+    defer context.level().pop();
 
     switch (freqState.action)
     {
@@ -231,6 +259,10 @@ fn readCodeLenEncodedFrequency(
 
             std.debug.assert(len <= 18);
 
+            try context.level().completeNodeWithValue(.{
+                .Number = len,
+            });
+            
             // Value above 16 means the bits that follow are the repeat count.
             if (len >= 16)
             {
@@ -243,17 +275,21 @@ fn readCodeLenEncodedFrequency(
 
                 return false;
             }
-
-            freqState.action = .Done;
-            outputArray[readCount.*] = len;
-            readCount.* += 1;
-            return true;
+            else
+            {
+                outputArray[readCount.*] = len;
+                readCount.* += 1;
+                return true;
+            }
         },
         .RepeatCount =>
         {
             const repeatBitCount = freqState.repeatBitCount();
             const repeatCount = try helper.readNBits(context, repeatBitCount);
             freqState.repeatCount = @intCast(repeatCount);
+            try context.level().completeNodeWithValue(.{
+                .Number = repeatCount,
+            });
 
             const maxCanReadCount = outputArray.len - readCount.*;
             if (repeatCount > maxCanReadCount)
@@ -269,28 +305,33 @@ fn readCodeLenEncodedFrequency(
                 outputArray[index] = repeatedLen;
             }
             readCount.* += repeatCount;
-            freqState.action = .Done;
             return true;
         },
-        .Done => unreachable,
     }
 }
 
 fn fullyReadCodeLenEncodedFrequency(
-    context: *const helper.DeflateContext,
+    context: *DeflateContext,
     state: *CodeDecodingState,
     outputArray: []u8) !bool
 {
     const readCount = &state.readListItemCount;
     const freqState = &state.codeFrequencyState;
+
     if (readCount.* < outputArray.len)
     {
         while (true)
         {
+            try context.level().pushNode(.{
+                .DynamicHuffman = .EncodedFrequency,
+            });
+            defer context.level().pop();
+
             const done = try readCodeLenEncodedFrequency(context, state, outputArray);
             if (done)
             {
                 freqState.action = .LiteralLen;
+                try context.level().completeNode();
                 break;
             }
         }
@@ -304,6 +345,11 @@ pub fn initializeDecompressionState(
     allocator: std.mem.Allocator) !void
 {
     const decodingState = &state.codeDecoding;
+    // TODO:
+    // Make sure this runs even on errors.
+    // There should be some sort of global dispose that works on any state.
+    // NOTE: has to be done before tree creation, because we're using the arrays.
+    defer decodingState.deinit(allocator);
 
     const literalTree = try huffman.createTree(
         @ptrCast(decodingState.literalOrLenCodeLens),
@@ -311,12 +357,6 @@ pub fn initializeDecompressionState(
     const distanceTree = try huffman.createTree(
         @ptrCast(decodingState.distanceCodeLens),
         allocator);
-
-    // TODO:
-    // Make sure this runs even on an errors.
-    // There should be some sort of global dispose that works on any state.
-    // NOTE: has to be done before tree creation, because we're using the arrays.
-    decodingState.deinit(allocator);
 
     state.* = .{
         .decompression = std.mem.zeroInit(DecompressionState, .{
@@ -327,9 +367,17 @@ pub fn initializeDecompressionState(
 }
 
 pub fn decompressSymbol(
-    context: *const helper.DeflateContext,
+    context: *DeflateContext,
     state: *DecompressionState) !?helper.Symbol
 {
+    try context.level().push();
+    defer context.level().pop();
+
+    var createNode = DecompressionNodeWriter
+    {
+        .context = context,
+    };
+
     switch (state.action)
     {
         .LiteralOrLen =>
@@ -338,21 +386,27 @@ pub fn decompressSymbol(
                 .tree = &state.literalOrLenTree,
                 .currentBitCount = &state.currentBitCount,
             });
+
             switch (value)
             {
                 // TODO: Share these constants with the fixed module.
                 0 ... 255 =>
                 {
+                    try createNode.create(.Literal, value);
                     return .{ .LiteralValue = @intCast(value) };
                 },
                 256 =>
                 {
+                    try createNode.create(.EndBlock, value);
                     return .{ .EndBlock = { } };
                 },
                 257 ... 285 =>
                 {
+                    const len: u5 = @intCast(value - 257);
                     state.action = .Distance;
-                    state.len = @intCast(value - 257);
+                    state.len = len;
+                    try createNode.create(.Len, len);
+                    return null;
                 },
                 else => unreachable,
             }
@@ -365,13 +419,39 @@ pub fn decompressSymbol(
             });
             state.action = .LiteralOrLen;
 
+            try createNode.create(.Distance, distance);
+
             return .{
                 .BackReference = .{
                     .distance = distance,
                     .len = state.len,
-                }
+                },
             };
         },
     }
-    return null;
 }
+
+pub const DecompressionValueType = enum
+{
+    Literal,
+    Len,
+    EndBlock,
+    Distance,
+};
+
+pub const DecompressionNodeWriter = struct
+{
+    context: *DeflateContext,
+
+    pub fn create(self: @This(), t: DecompressionValueType, value: usize) !void
+    {
+        self.context.level().setNodeType(.{
+            .DynamicHuffman = .{
+                .DecompressionValue = t,
+            },
+        });
+        try self.context.level().completeNodeWithValue(.{
+            .Number = value,
+        });
+    }
+};

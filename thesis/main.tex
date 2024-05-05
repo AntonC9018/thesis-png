@@ -405,7 +405,7 @@ pub fn impl(context: *Context) !void
         .Number =>
         {
             // Read the int, modify the stream
-            const number = try pipelines.readInt(context.sequence);
+            const number = try pipelines.readInt(context.sequence());
 
             // Save the context
             context.state.number = number;
@@ -470,7 +470,7 @@ pub fn impl(context: *Context) !void
         .Number =>
         {
             // Read the int, but do not consume the stream
-            const number = try pipelines.peekInt(context.sequence);
+            const number = try pipelines.peekInt(context.sequence());
 
             // Save the context
             context.state.number = number.value;
@@ -506,7 +506,7 @@ pub fn impl(context: *Context) !void
         .Number =>
         {
             // Read the int, modify the stream
-            const number = try pipelines.readInt(context.sequence);
+            const number = try pipelines.readInt(context.sequence());
 
             // Validate
             if (number == 256)
@@ -638,7 +638,63 @@ După ce s-a întâlnit problema care se rezolvă folosind această idee, s-a cl
 % 1. Cross-compilation to windows, testing GUI on windows.
 % 2. Running GUIs on WSL (I want to try if it works, that would be easier).
 
-\chapterConclusionSection{implementation_chater_title}
+\chapter{Construirea arborelui sintactic}
+
+În implementarea inițială a sistemului, arhitectura a fost concepută în așa fel ca
+logica de creare a arborelui să fie cu totul independentă de logica citirii datelor din fluxul de date.
+S-a conceput ca transmiterea informațiilor despre nodul curent să fie la nivel de starea generală a citirii.
+Deci, citirea următorului element din flux de date ar presupune scrierea informațiilor interpretate
+într-un câmp prestabilit, în obiectul care reprezintă datele elementul
+din fișier care se citește la momentul dat (fie chunk-ul curent), păstrat în starea generală de citire.
+După aceasta, codul care construiește arborele sintactic ar detecta care tip de nod a fost citit la ultima etapă
+(este o altă problemă, descrisă separat mai târziu),
+și, în dependența de stare în care se afla parserul înainte de ultima operație de citire,
+ar trebui să acceseze exact același câmp în care au fost citite datele la etapa precedentă.
+
+Această abordare are mai multe probleme:
+\begin{enumerate}
+    \item
+        Câmpul în care au fost scrise informațiile trebuie să fie sincronizat
+        între codul de scriere și codul de citire.
+    \item
+        Determinarea din care anume câmp trebuie să fie citite datele
+        depinde de starea parserului înainte de ultima operație,
+        dar nu doar de tipul nodului produs.
+        De exemplu, nodurile generate din elementele formatului Zlib pot apărea
+        la mai multe chunk-uri \ac{PNG}, dar ar avea același tip de nod.
+    \item
+        Parserul poate produce doar un singur tip de nod la fiecare operație, deci trebuie
+        să fie oprit după fiecare operație de scriere a datelor într-un câmp.
+        Mai mult ca aceasta, parserul nu poate să treacă la următoarea stare imediat,
+        deoarece aceasta ar putea elimina unele informații necesare pentru a crea următorul nod.
+\end{enumerate}
+
+Următoarea problemă este problema detectării tipului curent de nod.
+Deoarece arhitectura sistemului s-a conceput în așa fel ca parserul să nu cunoască despre tipuri de noduri,
+nu putem transmite aceste informații direct din parser la codul care folosește parserul pentru
+a construi arborele sintactic.
+Deci, aceste informații trebuie să fie derivate în mod dinamic pe partea
+care intepretează informația primită de la parser.
+Pentru acest lucru, trebuie să fie posibil de detectat pentru ce stare au fost citite informații
+la ultima invocare, sau cel puțin să fie creat nodul înainte de a realiza invocarea.
+După invocare, trebuie să se stabilească care noduri pot fi umplute cu informații,
+și dacă trebuie să se creeze noduri noi.
+Sistemul de gestionare a acestei informații devine destul de complicat,
+și necesită ca codul care construiește arborele să cunoască despre semnificațiile stărilor parserului,
+deci are loc și duplicarea structurii stărilor.
+
+Aceste probleme nu semnifică că abordarea nu poate fi folosită în practică,
+dar provoacă o imperativă de a căuta o soluție alternativă.
+Prima idee destul de evidentă este de schmbat puțin arhitectura,
+permițând parserului să cunoască unele concepte care țin de noduri sintactice,
+dar totuși să lase responsabilitatea de a aranja nodurile în memorie unui modul extern.
+
+Deci, ideea este ca parserul să genereze un flux de noduri,
+care să conțină informațiile interpretate,
+pe lângă intervalului citit din fișier pentru a genera aceste informații,
+și a adâncimii, pentru a putea determina la care nod părinte acesta trebuie să fie atașat.
+
+\chapterConclusionSection{implementation_chapter_title}
 
 
 \unnumberedChapter{Concluziile Finale și Recomandările}

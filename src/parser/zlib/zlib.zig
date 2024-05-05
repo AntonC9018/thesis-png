@@ -1,9 +1,11 @@
-const deflate = @import("deflate.zig");
+pub const deflate = @import("deflate.zig");
 const helper = @import("helper.zig");
+const parser = helper.parser;
 const std = @import("std");
-const pipelines = helper.pipelines;
+const pipelines = parser.pipelines;
 
 pub const OutputBuffer = deflate.OutputBuffer;
+const LevelContext = parser.level.LevelContext;
 
 const Header = struct
 {
@@ -12,14 +14,13 @@ const Header = struct
     dictionaryId: u4,
 };
 
-const Action = enum
+pub const Action = enum
 {
     CompressionMethodAndFlags,
     Flags,
     PresetDictionary,
     CompressedData,
     Adler32Checksum,
-    Done,
 };
 
 const Adler32State = struct
@@ -84,32 +85,29 @@ pub const State = struct
         cmf: CompressionMethodAndFlags,
         dictionaryId: u32,
     } = .{ .none = {} },
-
-    checksum: u32 = 0,
 };
 
-const CompressionMethodAndFlags = packed struct
+pub const CompressionMethodAndFlags = packed struct
 {
     compressionMethod: CompressionMethod,
     compressionInfo: CompressionInfo,
 };
 
-const CompressionMethod = enum(u4)
+pub const CompressionMethod = enum(u4)
 {
     Deflate = 8,
     Reserved = 15,
     _,
 };
 
-const CompressionInfo = u4;
+pub const CompressionInfo = u4;
 
-const Flags = packed struct
+pub const Flags = packed struct
 {
     check: u5,
     presetDictionary: bool,
     compressionLevel: CompressionLevel,
 };
-
 
 const CompressionLevel = enum(u2)
 {
@@ -134,35 +132,45 @@ pub const CommonContext = helper.CommonContext;
 
 pub const Context = struct
 {
-    common: *const CommonContext,
+    common: *CommonContext,
     state: *State,
 
-    pub fn output(self: *const Context) *helper.OutputBuffer
+    pub fn level(self: *Context) LevelContext(Context)
+    {
+        return .{
+            .data = self.common.levelData(),
+            .context = self,
+        };
+    }
+    pub fn output(self: *Context) *helper.OutputBuffer
     {
         return self.common.output;
     }
-    pub fn sequence(self: *const Context) *pipelines.Sequence
+    pub fn sequence(self: *Context) *pipelines.Sequence
     {
-        return self.common.sequence;
+        return self.common.sequence();
+    }
+    pub fn getStartBytePosition(self: *Context) parser.ast.Position
+    {
+        return .{
+            .byte = self.sequence().getStartBytePosition(),
+            .bit = 0,
+        };
+    }
+    pub fn nodeContext(self: *Context) *parser.NodeContext
+    {
+        return self.common.nodeContext();
     }
 };
 
-pub fn decode(context: *const Context) !bool
+pub fn decode(context: *Context) !bool
 {
     const state = context.state;
 
-    if (false)
-    {
-        const sequenceBefore = context.sequence().*;
-        // We don't need to 
-        const shouldComputeChecksum = state.action != .Adler32Checksum;
-        defer if (shouldComputeChecksum)
-        {
-            const newSequenceStart = context.sequence().start();
-            const readSequence = sequenceBefore.sliceToExclusive(newSequenceStart);
-            context.state.adler32.update(&readSequence);
-        };
-    }
+    try context.level().pushNode(.{
+        .Zlib = state.action,
+    });
+    defer context.level().pop();
 
     switch (state.action)
     {
@@ -171,6 +179,9 @@ pub fn decode(context: *const Context) !bool
             const value = try pipelines.removeFirst(context.sequence());
             const cmf: CompressionMethodAndFlags = @bitCast(value);
             state.data = .{ .cmf = cmf };
+            try context.level().completeNodeWithValue(.{
+                .CompressionMethodAndFlags = cmf,
+            });
 
             switch (cmf.compressionMethod)
             {
@@ -183,7 +194,7 @@ pub fn decode(context: *const Context) !bool
                     state.decompressor = .{
                         .deflate = .{},
                     };
-                    state.action = Action.Flags;
+                    state.action = .Flags;
                 },
                 else => return error.UnsupportedCompressionMethod,
             }
@@ -192,6 +203,10 @@ pub fn decode(context: *const Context) !bool
         {
             const value = try pipelines.removeFirst(context.sequence());
             const flags: Flags = @bitCast(value);
+            try context.level().completeNodeWithValue(.{
+                .ZlibFlags = flags,
+            });
+
             const flagValid = checkCheckFlag(state.data.cmf, flags);
             if (!flagValid)
             {
@@ -212,6 +227,9 @@ pub fn decode(context: *const Context) !bool
         {
             const value = try pipelines.readNetworkUnsigned(context.sequence(), u32);
             state.data = .{ .dictionaryId = value };
+            try context.level().completeNodeWithValue(.{
+                .Number = value,
+            });
             state.action = .CompressedData;
         },
         .CompressedData =>
@@ -226,7 +244,7 @@ pub fn decode(context: *const Context) !bool
                 state.adler32.update(addedBytes);
             }
 
-            const deflateContext = deflate.Context
+            var deflateContext = deflate.Context
             {
                 .common = context.common,
                 .state = decompressor,
@@ -240,18 +258,20 @@ pub fn decode(context: *const Context) !bool
             }
             if (doneWithBlock)
             {
+                try context.level().completeNode();
                 decompressor.action = deflate.Action.Initial;
             }
         },
         .Adler32Checksum =>
         {
-            std.debug.print("Decoded count: {}\n", .{context.output().buffer().len});
-
             const checksum = try pipelines.readNetworkUnsigned(context.sequence(), u32);
-            state.checksum = checksum;
-            std.debug.print("Checksum expected: {x:0>16}, Computed: {x:0>16}\n", .{checksum, state.adler32.getChecksum()});
+            try context.level().completeNodeWithValue(.{
+                .U32 = checksum,
+            });
 
             const computedChecksum = state.adler32.getChecksum();
+            std.debug.print("Checksum expected: {x:0>16}, Computed: {x:0>16}\n", .{ checksum, computedChecksum });
+
             if (checksum != computedChecksum)
             {
                 return error.ChecksumMismatch;
@@ -259,12 +279,11 @@ pub fn decode(context: *const Context) !bool
 
             return true;
         },
-        .Done => unreachable,
     }
     return false;
 }
 
-pub fn decodeAsMuchAsPossible(context: *const Context) !void
+pub fn decodeAsMuchAsPossible(context: *Context) !void
 {
     while (true)
     {
@@ -296,7 +315,10 @@ test "failing tests"
     // The examples are gzip, not zlib.
     // We don't parse gzip.
     if (true)
+    {
         return;
+    }
+
     const examplesDirectoryPath = "references/uzlib/tests/decomp-bad-inputs";
 
     const cwd = std.fs.cwd();
@@ -388,6 +410,7 @@ fn doTest(file: anytype, allocator: std.mem.Allocator)
     var state = State{};
     var resultError: ?anyerror = null;
     var sequence: pipelines.Sequence = undefined;
+    var settings: helper.Settings = .{};
 
     outerLoop: while (true)
     {
@@ -399,6 +422,7 @@ fn doTest(file: anytype, allocator: std.mem.Allocator)
             .sequence = &sequence,
             .output = &outputBuffer,
             .allocator = allocator,
+            .settings = &settings,
         };
 
         const context = Context

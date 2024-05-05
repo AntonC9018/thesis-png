@@ -1,7 +1,9 @@
 const helper = @import("helper.zig");
 const pipelines = helper.pipelines;
 
-pub fn decompress(context: *const helper.DeflateContext, state: *DecompressionState) !void
+const DeflateContext = helper.DeflateContext;
+
+pub fn decompress(context: *DeflateContext, state: *DecompressionState) !void
 {
     if (state.bytesLeftToCopy == 0)
     {
@@ -42,11 +44,10 @@ pub fn decompress(context: *const helper.DeflateContext, state: *DecompressionSt
     }
 }
 
-const InitStateAction = enum
+pub const InitStateAction = enum
 {
     Len,
     NLen,
-    Done,
 };
 
 pub const State = union
@@ -57,7 +58,7 @@ pub const State = union
 
 pub const InitState = struct
 {
-    action: InitStateAction,
+    action: InitStateAction = .Len,
     len: u16,
     nlen: u16,
 };
@@ -67,14 +68,22 @@ pub const DecompressionState = struct
     bytesLeftToCopy: u16,
 };
 
-pub fn initState(context: *const helper.DeflateContext, state: *InitState) !bool
+pub fn initState(context: *DeflateContext, state: *InitState) !bool
 {
+    try context.level().pushNode(.{
+        .NoCompression = state.action,
+    });
+    defer context.level().pop();
+
     switch (state.action)
     {
         .Len =>
         {
             const len = try pipelines.readNetworkUnsigned(context.sequence(), u16);
             state.len = len;
+            try context.level().completeNodeWithValue(.{
+                .Number = len,
+            });
             state.action = .NLen;
             return false;
         },
@@ -83,14 +92,15 @@ pub fn initState(context: *const helper.DeflateContext, state: *InitState) !bool
             const nlen = try pipelines.readNetworkUnsigned(context.sequence(), u16);
             state.nlen = nlen;
 
+            try context.level().completeNodeWithValue(.{
+                .Number = nlen,
+            });
+
             if (nlen != ~state.len)
             {
                 return error.NLenNotOnesComplement;
             }
-
-            state.action = .Done;
             return true;
         },
-        .Done => unreachable,
     }
 }

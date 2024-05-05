@@ -1,171 +1,308 @@
 const std = @import("std");
+const parser = @import("parser/module.zig");
+const png = parser.png;
 
-const pipelines = @import("pipelines.zig");
-test
-{ 
-    _ = pipelines;
-    _ = @import("zlib/zlib.zig");
-}
+const debug = @import("pngDebug.zig");
+const ast = @import("ast.zig");
 
-const parser = @import("parser.zig");
-
-pub fn main() !void
+fn parseIntoTree(allocator: std.mem.Allocator) !ast.AST
 {
-    var cwd = std.fs.cwd();
+    var testContext = try debug.openTestReader(allocator);
+    defer testContext.deinit();
 
-    var testDir = try cwd.openDir("test_data", .{ .access_sub_paths = true, });
-    defer testDir.close();
-
-    var file = try testDir.openFile("test.png", .{ .mode = .read_only, });
-    defer file.close();
-
-    const allocator = std.heap.page_allocator;
-    var reader = pipelines.Reader(@TypeOf(file.reader()))
-    {
-        .dataProvider = file.reader(),
-        .allocator = allocator,
-        .preferredBufferSize = 4096, // TODO: Get optimal block size from OS.
-    };
-    defer reader.deinit();
-
-    var parserState = parser.createParserState();
-    var chunks = std.ArrayList(parser.ChunkNode).init(allocator);
-    const settings = parser.Settings
+    const reader = &testContext.reader;
+    var parserState = png.createParserState();
+    const parserSettings = png.Settings
     {
         .logChunkStart = true,
     };
 
+    var tree = ast.AST.create(.{
+        .nodeData = allocator,
+        .rootNode = allocator,
+        .syntaxNode = allocator,
+    });
+    var nodeContext = parser.NodeContext
+    {
+        .allocator = allocator,
+        .operations = parser.NodeOperations.create(&tree),
+    };
+
+    var context = png.Context
+    {
+        .common = .{
+            .allocator = allocator,
+            .nodeContext = &nodeContext,
+            .settings = &parserSettings,
+            .sequence = undefined,
+        },
+        .state = &parserState,
+    };
+    defer
+    {
+        // Complete all of the nodes in case the tree is returned while there's an error.
+    }
+
     outerLoop: while (true)
     {
-        var readResult = try reader.read();
-        var context = parser.Context
-        { 
-            .state = &parserState,
-            .sequence = &readResult.sequence,
-            .allocator = allocator,
-            .settings = &settings,
-        };
+        std.debug.print("Reading sequence\n", .{});
+        const readResult = reader.read() catch unreachable;
 
-        doMaximumAmountOfParsing(&context, &chunks)
-        catch |err|
+        var sequence = readResult.sequence;
+        context.common.sequence = &sequence;
+
+        innerLoop: while (true)
         {
-            const errorStream = std.io.getStdErr();
-            try parser.printStepName(errorStream.writer(), context.state);
+            defer context.level().assertPopped();
 
-            const isNonRecoverableError = e:
+            const isDone = png.parseNextItem(&context) catch |err|
             {
-                switch (err)
+                if (err != error.NotEnoughBytes)
                 {
-                    error.NotEnoughBytes => break :e false,
-                    error.SignatureMismatch => 
-                    {
-                        std.debug.print("Signature mismatch\n", .{});
-                        break :e true;
-                    },
-                    error.LengthValueTooLarge => 
-                    {
-                        std.debug.print("Length too large\n", .{});
-                        break :e true;
-                    },
-                    else => |_| 
-                    {
-                        std.debug.print("Some other error: {}\n", .{err});
-                        break :e true;
-                    },
+                    std.debug.print("Non recoverable error {}", .{ err });
+                    break :outerLoop;
                 }
-            };
 
-            if (isNonRecoverableError)
+                break :innerLoop;
+            };
+            if (isDone and sequence.len() == 0)
             {
-                break :outerLoop;
+                break :innerLoop;
             }
-        };
+        }
 
         if (readResult.isEnd)
         {
-            const remaining = context.sequence.len();
+            const remaining = sequence.len();
             if (remaining > 0)
             {
                 std.debug.print("Not all input consumed. Remaining length: {}\n", .{remaining});
             }
 
-            if (!parser.isParserStateTerminal(context.state))
+            if (!png.isStateTerminal(&context))
             {
                 std.debug.print("Ended in a non-terminal state.\n", .{});
             }
 
-            break;
+            break :outerLoop;
         }
 
-        try reader.advance(context.sequence.start());
+        try reader.advance(sequence.start());
     }
 
-    for (chunks.items) |*chunk| 
-    {
-        std.debug.print("Chunk(Length: {d}, Type: {s}, CRC: {x})\n", .{
-            chunk.byteLength,
-            chunk.chunkType.bytes,
-            chunk.crc.value,
-        });
+    try context.level().completeHierarchy();
+    context.level().assertPopped();
 
-        const knownChunkType = parser.getKnownDataChunkType(chunk.chunkType);
-        switch (knownChunkType)
-        {
-            .ImageHeader =>
-            {
-                std.debug.print("  {any}\n", .{ chunk.dataNode.data.ihdr });
-            },
-            .Palette =>
-            {
-                std.debug.print("  {any}\n", .{ chunk.dataNode.data.plte.colors.items });
-            },
-            .Gamma =>
-            {
-                std.debug.print("  {any}\n", .{ chunk.dataNode.data.gamma });
-            },
-            .Text =>
-            {
-                std.debug.print("  {any}\n", .{ chunk.dataNode.data.text });
-            },
-            .Transparency =>
-            {
-                std.debug.print("  {any}\n", .{ chunk.dataNode.data.transparency });
-            },
-            else => {},
-        }
-    }
+    return tree;
 }
 
-fn doMaximumAmountOfParsing(
-    context: *parser.Context,
-    nodes: *std.ArrayList(parser.ChunkNode)) !void
+const raylib = @import("raylib");
+
+pub fn main() !void
 {
-    while (true)
+    const allocator = std.heap.page_allocator;
+    var tree = try parseIntoTree(allocator);
+
+    var currentPosition: raylib.Vector2 = .{ .x = 10, .y = 30 + 10 };
+
+    raylib.SetConfigFlags(.{ .FLAG_WINDOW_RESIZABLE = true });
+    raylib.InitWindow(1200, 1200, "hello world!");
+    raylib.SetTargetFPS(60);
+
+    defer raylib.CloseWindow();
+
+    const fontSize = 20;
+    const lineHeight = 30;
+    const fontTtf = raylib.LoadFontEx("resources/monofonto.otf", fontSize, null, 250);
+
+    while (!raylib.WindowShouldClose())
     {
-        const isDone = try parser.parseTopLevelNode(context);
-        if (!isDone)
+        raylib.BeginDrawing();
+        defer raylib.EndDrawing();
+        
+        raylib.ClearBackground(raylib.BLACK);
+        // raylib.DrawFPS(10, 10);
+
         {
-            continue;
+            const scrollSpeed: f32 = 40;
+            currentPosition.y += raylib.GetMouseWheelMove() * scrollSpeed;
+        }
+        {
+            const moveSpeed: f32 = 20;
+            const helper = .{
+                .{
+                    .key = .KEY_LEFT,
+                    .value = .{ .x = 1, .y = 0 },
+                },
+                .{
+                    .key = .KEY_RIGHT,
+                    .value = .{ .x = -1, .y = 0 },
+                },
+                .{
+                    .key = .KEY_UP,
+                    .value = .{ .x = 0, .y = 1 },
+                },
+                .{
+                    .key = .KEY_DOWN,
+                    .value = .{ .x = 0, .y = -1 },
+                },
+            };
+            inline for (helper) |h|
+            {
+                if (raylib.IsKeyDown(h.key))
+                {
+                    const vector: raylib.Vector2 = h.value;
+                    const translation = vector.scale(moveSpeed);
+                    currentPosition = currentPosition.add(translation);
+                }
+            }
         }
 
-        switch (context.state.action)
+        const Context = struct
         {
-            .Signature => 
-            {
-                std.debug.print("Signature\n", .{});
-            },
-            .Chunk =>
-            {
-                const newItem = try nodes.addOne();
-                newItem.* = context.state.chunk.node;
-            },
-            .StartChunk => unreachable,
-        }
+            currentPosition: raylib.Vector2,
+            tree: *ast.AST,
+            allocator: std.mem.Allocator,
+            font: raylib.Font,
 
-        context.state.action = .StartChunk;
-        if (context.state.isEnd)
+            fn drawTextLine(context: *@This(), string: [:0]const u8) void
+            {
+                const spacing = 2;
+                raylib.DrawTextEx(
+                    context.font,
+                    string,
+                    context.currentPosition,
+                    fontSize,
+                    spacing,
+                    raylib.WHITE);
+                context.currentPosition.y += lineHeight;
+            }
+        };
+        var context = Context
         {
-            return;
+            .currentPosition = currentPosition,
+            .tree = &tree,
+            .allocator = allocator,
+            .font = fontTtf,
+        };
+
+        const draw = struct
+        {
+            fn f(nodeIndex: usize, context_: *Context) !void
+            {
+                const node: *ast.Node = &context_.tree.syntaxNodes.items[nodeIndex];
+
+                var writerBuf = std.ArrayList(u8).init(context_.allocator);
+                defer writerBuf.clearAndFree();
+                const writer = writerBuf.writer();
+
+                {
+                    const start = node.span.start;
+                    const end = node.span.endInclusive;
+                    try writer.print(
+                        "Range[{d},{d}:{d},{d}]",
+                        .{
+                            start.byte,
+                            start.bit,
+                            end.byte,
+                            end.bit,
+                        });
+                }
+
+                if (node.data != ast.invalidDataIndex)
+                {
+                    const printString = struct
+                    {
+                        fn f(writer_: anytype, string: []const u8) !void
+                        {
+                            for (string) |ch|
+                            {
+                                const specialCh = switch (ch)
+                                {
+                                    '\n' => "\\n",
+                                    '\r' => "\\r",
+                                    0 => "\\0",
+                                    else => null,
+                                };
+                                if (specialCh) |special|
+                                {
+                                    _ = try writer_.print("{s}", .{ special });
+                                }
+                                else
+                                {
+                                    _ = try writer_.print("{c}", .{ ch });
+                                }
+                            }
+                        }
+
+                    }.f;
+                    const data = context_.tree.nodeDatas.items[node.data];
+                    try writer.print(", Value: ", .{});
+                    switch (data)
+                    {
+                        .LiteralString => |s|
+                        {
+                            try printString(writer, s);
+                        },
+                        .OwnedString => |s|
+                        {
+                            try printString(writer, s.items);
+                        },
+                        .ChunkType => |t|
+                        {
+                            try printString(writer, &t.getString());
+                        },
+                        inline else => |d| try writer.print("{}", .{ d }),
+                    }
+                }
+                if (node.nodeType != .Container)
+                {
+                    try writer.print(", Type: ", .{});
+                    switch (node.nodeType)
+                    {
+                        inline else => |t, key| 
+                        {
+                            if (@TypeOf(t) == void)
+                            {
+                                try writer.print("{s}", .{ @tagName(key) });
+                            }
+                            else
+                            {
+                                try writer.print("{}", .{ t });
+                            }
+                        }
+                    }
+                }
+                try writer.writeByte(0);
+
+                context_.drawTextLine(writerBuf.items[0 .. writerBuf.items.len - 1: 0]);
+
+                if (node.syntaxChildren.len() > 0)
+                {
+                    const offsetSize = 20;
+                    context_.currentPosition.x += offsetSize;
+                    defer context_.currentPosition.x -= offsetSize;
+
+                    for (node.syntaxChildren.array.items) |childNodeIndex|
+                    {
+                        try f(childNodeIndex, context_);
+                    }
+                }
+           }
+        }.f;
+
+        for (tree.rootNodes.items) |rootNodeIndex|
+        {
+            try draw(rootNodeIndex, &context);
         }
     }
 }
+
+test
+{ 
+    const pipelines = parser.pipelines;
+    _ = pipelines;
+    _ = parser.zlib;
+    _ = parser.png;
+}
+

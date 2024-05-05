@@ -2,13 +2,15 @@ const helper = @import("helper.zig");
 const std = helper.std;
 const huffman = helper.huffman;
 const pipelines = helper.pipelines;
+const parser = helper.parser;
 
 pub const OutputBuffer = helper.OutputBuffer;
 pub const noCompression = @import("noCompression.zig");
 pub const fixed = @import("fixed.zig");
 pub const dynamic = @import("dynamic.zig");
+pub const Symbol = helper.Symbol;
 
-const BlockType = enum(u2)
+pub const BlockType = enum(u2)
 {
     NoCompression = 0,
     FixedHuffman = 1,
@@ -19,32 +21,49 @@ const BlockType = enum(u2)
 pub const Context = struct
 {
     state: *State,
-    common: *const helper.CommonContext,
+    common: *helper.CommonContext,
 
-    pub fn sequence(self: *const Context) *pipelines.Sequence
+    pub fn level(self: *Context) helper.LevelContext(Context)
     {
-        return self.common.sequence;
+        return .{
+            .context = self,
+            .data = self.common.levelData(),
+        };
     }
-    pub fn allocator(self: *const Context) std.mem.Allocator
+    pub fn sequence(self: *Context) *pipelines.Sequence
     {
-        return self.common.allocator;
+        return self.common.sequence();
     }
-    pub fn output(self: *const Context) *helper.OutputBuffer
+    pub fn allocator(self: *Context) std.mem.Allocator
+    {
+        return self.common.allocator();
+    }
+    pub fn output(self: *Context) *helper.OutputBuffer
     {
         return self.common.output;
+    }
+    pub fn getStartBytePosition(self: *Context) helper.NodePosition
+    {
+        return .{
+           .byte = self.sequence().getStartBytePosition(),
+           .bit = self.state.bitOffset,
+        };
+    }
+    pub fn nodeContext(self: *Context) *parser.NodeContext
+    {
+        return self.common.nodeContext();
     }
 };
 
 pub const State = struct
 {
-    action: Action = .IsFinal,
+    action: Action = Action.Initial,
     bitOffset: u3 = 0,
 
     isFinal: bool = false,
     len: u16 = 0,
 
     dataBytesRead: u16 = 0,
-    lastSymbol: ?helper.Symbol = null,
 
     blockState: union(BlockType)
     {
@@ -52,7 +71,7 @@ pub const State = struct
         FixedHuffman: fixed.SymbolDecompressionState,
         DynamicHuffman: dynamic.State,
         Reserved: void,
-    } = .{ .Reserved = {} },
+    } = .Reserved,
 };
 
 pub const Action = enum
@@ -61,21 +80,30 @@ pub const Action = enum
     BlockType,
     BlockInit,
     DecompressionLoop,
-    Done,
 
     pub const Initial: Action = .IsFinal;
 };
 
 // Returns true when it's done with a block.
-pub fn deflate(context: *const Context) !bool
+pub fn deflate(context: *Context) !bool
 {
     const state = context.state;
+
+    try context.level().pushNode(.{
+        .Deflate = state.action,
+    });
+    defer context.level().pop();
+
     switch (state.action)
     {
         .IsFinal =>
         {
-            const isFinal = try helper.readBits(.{ .context = context }, u1);
-            state.isFinal = isFinal == 1;
+            const value = try helper.readBits(.{ .context = context }, u1);
+            const isFinal = value == 1;
+            state.isFinal = isFinal;
+            try context.level().completeNodeWithValue(.{
+                .Bool = isFinal,
+            });
             state.action = .BlockType;
         },
         .BlockType =>
@@ -84,6 +112,9 @@ pub fn deflate(context: *const Context) !bool
             const typedBlockType: BlockType = @enumFromInt(blockType);
 
             std.debug.print("Block type value: {}\n", .{typedBlockType});
+            try context.level().completeNodeWithValue(.{
+                .BlockType = typedBlockType,
+            });
 
             switch (typedBlockType)
             {
@@ -141,6 +172,7 @@ pub fn deflate(context: *const Context) !bool
                     const done = try noCompression.initState(context, &s.init);
                     if (done)
                     {
+                        try context.level().completeNode();
                         s.* = .{
                             .decompression = .{
                                 .bytesLeftToCopy = s.init.len,
@@ -156,6 +188,7 @@ pub fn deflate(context: *const Context) !bool
                     if (done)
                     {
                         try dynamic.initializeDecompressionState(s, context.allocator());
+                        try context.level().completeNode();
                         state.action = .DecompressionLoop;
                     }
                 },
@@ -170,31 +203,46 @@ pub fn deflate(context: *const Context) !bool
                 {
                     // This reads as much as possible, because there's nothing interesting going on.
                     try noCompression.decompress(context, &s.decompression);
-                    state.action = .Done;
-                },
-                .FixedHuffman => |*s|
-                {
-                    const symbol = try fixed.decompressSymbol(context, s);
-                    state.lastSymbol = symbol;
-                    const done = try helper.writeSymbolToOutput(context, symbol);
-                    return done;
-                },
-                .DynamicHuffman => |*s|
-                {
-                    const symbol = try dynamic.decompressSymbol(context, &s.decompression);
-                    state.lastSymbol = symbol;
-                    const done = try helper.writeSymbolToOutput(context, symbol);
-                    return done;
+                    return true;
                 },
                 .Reserved => unreachable,
+                inline else => |*s, mechanism|
+                {
+                    const symbol = symbol:
+                    {
+                        try context.level().pushNode(.ZlibSymbol);
+                        defer context.level().pop();
+
+                        const symbol_ = switch (mechanism)
+                        {
+                            .DynamicHuffman => try dynamic.decompressSymbol(context, &s.decompression),
+                            .FixedHuffman => try fixed.decompressSymbol(context, s),
+                            else => unreachable,
+                        };
+
+                        if (symbol_) |symbol__|
+                        {
+                            try context.level().completeNodeWithValue(.{
+                                .ZlibSymbol = symbol__,
+                            });
+                        }
+
+                        break :symbol symbol_;
+                    };
+                    const done = try helper.writeSymbolToOutput(context, symbol);
+                    if (done)
+                    {
+                        try context.level().completeNode();
+                    }
+                    return done;
+                },
             }
         },
-        .Done => unreachable,
     }
-    return state.action == .Done;
+    return false;
 }
 
-pub fn skipToWholeByte(context: *const Context) void
+pub fn skipToWholeByte(context: *Context) void
 {
     const state = context.state;
     if (state.bitOffset != 0)
