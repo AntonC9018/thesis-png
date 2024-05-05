@@ -186,6 +186,50 @@ fn rectContainsPoint(rect: raylib.Rectangle, point: raylib.Vector2) bool
            point.y >= rect.y and point.y <= rect.y + rect.height;
 }
 
+fn updateNodePathForPosition(
+    tree: *const ast.AST,
+    bytePosition: usize,
+    nodePath: *std.ArrayList(ast.NodeIndex)) !void
+{
+    nodePath.clearRetainingCapacity();
+    const rootNodeIndex = rootNode:
+    {
+        // Could do binary search, but there's not going to be much benefit.
+        for (tree.rootNodes.items) |rootIndex|
+        {
+            const node = &tree.syntaxNodes.items[rootIndex];
+            if (node.span.start.byte <= bytePosition
+                and node.span.endInclusive.byte >= bytePosition)
+            {
+                break :rootNode rootIndex;
+            }
+        }
+        return;
+    };
+
+    var currentIndex: usize = 0;
+    try nodePath.append(rootNodeIndex);
+    while (currentIndex < nodePath.items.len)
+    {
+        const nodeIndex = nodePath.items[currentIndex];
+        const node = &tree.syntaxNodes.items[nodeIndex];
+
+        // It doesn't really matter if it's a BFS or a DFS.
+        // For a DFS the logic is somewhat more complicated / use recursion.
+        currentIndex += 1;
+
+        for (node.syntaxChildren.array.items) |childIndex|
+        {
+            const child = &tree.syntaxNodes.items[childIndex];
+            if (child.span.start.byte >= bytePosition
+                and child.span.endInclusive.byte <= bytePosition)
+            {
+                try nodePath.append(childIndex);
+            }
+        }
+    }
+}
+
 const raylib = @import("raylib");
 
 pub fn main() !void
@@ -203,6 +247,9 @@ pub fn main() !void
 
     var tempBuffer = std.ArrayList(u8).init(allocator);
     defer tempBuffer.deinit();
+
+    var currentNodePath = std.ArrayList(ast.NodeIndex).init(allocator);
+    defer currentNodePath.deinit();
 
     raylib.SetConfigFlags(.{ .FLAG_WINDOW_RESIZABLE = true });
     raylib.InitWindow(1200, 1200, "hello world!");
@@ -260,6 +307,7 @@ pub fn main() !void
         };
         const byteTextSizePadded = byteTextSize.add(byteSpacing);
 
+        squareSelection:
         {
             const mousePos = raylib.GetMousePosition();
             const rangeSizeAsVec = (raylib.Vector2i
@@ -271,14 +319,27 @@ pub fn main() !void
                 raylib.Vector2.zero(),
                 componentwiseMult(rangeSizeAsVec, byteTextSizePadded));
 
-            if (rectContainsPoint(allTextRect, mousePos))
+            if (!rectContainsPoint(allTextRect, mousePos))
             {
-                const relativePos = mousePos.sub(allTextRect.topLeft());
-                const gridCoord = raylib.Vector2i
-                {
-                    .x = @intFromFloat(@floor(relativePos.x / byteTextSizePadded.x)),
-                    .y = @intFromFloat(@floor(relativePos.y / byteTextSizePadded.y)),
-                };
+                break :squareSelection;
+            }
+            const relativePos = mousePos.sub(allTextRect.topLeft());
+            const gridCoord = raylib.Vector2i
+            {
+                .x = @intFromFloat(@floor(relativePos.x / byteTextSizePadded.x)),
+                .y = @intFromFloat(@floor(relativePos.y / byteTextSizePadded.y)),
+            };
+
+            const byteOffset = @as(usize, @intCast(gridCoord.y)) * rangeSize.cols
+                + @as(usize, @intCast(gridCoord.x));
+
+            std.debug.print("Offset: {} Len: {}\n", .{ byteOffset, sequence.len() });
+            if (byteOffset >= sequence.len())
+            {
+                break :squareSelection;
+            }
+
+            {
                 const textPos = componentwiseMult(gridCoord.float(), byteTextSizePadded);
                 const textRect = rectFromTopLeftAndSize(textPos, byteTextSize);
                 const paddedRect = addPaddingToRect(textRect, .{
@@ -286,10 +347,18 @@ pub fn main() !void
                     .y = 0,
                 });
                 raylib.DrawRectangleRec(paddedRect, raylib.GRAY);
+            }
 
-                if (raylib.IsMouseButtonReleased(.MOUSE_BUTTON_LEFT))
+            if (raylib.IsMouseButtonReleased(.MOUSE_BUTTON_LEFT))
+            {
+                const bytePosition = rangeSize.byteCount() * rangeIndex + byteOffset;
+                clickedPosition = gridCoord;
+
+                try updateNodePathForPosition(&appContext.tree, bytePosition, &currentNodePath);
+
+                for (currentNodePath.items) |nodeIndex|
                 {
-                    clickedPosition = gridCoord;
+                    std.debug.print("Node index: {}\n", .{nodeIndex});
                 }
             }
         }

@@ -306,16 +306,12 @@ pub const BufferManager = struct
             }
             break :endPos maybeEnd(segs, end, range.end);
         };
-        const sequenceRange = SequenceRange
-        {
+        const wholeSequence = Sequence.create(self);
+        const sequenceRange = wholeSequence.range.slice(.{
             .start = startSequencePosition,
             .end = endSequencePosition,
-            .len = @intCast(range.end - range.start),
-        };
-        return Sequence
-        {
-            .range = sequenceRange,
-        };
+        });
+        return wholeSequence.slice(sequenceRange);
     }
 };
 
