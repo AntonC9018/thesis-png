@@ -203,10 +203,6 @@ Pentru a sublinia aspectul de explorare a \textit{formatului} \ac{PNG},
 se va include în aplicație un editor hexazecimal.
 Acesta va prezenta valorile fiecărui octet și
 va oferi reprezentări vizuale pentru a facilita distingerea diferitelor chunk-uri.
-O caracteristică utilă a editorului va fi funcționalitatea
-de a minimiza anumite chunk-uri, utilizând o iconiță dedicată,
-deoarece multe dintre ele conțin date de pixeli
-care nu sunt esențiale pentru înțelegerea formatului.
 
 La selectarea unui chunk, vor fi afișate informații detaliate despre acesta,
 incluzând numele, descrierea și lungimea.
@@ -274,18 +270,18 @@ iar implicațiile utilizării acestuia urmează să fie analizate pe parcursul d
 
 Pe parcursul dezvoltării a parser-ului, indeosebi a funcțiilor de parsare a datelor din chunk-uri,
 s-a observat o oportunitate de abstractizare a acestui cod.
-Deoarece structura parser-ului este by design realizată ca o mașină de stări,
-are sens să se facă o abstracție pentru a putea construi mașina acesta de stări mai ușor
+Deoarece structura parser-ului este proiectată ca o mașină de stări,
+are sens să fie realizată o abstracție pentru a putea construi mașina acesta de stări mai ușor
 fără a repeta logica.
 
-Inițial, parser-ul se află într-o stare destinată validării a semnaturii fișierului \ac{PNG}.
-Semnatura este o secvență specială de caractere care 
+Inițial, parser-ul se află într-o stare destinată validării a semnăturii fișierului \ac{PNG}.
+Semnătura este o secvență specială de caractere care 
 trebuie necesar să apare la începutul oricărui fișier \ac{PNG}.
-După citire a semnăturii, parser-ul trece în starea începerii a citirii a unui chunk,
-iar după ce începe a citi chunk-ul, trece la starea de citire a chunk-ului.
-Acestă distincție există pentru a indica faptul că dacă fluxul de intrare
-se termină în acest moment, atunci fișierul nu este complet și 
-o eroare trebuie să fie indicată.
+După citire a semnăturii, parser-ul trece la starea de citire a chunk-ului.
+Parsesul trebuie să mai noteze dacă a început să citească următorul chunk.
+Acesta este important pentru a indica faptul că dacă fluxul de intrare
+se termină după ce s-a început citirea, atunci fișierul nu este complet și 
+o eroare trebuie să fie semnalizată.
 
 În timpul citirii a chunk-ului, parserul poate să se afle 
 într-o stare specifică destinată fiecărui câmp al chunk-ului:
@@ -306,18 +302,19 @@ de exemplu, dimensiunile nu pot fi zero, iar \texttt{BitDepth} poate lua numai u
 Încă un element este faptul că valorile ale lor, de exemplu, lungimea, tipul chunk-ului,
 lățimea și înălțimea, precum și alte valorile parsate se dorește a fi păstrate undeva,
 ca câmpuri ale unei structuri ce descrie nodul respectiv.
+În structura finală a aplicației, aceste valori au fost amplasate în noduri ale unui arbore sintactic.
 
 Deci, logica de parsare a unui câmp de obicei are următoarea formă:
 \begin{enumerate}
 \item
     Se citește numărul necesar de octeți din fluxul de intrare
-        și se convertează acesta în tipul de date dorit (de exemplu, un \texttt{int}).
+        și se convertează aceștia în tipul de date dorit (de exemplu, un \texttt{int}).
 \item
     Se realizează validarea acestei valori.
     De exemplu, nu se admit valorile dimensiunilor egale cu zero.
     În unele cazuri eroarea nu este groaznică, poate fi înresitrată, iar parsarea poate fi continuată.
 \item
-    Salvarea valorii într-un câmp pe o structură respectivă.
+    Salvarea valorii într-un câmp pe o structură (sau într-un nod, în structura finală a aplicației).
 \item
     Trecerea la următoarea stare.
 \end{enumerate}
@@ -347,7 +344,7 @@ Ideea este ca acest proces s-ar putea fi abstractizat în loc de a fi duplicat:
     într-un mod mai declarativ.
 \item
     Stările care se așteapă că vor seta anumite câmpuri
-    pot indica offset-ul câmpului pentru ca sistemul să scrie valoarea acolo automat.
+    pot indica ofsetul câmpului pentru ca sistemul să scrie valoarea acolo automat.
     Aceasta poate fi simplificat prin folosirea tehnicilor de metaprogramare oferite de Zig.
 \item
     Fiecare stare ar trebui să declare o funcție de inițializare a nodului,
@@ -355,18 +352,22 @@ Ideea este ca acest proces s-ar putea fi abstractizat în loc de a fi duplicat:
     Aici s-ar putea oferi niște funcții de configurare pentru a partaja logica.
 \end{enumerate}
 
-Însă, realizarea acestui gând în starea curentă a dezvoltării n-ar fi înțeleaptă,
+Însă, realizarea acestui gând în starea inițială a dezvoltării n-ar fi înțeleaptă,
 deoarece această oportunitate s-a observat la momentul
 realizării a primului tip de chunk, \texttt{IHDR},
 deci este posibil că nu s-ar generaliza bine pentru toate tipurile de chunk-uri.
 Încă, s-a menționat deja anterior că această abordare reduce capacitatea de debugging.
 
+În structura finală a aplicației s-a observat că chunk-urile au o structură destul de diferită unul de altul.
+Cu toate că abordarea aceasta s-ar putea fi aplicată la unele chunk-uri,
+integrarea acestui subsistem cu logica obișnuită procedurală a celorlalte chunk-uri
+ar fi complicată și ar reduce semnificativ meritul acestei abordări. 
+
 \section{Zlib și Deflate}
 
 Formatul \ac{PNG} folosește comprimarea datelor prin algoritmul Zlib.
 Comprimarea se folosește pentru chunk-urile \texttt{zTXt} (text comprimat),
-\texttt{iCCP} (profil \ac{ICC}), \texttt{IDAT} (datele pixelilor),
-și posibil altele.
+\texttt{iCCP} (profil \ac{ICC}), \texttt{IDAT} (datele pixelilor), precum și altele.
 Pentru a înțelege problema mai bine, ar fi benefic să se înțeleagă cum funcționează algoritmul Zlib.
 În plus, deoarece algorimul este parte din standardul \ac{PNG},
 și structura acestuia poate fi decodificată și analizată,
@@ -374,19 +375,23 @@ ar fi benefic să se realizeze un fel de parser special pentru Zlib pentru a put
 în mod bogat în interfață.
 Din această cauză, s-a decis să se realizeze implementarea unui decoder Zlib de la zero.
 
-Structura parserului folosită până acum poate fi aplicată și pentru formatul Zlib.
+Structura parserului menționată până acum poate fi aplicată și pentru formatul Zlib.
 Singura diferență este că formatul Zlib este bazat pe biți, dar nu pe octeți.
 Însă deoarece poziția pe biți absolut nu ține de gestionarea buferilor,
 componenta \texttt{pipelines} care realizează fluxul de date nu va trebui să fie modificată.
 Starea parserului Zlib poate să țină cont de poziția pe biți ca o variabilă privată, deoarece
 acest concept nu se revarsă la procesarea \ac{PNG}.
 Însă, poziția pe biți ar trebuie să fie utilă pentru vizualizare a formatului.
-Acesta nu este o problemă, deoarece interfața are acces la starea privată a parser-ului.
+
+În structura finală a aplicației, poziția pe biți a componentelor din fluxul de date a fost sălvată la crearea nodurilor.
 
 Mai complicat conceptual este sistemul de decompresie,
-deoarece acesta trebuie să păstreze octeții decodificate pentru a se referi la ei
+deoarece acesta trebuie să păstreze octeții decodificate pentru a putea referi la acestea
 în procesul de decompresie, până la 32 KB de date.
-Pentru prototip, a fost realizată o abordare simplă --- se păstrează toți octeții într-un bufer dinamic.
+
+A fost realizată o abordare simplă --- se păstrează toți octeții într-un bufer dinamic.
+S-ar putea aplica o abordare mai complexă, însă acest element al programului
+nu este atât de important sau interesant din punct de vedere a formatului pentru a merita optimizarea.
 
 \subsection{Testarea}
 
@@ -414,12 +419,19 @@ Sunt două variante care ar putea fi folosie:
         însă are datele pentru formatul gzip, dar nu zlib, din care cauză acestea nu au putut fi folosite.
 \end{enumerate}
 
-Ca atare există și încă o abordare -- să nu se facă testarea la modulul zlib direct.
+De fapt există și încă o abordare -- să nu facă testarea la modulul zlib direct.
 Pentru prototip, această abordare este cea mai aplicabilă pentru a putea sălva timpul.
 
 Testarea indirectă oricum va fi folosită la testarea intrărilor diferite ale formatului \ac{PNG},
-deoarece acesta numaidecât folosește zlib pentru chunk-urile \texttt{IDAT} care trebuie să fie prezente
+deoarece acesta numaidecât folosește Zlib pentru chunk-urile \texttt{IDAT} care trebuie să fie prezente
 în orice exemplu de fișier \ac{PNG}.
+
+În plus, decodificarea deja este verificată conform câmpului de suma de control Adler32,
+care în cazul dacă corespunde valorii acestei sume de control calculate pe baza biților decodificați,
+indică probabilitatea înaltă că fișierul a fost decodificat corect. 
+Notez că probabilitatea este înaltă, dar nu categorică din cazul că aceasta este într-un fel o funcție hash
+care nu dau garanții exacte față de integritate, ci doar o certitudine înaltă.
+
 
 \section{Procesarea erorilor}
 
@@ -443,13 +455,13 @@ pub fn impl(context: *Context) !void
 
         .Number =>
         {
-            // Read the int, modify the stream
+            // Citirea unui întreg, modificarea fluxului.
             const number = try pipelines.readInt(context.sequence());
 
-            // Save the context
+            // Salvarea valorii pe context.
             context.state.number = number;
 
-            // Validate
+            // Validarea.
             if (number == 256)
             {
                 return error.CannotBe256;
@@ -471,8 +483,8 @@ pub fn callSite()
         {
             error.CannotBe256 =>
             {
-                // If multiple states can result in this error,
-                // need to check which state we're in.
+                // Dacă mai multe stări pot produce această eroare,
+                // Trebuie să se verifice în care stare se află parserul.
                 switch (context.state.action)
                 {
                     // ...
@@ -508,19 +520,19 @@ pub fn impl(context: *Context) !void
 
         .Number =>
         {
-            // Read the int, but do not consume the stream
+            // Citirea unui număr din fluxul de date, dar nu consumăm octeții.
             const number = try pipelines.peekInt(context.sequence());
 
-            // Save the context
+            // Salvează contextul.
             context.state.number = number.value;
 
-            // Validate
+            // Validarea.
             if (number.value == 256)
             {
                 return error.CannotBe256;
             }
 
-            // Consume the read bytes if the result is valid.
+            // Se consumă octeții.
             number.apply(context);
         },
 
@@ -544,10 +556,10 @@ pub fn impl(context: *Context) !void
 
         .Number =>
         {
-            // Read the int, modify the stream
+            // Citirea unui întreg.
             const number = try pipelines.readInt(context.sequence());
 
-            // Validate
+            // Validarea.
             if (number == 256)
             {
                 context.state.addError(.{
@@ -557,7 +569,7 @@ pub fn impl(context: *Context) !void
             }
             else
             {
-                // Can use the type system to semantically indicate validity.
+                // Putem folosi sistemul de tipuri pentru a reprezenta faptul că valoarea a fost validată.
                 context.state.number = ValidNumber
                 {
                     .value = number,
@@ -578,7 +590,7 @@ pub fn callSite()
     impl(&context);
     catch |err|
     {
-        // Here, only memory allocation related errors and the NotEnoughBytes error is possible.
+        // Aici, doar sunt posibile doar erori legate cu alocarea memoriei și eroarea NotEnoughBytes.
         // ...
     };
 
@@ -601,6 +613,68 @@ pub fn callSite()
 }
 \end{minted}
 
+În varianta finală a aplicației, datele sunt sălvate în noduri înainte de a returna erori.
+Din aceasta cauză, ultimul nod care a fost completat mereu conține întregul context al erorii.
+Abordarea aceasta este folosită în aplicație, acolo unde este posibil.
+La nivel înalt, procesarea erorilor în așa sistem s-ar asemăna cu următoarea.
+
+\begin{minted}{zig}
+pub fn impl(context: *Context) !void
+{
+    // Este creat un nod nou pe stack-ul nodurilor.
+    try context.level().pushNode(.{
+        .Foo = context.state.action,
+    });
+    defer context.level().pop();
+
+    switch (context.state.action)
+    {
+        // ...
+
+        .Number =>
+        {
+            const number = try pipelines.readInt(context.sequence());
+
+            try context.level().completeNodeWithValue(.{
+                .Number = number,
+            });
+
+            if (number > 200)
+            {
+                return error.CannotBeMoreThan200;
+            }
+        },
+
+        // ...
+    }
+}
+
+pub fn callSite()
+{
+    // ... 
+
+    const errorScope = context.state.errorScope();
+
+    impl(&context);
+    catch |err|
+    {
+        switch (err)
+        {
+            // ...
+
+            .CannotBeMoreThan200 =>
+            {
+                const lastNodeData = context.getLastCompletedNodeData();
+                print("Number {} cannot be more than 200\n", .{ lastNodeData.Number });
+            },
+        }
+    };
+}
+\end{minted}
+
+Însă s-a hotărât că procesarea explicită a acestora de program nu merită atenția,
+deci eroarea este pur și simplu afișată la ecran, terminând parsarea, dar totodată afișând și interfața obișnuită.
+Uitându-se la interfață, utilizatorul poate deduce ce a căuzat eroarea, deoarece arborele s-ar termina la acea poziție.
 
 \section{Complicațiile asociate cu citirea chunk-ului \texttt{IDAT}}
 
@@ -620,12 +694,12 @@ iar parserul PNG se consideră incorect dacă nu realizează corect
 orice distribuție a fluxului Zlib între chunk-uri.
 Adică parserul PNG nu poate presupune de exemplu că blocul Zlib va termina de fiecare dată
 împreună cu chunk-ul \texttt{IDAT} în care se află.
-De fapt, este posibilă situația că biții ultimului bit au rămas necitite până la capăt
+De fapt, este posibilă situația că biții ultimului octet au rămas necitite până la capăt
 în primul chunk \texttt{IDAT}, continuându-se în următorul chunk.
 
 Deoarece arborele Huffman din specificația Zlib permit lungimea maximă de 16 biți pentru coduri,
 iar programul trebuie să considere aceste coduri ca noduri separate,
-și acestea pot să se afle la offset-uri de biți nealiniate cu granițele octeților,
+și acestea pot să se afle la ofset-uri de biți nealiniate cu granițele octeților,
 în cel mai rău caz se poate întâmpla ca unul singur nod să se afle în 3 chunk-uri în același timp.
 De exemplu, primul bit poate să se afle la sfârșitul primului chunk,
 următoarele 8 biți pot să se afle în întregul următorul chunk, dacă acesta are lungimea 1, ce este posibil,
@@ -637,7 +711,7 @@ la începutul secvenței, când se realizează procesarea fluxului Zlib.
 
 Prima problema era că secvența trebuia să se includă doar segmentele din manager de bufer principal,
 folosind de către cititor.
-De fapt, segmentele erau păstrate ca index-urile în tabloul de segmente, cu un offset de bază.
+De fapt, segmentele erau păstrate ca index-urile în tabloul de segmente, cu un ofset de bază.
 Ca să devină posibil de inclus niște segmente dinafara buferilor principali la începutul secvenței,
 modul acesta de adresare a fost schimbat la o listă înlănțuită.
 Astfel, este posibil să seteze segmentul adăugator ca primul segment din secvență, urmându-l cu
@@ -645,18 +719,18 @@ primul segment din secvența inițială, pentru a crea secvența nouă.
 
 Următoarea problema era că implementarea inițială a secvențelor din modulul \texttt{pipelines} presupunea
 că toate segmentele care se află între primul și ultimul segment se includ în secvența în întregime.
-Însă, secvența poate avea ca prima poziție segmentul inițial la un offset.
+Însă, secvența poate avea ca prima poziție segmentul inițial la un ofset.
 Deoarece el este predestinat să devină al doilea segment după adăugare a primului segment adăugător,
-trebuie s-a hotărât să-i miște buferul de început, aplicând offset-ul.
+trebuie s-a hotărât să-i miște buferul de început, aplicând ofsetul.
 
 Această soluție nu se simte curată.
 Sunt alte abordări puțin mai complicate, dar care potențial vor face implementarea arborelui mai ușoară.
-Deoarece acele segmente de început pentru moment sunt temporare,
+Deoarece acele segmente de început la moment sunt temporare,
 nodurile din arbore nu pot să se refere la acestea, iar pozițiile din acestea pot să nu existe în buferi la momentul curent.
 
 Poate o abordare mai bună ar fi ca acele segmente veche să se păstreze în lista buferilor,
 pentru a putea să se adreseze la acestea în secvențe,
-și ca segmentele din secvențe să-și poată specifica offset-uri,
+și ca segmentele din secvențe să-și poată specifica ofseturi,
 cu însele date păstrate separat, doar în buferi principali.
 Atunci ar trebui să se adauge și un fel de "comsumed position hint" la cititorul,
 ca el să păstreze segmentele care încă nu s-au citit până la capăt.
@@ -665,12 +739,21 @@ De fapt, așa idee se folosește și în biblioteca \texttt{System.IO.Pipelines}
 însă la implementarea inițială nu era clar de ce ar fi necesară această abordare.
 După ce s-a întâlnit problema care se rezolvă folosind această idee, s-a clarificat și sensul ei.
 
-% The nodes will probably have to store the data separately from the locations.
-% So the node will be location + pointer to data so that we can make multiple nodes
-% with different locations be looking at the same data.
-% At least for the zlib nodes from the image data chunk.
+Problema aceasta s-a rezolvat prin introducerea distincției între nodurile sintactice,
+care reprezintă bucățile concrete din fișier, și ale datelor fiecărui nod.
+Datele nu au o locație și pot fi partajate prin mai multe noduri.
 
-% Probabil, am să schimb implementarea atunci când încep cu arborele.
+În plus, a fost realizată o legare între nodurile care sunt într-un fel o singură parte a aceluiași obiect,
+printr-o listă semantică dublu înlănțuită, creată între noduri.
+Deci, dacă se întâmplă ca unul și același nod se continuă în următorul chunk,
+acesta numaidecât va avea și o referință la nodul care îl conținuă,
+iar acel nod va avea o legătură înapoi la primul nod.
+Aceasta poate fi util pentru a arăta utilizatorului de exemplu poziția nodului de continuare.
+
+Interesant este și faptul că această structură poate fi expresată în mod general, nu doar pentru nodurile din acest chunk.
+Datorită acestui fapt implementarea funcționalităților legate cu această proprietate
+nu trebuie să țină cont de tipul de nod.
+
 
 \chapter{Dezvoltarea în WSL}
 
@@ -685,10 +768,10 @@ S-a conceput ca transmiterea informațiilor despre nodul curent să fie la nivel
 Deci, citirea următorului element din flux de date ar presupune scrierea informațiilor interpretate
 într-un câmp prestabilit, în obiectul care reprezintă datele elementul
 din fișier care se citește la momentul dat (fie chunk-ul curent), păstrat în starea generală de citire.
-După aceasta, codul care construiește arborele sintactic ar detecta care tip de nod a fost citit la ultima etapă
+După aceasta, codul care construiește arborele sintactic ar detecta care tip de nod a fost citit la cea mai recentă etapă 
 (este o altă problemă, descrisă separat mai târziu),
 și, în dependența de stare în care se afla parserul înainte de ultima operație de citire,
-ar trebui să acceseze exact același câmp în care au fost citite datele la etapa precedentă.
+ar trebui să acceseze exact același câmp în care au fost copiate datele.
 
 Această abordare are mai multe probleme:
 \begin{enumerate}
@@ -724,7 +807,7 @@ deci are loc și duplicarea structurii stărilor.
 
 Aceste probleme nu semnifică că abordarea nu poate fi folosită în practică,
 dar provoacă o imperativă de a căuta o soluție alternativă.
-Prima idee destul de evidentă este de schmbat puțin arhitectura,
+Prima idee destul de evidentă este de schimbat puțin arhitectura,
 permițând parserului să cunoască unele concepte care țin de noduri sintactice,
 dar totuși să lase responsabilitatea de a aranja nodurile în memorie unui modul extern.
 
