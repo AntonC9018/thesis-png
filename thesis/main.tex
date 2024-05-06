@@ -11,7 +11,7 @@
 
 % Hardcoded for now
 \newcommand{\anexeCount}{20}
-\newcommand{\conferencesList}{I don't know what to write here}
+\newcommand{\conferencesList}{SESIUNEA NAŢIONALĂ CU PARTICIPARE INTERNAȚIONALĂ DE COMUNICĂRI ŞTIINŢIFICE STUDENŢEŞTI, EDIŢIA A XXVIII-A}
 
 \begin{document}
 
@@ -41,26 +41,34 @@
 Teza constă din: Introducere, \total{num_chapters} capitole, Concluzii generale și recomandări, Bibliografie \bibliographyEntryCount{} titluri.
 Textul de bază cuprinde \usefulPageCount{} de pagini și \anexeCount{} de anexe.
 
-\textbf{Cuvinte-cheie:} \ac{PNG}
+\textbf{Cuvinte-cheie:}
+\textit{\ac{PNG}, \ac{Zlib}, \ac{Deflate}, format de fișier, arbore sintactic, aplicație pentru vizualizare.}
 
 \textbf{Actualitatea.}
+
 PNG este un format de imagini folosit pe scară largă pe Internet,
-în dezoltarea aplicațiilor grafice, în jocuri, și în multe alte domenii.
+în dezoltarea aplicațiilor grafice, precum și în alte diverse domenii.
 Înțelegerea structurii formatului poate fi utilă pentru a-l putea extinde, 
 a-l utiliza într-un mod mai eficient și acesta poate servi drept referință pentru 
 crearea unor formate noi.
 
 \textbf{Scopul și obiectivele cercetării}.
 
+Lucrarea de față are scopul educațional -- să facă cunoștința cu structura formatului \ac{PNG}.
+Obiectivele tezei constă în explorarea formatului creând o aplicație grafică de vizualizare.
 
+Scopul tezei explicit \textit{nu constă} în afișarea imaginii pe ecran, focusând anume la structura formatului.
 
-\textbf{Rezultatele preconizate și obținute} rezumă în: (1) (2) (3)
+\textbf{Rezultatele preconizate și obținute} rezumă în: 
+(1) studierea și înțelegerea formatului \ac{PNG} și a formaturilor de compresie asociate 
+(2) implementarea unui parser în cod
+(3) implementarea unei aplicații grafice pe baza parser-ului.
 
-\textbf{Problemele importante rezolvate} sunt:
+\textbf{Problemele importante rezolvate} sunt: înțelegerea slabă a formatului \ac{PNG}.
 
-\textbf{Valoarea aplicativă.}
+\textbf{Valoarea aplicativă.} Ca rezultat a fost implementată o aplicație care poate fi folosită pentru vizualizare a formatului \ac{PNG}.
 
-Rezultatele obținute au fost raportate la Conferința (-ele) \textbf{\conferencesList}.
+Rezultatele obținute au fost raportate la Conferința \textbf{\conferencesList}.
 
 % I think this one's required to be capitalized.
 \unnumberedChapter{INTRODUCERE}
@@ -69,13 +77,44 @@ Rezultatele obținute au fost raportate la Conferința (-ele) \textbf{\conferenc
 
 \textbf{Actualitatea și importanța temei.}
 
+Formatul \ac{PNG} este utilizat pe scară largă în numeroase domenii, incluzând majoritatea aplicațiilor
+web, aplicații grafice care salvează sau încarcă imagini din fișiere, precum și în dezvoltarea de jocuri.
+PNG este un format adaptiv și extensibil, având o structură băzată pe chunk-uri, versionate separat unul
+de altul. Formatul include, de asemenea, mecanisme pentru asigurarea integrității datelor, precum
+octeții elementului cyclic redundancy check (CRC).
+
+Reieșind din toate acestea, formatul \ac{PNG} merită să se învețe pentru a manipula eficient fișierele de
+acest format, pentru a putea extinde formatul prin niște chunk-uri personalizate, și pentru a afla despre
+metodele de asigurare a integrității, precum și despre algoritmii de compresie folosite ca parte din PNG
+(Zlib). Aceste idei pot ajuta și la crearea unor formate noi de fișier, nu neapărat de imagine.
+
 \textbf{Scopul și obiectivele.}
+
+Lucrarea de față are scopul educațional -- să facă cunoștința cu structura formatului \ac{PNG} și a
+formatului integrat de compresie \ac{Zlib}. Pentru aceasta s-a decis să se creeze o interfață grafică care
+să permită explorarea vizuală a formatului \ac{PNG}, creând un parser și oarecare alte instrumente necesare în proces.
+
 
 \textbf{Suportul metodologic și tehnologic.}
 
+Structura formatului \ac{PNG} și a formaturilor de compresie integrate \ac{Zlib} și Deflate
+a fost studiată din specificațiile acestora \cite{png_spec} \cite{zlib_spec} \cite{deflate_spec}.
+Programul a fost implementat în limbajul de programare Zig \cite{zig} care a fost învățat prin documentație.
+Pentru implementarea formatului Deflate ca referință a fost într-o măsură scăzută folosit codul librăriei uzlib \cite{gzip_impl}.
+A fost folosită librăria Raylib \cite{raylib} drept librăria grafică.
+
 \textbf{Noutatea stiințifică/originalitatea.}
 
+Cu toate că există mai multe librării \ac{PNG},
+scopul acestei teze diferă de scopul librăriilor \ac{PNG} obișnuite,
+care este reprezentarea imaginii pe ecran,
+dar nu explorarea formatului de fișier sau construirea arborelui sintactic.
+Teza explicit nu are scopul de a afișa imaginea pe ecran.
+
 \textbf{Valoarea aplicativă.}
+
+Aplicația obținută poate fi folosită pentru a-și face cunoștința cu formatul de fișier \ac{PNG}.
+
 
 \textbf{Sumarul tezei.}
 
