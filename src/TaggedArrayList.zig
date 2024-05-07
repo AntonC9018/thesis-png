@@ -138,7 +138,7 @@ pub fn TaggedArrayList(TaggedUnion: type) type
         pub fn init(allocator: std.mem.Allocator) Self
         {
             return .{
-                .managed = std.mem.zeroes(Managed),
+                .managed = .{},
                 .allocator = allocator,
             };
         }
