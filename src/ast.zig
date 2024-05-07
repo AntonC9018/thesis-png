@@ -29,10 +29,10 @@ pub const SyntaxChildrenList = struct
 pub const ChunkDataNodeType = parser.ChunkType;
 
 pub const NodeIndex = ast.NodeId;
-pub const DataIndex = ast.NodeDataId;
+pub const DataId = ast.NodeDataId;
 
 pub const invalidNodeIndex: NodeIndex = ast.invalidNodeId;
-pub const invalidDataIndex: DataIndex = ast.invalidNodeDataId;
+pub const invalidDataIndex: DataId = ast.invalidNodeDataId;
 
 pub const NodeType = ast.NodeType;
 pub const NodeValue = ast.NodeData;
@@ -60,7 +60,7 @@ pub const Node = struct
     // Points to the root data of the semantic linked list.
     // If there's no semantic list, just points to the data.
     // There's always at least one data in that case.
-    data: DataIndex = invalidDataIndex, 
+    data: DataId = invalidDataIndex, 
     syntaxChildren: SyntaxChildrenList = .{},
     
     // This is only going to be used for the image data nodes, probably.
@@ -71,7 +71,7 @@ fn nodeIdToIndex(id: ast.NodeId) NodeIndex
 {
     return id;
 }
-fn dataIdToIndex(id: ast.NodeDataId) DataIndex
+fn dataIdToIndex(id: ast.NodeDataId) DataId
 {
     return id;
 }
@@ -79,7 +79,7 @@ fn nodeIndexToId(index: NodeIndex) ast.NodeId
 {
     return index;
 }
-fn dataIndexToId(index: DataIndex) ast.NodeDataId
+fn dataIndexToId(index: DataId) ast.NodeDataId
 {
     return index;
 }
@@ -88,7 +88,7 @@ pub const AST = struct
 {
     rootNodes: std.ArrayList(NodeIndex),
     syntaxNodes: std.ArrayList(Node),
-    nodeDatas: std.ArrayList(NodeData),
+    nodeDatas: std.MultiArrayList(NodeData),
 
     const NodeOperations = parser.NodeOperations;
 

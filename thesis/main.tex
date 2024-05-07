@@ -46,7 +46,7 @@ Textul de bază cuprinde \usefulPageCount{} de pagini și \anexeCount{} de anexe
 
 \textbf{Actualitatea.}
 
-PNG este un format de imagini folosit pe scară largă pe Internet,
+\ac{PNG} este un format de imagini folosit pe scară largă pe Internet,
 în dezoltarea aplicațiilor grafice, precum și în alte diverse domenii.
 Înțelegerea structurii formatului poate fi utilă pentru a-l putea extinde, 
 a-l utiliza într-un mod mai eficient și acesta poate servi drept referință pentru 
@@ -60,7 +60,7 @@ Obiectivele tezei constă în explorarea formatului creând o aplicație grafic�
 Scopul tezei explicit \textit{nu constă} în afișarea imaginii pe ecran, focusând anume la structura formatului.
 
 \textbf{Rezultatele preconizate și obținute} rezumă în: 
-(1) studierea și înțelegerea formatului \ac{PNG} și a formaturilor de compresie asociate 
+(1) studierea și înțelegerea formatului \ac{PNG} și a formaturilor de comprimare asociate 
 (2) implementarea unui parser în cod
 (3) implementarea unei aplicații grafice pe baza parser-ului.
 
@@ -79,25 +79,25 @@ Rezultatele obținute au fost raportate la Conferința \textbf{\conferencesList}
 
 Formatul \ac{PNG} este utilizat pe scară largă în numeroase domenii, incluzând majoritatea aplicațiilor
 web, aplicații grafice care salvează sau încarcă imagini din fișiere, precum și în dezvoltarea de jocuri.
-PNG este un format adaptiv și extensibil, având o structură băzată pe chunk-uri, versionate separat unul
+\ac{PNG} este un format adaptiv și extensibil, având o structură băzată pe chunk-uri, versionate separat unul
 de altul. Formatul include, de asemenea, mecanisme pentru asigurarea integrității datelor, precum
 octeții elementului cyclic redundancy check (CRC).
 
 Reieșind din toate acestea, formatul \ac{PNG} merită să se învețe pentru a manipula eficient fișierele de
 acest format, pentru a putea extinde formatul prin niște chunk-uri personalizate, și pentru a afla despre
-metodele de asigurare a integrității, precum și despre algoritmii de compresie folosite ca parte din PNG
+metodele de asigurare a integrității, precum și despre algoritmii de comprimare folosite ca parte din \ac{PNG}
 (Zlib). Aceste idei pot ajuta și la crearea unor formate noi de fișier, nu neapărat de imagine.
 
 \textbf{Scopul și obiectivele.}
 
 Lucrarea de față are scopul educațional -- să facă cunoștința cu structura formatului \ac{PNG} și a
-formatului integrat de compresie \ac{Zlib}. Pentru aceasta s-a decis să se creeze o interfață grafică care
+formatului integrat de comprimare \ac{Zlib}. Pentru aceasta s-a decis să se creeze o interfață grafică care
 să permită explorarea vizuală a formatului \ac{PNG}, creând un parser și oarecare alte instrumente necesare în proces.
 
 
 \textbf{Suportul metodologic și tehnologic.}
 
-Structura formatului \ac{PNG} și a formaturilor de compresie integrate \ac{Zlib} și Deflate
+Structura formatului \ac{PNG} și a formaturilor de comprimare integrate \ac{Zlib} și Deflate
 a fost studiată din specificațiile acestora \cite{png_spec} \cite{zlib_spec} \cite{deflate_spec}.
 Programul a fost implementat în limbajul de programare Zig \cite{zig} care a fost învățat prin documentație.
 Pentru implementarea formatului Deflate ca referință a fost într-o măsură scăzută folosit codul librăriei uzlib \cite{gzip_impl}.
@@ -385,9 +385,9 @@ acest concept nu se revarsă la procesarea \ac{PNG}.
 
 În structura finală a aplicației, poziția pe biți a componentelor din fluxul de date a fost sălvată la crearea nodurilor.
 
-Mai complicat conceptual este sistemul de decompresie,
+Mai complicat conceptual este sistemul de decomprimare,
 deoarece acesta trebuie să păstreze octeții decodificate pentru a putea referi la acestea
-în procesul de decompresie, până la 32 KB de date.
+în procesul de decomprimare, până la 32 KB de date.
 
 A fost realizată o abordare simplă --- se păstrează toți octeții într-un bufer dinamic.
 S-ar putea aplica o abordare mai complexă, însă acest element al programului
@@ -396,7 +396,7 @@ nu este atât de important sau interesant din punct de vedere a formatului pentr
 \subsection{Testarea}
 
 Problema legată de testare este faptul că, deoarece programul este orientat
-la decompresie și nici nu realizează un compresor,
+la decomprimare și nici nu realizează un compresor,
 este dificit să se genereze niște date pentru teste.
 
 Sunt două variante care ar putea fi folosie:
@@ -689,12 +689,12 @@ Deoarece unul singur nod poate să se afle la marginea a două segmente (potenț
 ideea că locația fiecărui nod poate fi descrisă de locația lui absolută în fișier și
 lungimea lui deja nu se va aplica.
 
-Cu toate că pentru noduri regulare din formatul PNG așa ceva nu este posibil,
+Cu toate că pentru noduri regulare din formatul \ac{PNG} așa ceva nu este posibil,
 chunk-ul \texttt{IDAT} este special în acest sens.
 Toate chunk-urile acestea conțin unul singur stream Zlib partajat,
-iar parserul PNG se consideră incorect dacă nu realizează corect
+iar parserul \ac{PNG} se consideră incorect dacă nu realizează corect
 orice distribuție a fluxului Zlib între chunk-uri.
-Adică parserul PNG nu poate presupune de exemplu că blocul Zlib va termina de fiecare dată
+Adică parserul \ac{PNG} nu poate presupune de exemplu că blocul Zlib va termina de fiecare dată
 împreună cu chunk-ul \texttt{IDAT} în care se află.
 De fapt, este posibilă situația că biții ultimului octet au rămas necitite până la capăt
 în primul chunk \texttt{IDAT}, continuându-se în următorul chunk.
@@ -906,7 +906,7 @@ fac folosirea indicilor în loc de pointeri ca soluția implicită în mai multe
 
 La dezvoltarea sistemului s-a considerat dacă păstrarea nodurilor după niveluri ar fi preferată
 peste păstrarea lor liniar într-un singur bloc de memorie.
-Ideea este că aceasta proprietate ar putea fi folosită pentru a accelera procesul de căutare
+Ideea este că această proprietate ar putea fi folosită pentru a accelera procesul de căutare
 a drumului de noduri după poziția din fișier.
 Separarea nodurilor într-un alt mod mai conștient ar putea simplifica
 și operațiile de ștergere a nodurilor trecute.
@@ -954,9 +954,26 @@ iar tipul de noduri nu trebuie să fie schimbat, aceasta nu este groaznic.
 
 \chapter{Implementarea Zlib}
 
-Zlib este formatul de compresie folosit în scopul unelor chunk-uri din formatul \ac{PNG}.
+Zlib este formatul de comprimare folosit în scopul unelor chunk-uri din formatul \ac{PNG}.
 De exemplu, chunk-ul \texttt{zTXt} definește câmpul \texttt{Compressed text},
 care include direct șirul compresat în formatul Zlib.
+
+Toate datele pixelilor, adică datele chunk-urilor \texttt{IDAT}, sunt comprimate folosind acest algoritm.
+
+Asemănătoare cu formatul \ac{PNG}, Zlib include un câmp folosit pentru verificarea integrității datelor.
+Algoritmul folosit pentru calcularea acestui câmp este numit Adler32.
+Cheia este că acesta este calculat pe baza datelor \textit{decomprimate},
+deci poate fi folosit pentru a verifica și integritatea datelor, și corectitudinea programului implementat.
+
+Zlib are și alte capacități ca suportul pentru dicționare, permite setarea parametrilor de comprimare, etc.
+Însă, acestea nu sunt relevante pentru interpretarea unui fișier \ac{PNG}.
+Dicționarele absolut nu sunt folosite, și chiar sunt interzise după specificație \cite{png_spec_chapter_deflate}.
+Parametrii de comprimare sunt folositori doar pentru procesul de comprimare,
+adică, în context-ul formatului \ac{PNG}, generarea unui fișier din datele pixelilor.
+Deoarece scopul aplicației este de a realiza \textit{citirea} unui fișier \ac{PNG},
+dar nu generarea unui așa fișier, acestea nu vor fi menționate în continuare.
+Câmpurile cu aceste date însă sunt citite și validate în mod normal, conform specificației.
+
 
 
 

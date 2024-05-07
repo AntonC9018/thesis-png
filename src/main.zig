@@ -53,10 +53,6 @@ fn parseIntoTree(allocator: std.mem.Allocator) !AppContext
         },
         .state = &parserState,
     };
-    defer
-    {
-        // Complete all of the nodes in case the tree is returned while there's an error.
-    }
 
     outerLoop: while (true)
     {
