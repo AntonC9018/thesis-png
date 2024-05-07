@@ -333,7 +333,6 @@ pub fn main() !void
             const byteOffset = @as(usize, @intCast(gridCoord.y)) * rangeSize.cols
                 + @as(usize, @intCast(gridCoord.x));
 
-            std.debug.print("Offset: {} Len: {}\n", .{ byteOffset, sequence.len() });
             if (byteOffset >= sequence.len())
             {
                 break :squareSelection;

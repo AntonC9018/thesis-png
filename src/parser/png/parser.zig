@@ -312,6 +312,14 @@ pub fn parseChunkItem(context: *Context) !bool
     });
     defer context.level().pop();
 
+    const shouldComputeCrc = chunk.action != .Length and chunk.action != .CyclicRedundancyCheck;
+    const previousSequence = context.sequence().*;
+    defer if (shouldComputeCrc)
+    {
+        const consumedSequence = previousSequence.sliceToExclusive(context.sequence().start());
+        chunk.crcState = common.updateCrc(chunk.crcState, consumedSequence);
+    };
+
     switch (chunk.action)
     {
         .Length => 
@@ -396,6 +404,12 @@ pub fn parseChunkItem(context: *Context) !bool
             try context.level().completeNodeWithValue(.{
                 .U32 = value,
             });
+
+            const computedCrc = ~chunk.crcState;
+            if (computedCrc != value)
+            {
+                return error.CyclicRedundancyCheckMismatch;
+            }
 
             return true;
         },

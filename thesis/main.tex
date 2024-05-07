@@ -520,7 +520,7 @@ pub fn impl(context: *Context) !void
 
         .Number =>
         {
-            // Citirea unui număr din fluxul de date, dar nu consumăm octeții.
+            // Citirea unui număr din fluxul de date, fără a consuma octeții.
             const number = try pipelines.peekInt(context.sequence());
 
             // Salvează contextul.
@@ -569,7 +569,8 @@ pub fn impl(context: *Context) !void
             }
             else
             {
-                // Putem folosi sistemul de tipuri pentru a reprezenta faptul că valoarea a fost validată.
+                // Se poate folosi sistemul de tipuri pentru a reprezenta
+                // faptul că valoarea a fost validată.
                 context.state.number = ValidNumber
                 {
                     .value = number,
@@ -590,7 +591,8 @@ pub fn callSite()
     impl(&context);
     catch |err|
     {
-        // Aici, doar sunt posibile doar erori legate cu alocarea memoriei și eroarea NotEnoughBytes.
+        // Aici, doar sunt posibile doar erorile legate cu alocarea memoriei
+        // și eroarea NotEnoughBytes.
         // ...
     };
 
@@ -762,15 +764,34 @@ nu trebuie să țină cont de tipul de nod.
 
 \chapter{Construirea arborelui sintactic}
 
+Folosirea unui arbore sintactic este o abordare bună pentru problemele 
+unde datele sunt structurate în mod ierarhic și se cere a fi analizate sau într-un fel accesate pe urmă.
+Proprietatea cheie a acestei abordări este faptul că arborele poate fi \textit{abstract},
+ceea ce înseamnă că acesta este o reprezentare la un nivel mai înalt a informațiilor despre datele
+din care a fost construit.
+Din această proprietate origină avantajul principal al acestei abordări --
+construirea arborelui analizând datele neprocesate și folosirea arborelui
+pentru analiză pot fi implementate separat, comunicând prin acest arbore.
+Aceasta simplifică realizarea sistemului, impărțindu-l la două module majore cu responsabilitățile respective,
+care pot fi implementate în izolare, conform interfeței arborelui.
+
+Folosirea unui arbore este cea mai evidentă abordare pentru sistemul în cauză.
+Această abordare divizează sistemul la bucata care construiește arborele
+(partea de citire a fișierului, parser-ul, și codul care crează și gestionează alocarea nodurilor),
+și bucata care analizează arborele derivat (interfața grafică în cazul dat).
+Aceste bucăți pot fi realizate separat, ceea ce simplifică procesul de dezvoltare.
+
+\section{Problemele abordării inițiale}
+
 În implementarea inițială a sistemului, arhitectura a fost concepută în așa fel ca
 logica de creare a arborelui să fie cu totul independentă de logica citirii datelor din fluxul de date.
-S-a conceput ca transmiterea informațiilor despre nodul curent să fie la nivel de starea generală a citirii.
+S-a conceput ca transmiterea informațiilor despre nodul curent să fie la nivelul stării generale a citirii.
 Deci, citirea următorului element din flux de date ar presupune scrierea informațiilor interpretate
 într-un câmp prestabilit, în obiectul care reprezintă datele elementul
 din fișier care se citește la momentul dat (fie chunk-ul curent), păstrat în starea generală de citire.
 După aceasta, codul care construiește arborele sintactic ar detecta care tip de nod a fost citit la cea mai recentă etapă 
 (este o altă problemă, descrisă separat mai târziu),
-și, în dependența de stare în care se afla parserul înainte de ultima operație de citire,
+și, în dependența de stare în care se afla parserul înainte de cea mai recentă operație de citire,
 ar trebui să acceseze exact același câmp în care au fost copiate datele.
 
 Această abordare are mai multe probleme:
@@ -805,6 +826,11 @@ Sistemul de gestionare a acestei informații devine destul de complicat,
 și necesită ca codul care construiește arborele să cunoască despre semnificațiile stărilor parserului,
 deci are loc și duplicarea structurii stărilor.
 
+Următoarea problemă constă în ceea că faptul de creare
+și completarea nodurilor la diferite niveluri trebuie să fie înregistrata la nivel de parser.
+Într-un fel, la sfârșit parser-ul trebuie să îndeplinească operațiunile
+de bază necesare pentru a crea arborele, fără a folosi abstracția arborelui.
+
 Aceste probleme nu semnifică că abordarea nu poate fi folosită în practică,
 dar provoacă o imperativă de a căuta o soluție alternativă.
 Prima idee destul de evidentă este de schimbat puțin arhitectura,
@@ -815,6 +841,125 @@ Deci, ideea este ca parserul să genereze un flux de noduri,
 care să conțină informațiile interpretate,
 pe lângă intervalului citit din fișier pentru a genera aceste informații,
 și a adâncimii, pentru a putea determina la care nod părinte acesta trebuie să fie atașat.
+
+\section{Proiectarea abordării noi}
+
+În urmă analizei situației a devenit mai clară structura favorabilă de sistem:
+\begin{itemize}
+    \item 
+        Structura interfeței grafice rămâne neschimbată, 
+        deoarece aceasta nu este implicată în crearea arborelui.
+
+    \item
+        Modulul de gestionare a arborelui va fi separat de logica creării al arborelui.
+        De fapt, așa era și înainte, însă acum această parte de logică va fi mișcată mai aproape de parser.
+        
+    \item
+        Parserul acum va cunoaște despre existența nodurilor, însă nu va interacționa cu ele direct.
+        Adăugarea logicii de gestionare a stivei de noduri și crearea nodurilor în parser s-a părut încurcătoare,
+        din aceasta cauză s-a hotărât să fie creat încă un modul pentru această funcționalitatea.
+        Parserul va folosi acest modul, în loc de a interacționa cu stiva și cu nodurile direct.
+
+    \item
+        Acest modul va avea responsabilitatea de a crea nodurile atunci când crește adâncimea stivei în parser,
+        semnalizat de parser, și va comunica cu modulul de gestionare a nodurilor din arbore.
+        Interfața acestui modul reprezintă operațiunile cu nodul de pe un nivel concret de pe stivă, 
+        așadar a fost numită \texttt{LevelContext}.
+
+    \item
+        Interfața care permite interacționarea între \texttt{LevelContext}
+        și modulul care gestionează arborele a primit numele \texttt{NodeOperations}.
+        Acesta definește funcțiile de bază de creare și finalizare a nodurilor.
+\end{itemize}
+
+\texttt{NodeOperations} nu trebuie să fie numaidecât abstractizat în această cauză,
+adică nu numaidecât trebuie să fie folosit polimorfismul dinamic.
+Modulul \texttt{LevelContext} ar putea să se interfațeze direct cu modulul de gestionare a arborelui,
+folosind direct abstracțiile lui de noduri, identificare a nodurilor,
+modul de implementare a structurii părinte-fiu, etc.
+
+În loc de aceasta, s-a hotărât să introducă încă un nivel de abstracție pentru a evidenția această separare.
+A fost definit un set de abstracții pentru identificatori de nod,
+folosit ca niște valori opace pentru a adresa la noduri de către \texttt{LevelContext}.
+În mod similar, a fost creat un tabel virtual și o implementare a acestuia pe partea modulului de gestionare a arborelui.
+
+\section{Modulul de gestionare a arborelui sintactic}
+
+În continuare, pentru a simplifica explicațiile, modulul dat va fi adresat după numele \textbf{arbore}.
+În esența, arborele permite crearea nodurilor și accesarea lor în viitor.
+Fiecare nod se află pe o poziție concretă din fișier și poate avea noduri fii.
+
+Fiecare nod are un tip asociat care indică cărei componente din fișier acesta corespunde.
+De exemplu, un nod poate avea tipul \texttt{Datele din chunk = Antet},
+indicând că nodul corespunde la elementul din fișier cu chunk-ul de antet,
+și deoarece conține niște noduri fii, acesta nu este nodul terminal.
+Dintre nodurile fii ale acestui nod se va afla nodul cu tipul \texttt{Antet = Lățimea}
+care va fi asociat datele \texttt{Number = 32}.
+
+S-a hotărât că în loc de pointeri la noduri va fi folosit un index în tablou cu nodurile.
+În cazul dat, aceasta doar face faptul că nodurile sunt păstrate într-un singur tablou mai evident,
+și permite schimbarea mărimii acestui tablou.
+În plus, aceasta permite ca nodurile să fie adresate într-un mod stabil de către \texttt{LevelContext},
+în sensul că acesta poate păstra indicii ca identificatorii fără a-și face griji că nodurile pot fi mișcate în memorie.
+Există și alte avantaje ale acestei abordări care cu toate că nu necesar se aplică pentru aplicație în cauză,
+fac folosirea indicilor în loc de pointeri ca soluția implicită în mai multe cazuri.
+
+La dezvoltarea sistemului s-a considerat dacă păstrarea nodurilor după niveluri ar fi preferată
+peste păstrarea lor liniar într-un singur bloc de memorie.
+Ideea este că aceasta proprietate ar putea fi folosită pentru a accelera procesul de căutare
+a drumului de noduri după poziția din fișier.
+Separarea nodurilor într-un alt mod mai conștient ar putea simplifica
+și operațiile de ștergere a nodurilor trecute.
+Dacă nodurile ar fi păstrate după mai multe tablouri,
+aceasta poate fi indicat printr-un segment de biți dintr-un identificator compus.
+Însă faptul este că operațiile de căutare sunt foarte rapide,
+chiar dacă sunt realizate folosind căutarea ce mai simplă liniară după fii,
+iar ștergerea nodurilor care a trecut peste zona de vizibilitate
+n-a fost implementată deoarece n-a fost considerată importantă pentru funcționalitatea aplicației.
+
+\subsection{Datele nodurilor}.
+
+În mod asemănător, datele din noduri sunt păstrate după un index într-un tablou separat.
+Deoarece datele sunt reprezentate printr-o uniune etichetată (tagged union),
+ar fi prea risipitor ca acestea să fie păstrate într-un singur tablou.
+
+Problema este că fiecare instanță de o uniune etichetată are
+mărimea etichetei plus mărimea celui mai mare tip,
+chiar dacă tipul valorii păstrate în această valoare ocupă mai puțin spațiu.
+De exemplu, dacă este păstrat o valoare pe un octet,
+iar uniunea etichetată admite ca cel mai mare tip un \texttt{RGB16} pe 48 de biți,
+spațiul ocupat va fi mărimea etichetei (de exemplu, 8 biți) adăugată la mărimea acestui tip,
+deci 56 de biți.
+Prin urmare, este risipit foarte mult spațiu, dacă valorile sunt păstrate într-un singur tablou.
+
+O abordare mai eficientă este de a păstra fiecare tip de valoare într-un tablou,
+indicând în identificatorul cărui tablou corespunde datele după acel identificator.
+Atunci valorile de fiecare mărime posibilă pot fi păstrate într-un tablou propriu,
+ocupând doar acel număr de biți per fiecare valoare, 
+iar valoarea etichetată s-ar putea fi recreată după cerere.
+
+S-ar mai putea folosi abordarea de a elimina eticheta din date,
+deducând tipul corect al etichetei din tipul nodului,
+însă s-a dorit ca aceste concepte totuși să fie mai independente pentru
+a simplifica adresarea la date și pentru a avea flexibilitatea de
+a putea păstra mai multe tipuri de date pentru același tip de nod.
+
+Unica constrângere care va fi adăugată dacă este folosită această abordare este că
+tipul inițial atribuit unui nod cu date nu poate fi schimbat pe urmă.
+Aceasta implică și faptul că dacă se dorește ca datele să fie păstrate în aceeași ordine ca și
+nodurile cu care acestea sunt asociate, ele trebuie să fie create împreună cu crearea nodului în cauză.
+Însă deoarece nodurile nu vor fi șterse în această aplicație,
+iar tipul de noduri nu trebuie să fie schimbat, aceasta nu este groaznic.
+
+
+\chapter{Implementarea Zlib}
+
+Zlib este formatul de compresie folosit în scopul unelor chunk-uri din formatul \ac{PNG}.
+De exemplu, chunk-ul \texttt{zTXt} definește câmpul \texttt{Compressed text},
+care include direct șirul compresat în formatul Zlib.
+
+
+
 
 \chapterConclusionSection{implementation_chapter_title}
 

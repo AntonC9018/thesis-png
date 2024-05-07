@@ -772,8 +772,6 @@ pub fn initChunkDataNode(context: *Context, chunkType: ChunkType) !void
             {
                 return error.NonZeroLengthForIEND;
             }
-
-            context.state.isEnd = true;
         },
         .ImageData =>
         {
@@ -781,6 +779,8 @@ pub fn initChunkDataNode(context: *Context, chunkType: ChunkType) !void
             {
                 context.state.isData = true;
             }
+
+            context.state.isEnd = true;
         },
         .Transparency => |s|
         {
