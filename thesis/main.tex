@@ -974,6 +974,26 @@ Deoarece scopul aplicației este de a realiza \textit{citirea} unui fișier \ac{
 dar nu generarea unui așa fișier, acestea nu vor fi menționate în continuare.
 Câmpurile cu aceste date însă sunt citite și validate în mod normal, conform specificației.
 
+Partea esențială a formatului Zlib este subformatul integrat Deflate.
+Deflate definește 3 mecanisme de comprimare: datele fără comprimare,
+și comprimarea folosind arbori Huffman, metoda fixă și metoda dinamică.
+
+Metoda fixă se implementează mai ușor, deoarece nu necesită constuirea unei structuri de date.
+Specificația dă niște tabele, folosind care este interpretat fluxul de biți.
+
+Metoda dinamică este mai complicată și necesită citirea arborelui Huffman
+folosit pentru decomprimare a fluxului de biți în continuare.
+Este dificil de implementat codul corect pentru această metodă tocmai deoarece descrierea
+la nivel înalt al algoritmului nu corespunde direct la implementare.
+În special, proprietatea codurilor Huffman că oarecare cod nu poate apărea
+la începutul unui alt cod poate fi pe deplin apreciată numai atunci
+când persoana singură realizează o implementare.
+
+Fluxul de biți este procesat într-o secvență de simboluri,
+care reprezintă ori literale, adică singuri octeți decomprimați,
+ori referințe de o anumită lungime înapoi la bufer decomprimat,
+după anumită distanță de la poziția corectă.
+Aceste simboluri nu există 
 
 
 

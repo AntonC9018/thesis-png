@@ -5,6 +5,7 @@ const zlib = parser.zlib;
 const deflate = zlib.deflate;
 const chunks = parser.chunks;
 const ast = parser.ast;
+const TaggedArrayList = @import("TaggedArrayList.zig").TaggedArrayList;
 
 const resourcesDir = "raylib/raylib/examples/text/resources/";
 
@@ -29,16 +30,25 @@ pub const SyntaxChildrenList = struct
 pub const ChunkDataNodeType = parser.ChunkType;
 
 pub const NodeIndex = ast.NodeId;
-pub const DataId = ast.NodeDataId;
 
 pub const invalidNodeIndex: NodeIndex = ast.invalidNodeId;
-pub const invalidDataIndex: DataId = ast.invalidNodeDataId;
+pub const invalidDataId: DataId = @bitCast(@as(usize, std.math.maxInt(usize)));
+
+pub fn isDataIdInvalid(id: DataId) bool
+{
+    return @as(usize, @bitCast(id)) == @as(usize, std.math.maxInt(usize));
+}
+pub fn isDataIdValid(id: DataId) bool
+{
+    return !isDataIdInvalid(id);
+}
 
 pub const NodeType = ast.NodeType;
 pub const NodeValue = ast.NodeData;
 
 // Maybe add a reference count here to be able to know when to delete things.
 pub const NodeData = ast.NodeData;
+pub const DataId = TaggedArrayList(NodeData).Id;
 
 pub const SemanticListNode = struct
 {
@@ -60,7 +70,7 @@ pub const Node = struct
     // Points to the root data of the semantic linked list.
     // If there's no semantic list, just points to the data.
     // There's always at least one data in that case.
-    data: DataId = invalidDataIndex, 
+    data: DataId = invalidDataId, 
     syntaxChildren: SyntaxChildrenList = .{},
     
     // This is only going to be used for the image data nodes, probably.
@@ -71,24 +81,24 @@ fn nodeIdToIndex(id: ast.NodeId) NodeIndex
 {
     return id;
 }
-fn dataIdToIndex(id: ast.NodeDataId) DataId
+fn decodeDataId(id: ast.NodeDataId) DataId
 {
-    return id;
+    return @bitCast(id);
 }
 fn nodeIndexToId(index: NodeIndex) ast.NodeId
 {
     return index;
 }
-fn dataIndexToId(index: DataId) ast.NodeDataId
+fn encodeDataId(id: DataId) ast.NodeDataId
 {
-    return index;
+    return @bitCast(id);
 }
 
 pub const AST = struct
 {
     rootNodes: std.ArrayList(NodeIndex),
     syntaxNodes: std.ArrayList(Node),
-    nodeDatas: std.MultiArrayList(NodeData),
+    nodeDatas: TaggedArrayList(NodeData),
 
     const NodeOperations = parser.NodeOperations;
 
@@ -102,7 +112,7 @@ pub const AST = struct
         return .{
             .rootNodes = std.ArrayList(NodeIndex).init(allocators.rootNode),
             .syntaxNodes = std.ArrayList(Node).init(allocators.syntaxNode),
-            .nodeDatas = std.ArrayList(NodeData).init(allocators.nodeData),
+            .nodeDatas = TaggedArrayList(NodeData).init(allocators.nodeData),
         };
     }
 
@@ -144,13 +154,7 @@ pub const AST = struct
         NodeOperations.Error!void
     {
         const nodeIndex = nodeIdToIndex(params.id);
-        const dataIndex = dataIdToIndex(params.dataId);
-
-        // data exists?
-        if (dataIndex != invalidDataIndex)
-        {
-            std.debug.assert(self.nodeDatas.items.len > dataIndex);
-        }
+        const dataIndex = decodeDataId(params.dataId);
 
         const node = &self.syntaxNodes.items[nodeIndex];
         node.span.endInclusive = end:
@@ -168,18 +172,7 @@ pub const AST = struct
             }
         };
         node.nodeType = params.nodeType;
-        std.debug.assert(node.data == dataIndex);
-
-        if (dataIndex != invalidDataIndex)
-        {
-            const data = &self.nodeDatas.items[dataIndex];
-            if (data.* == .None)
-            {
-                std.debug.print("Data was created but is empty on node completion."
-                    ++ "Something might be wrong. The node type is {}", 
-                    .{ node.nodeType });
-            }
-        }
+        std.debug.assert(node.data.eql(dataIndex));
     }
 
     pub fn linkSemanticParent(self: *AST, params: NodeOperations.SyntaxNodeSemanticLinkParams)
@@ -211,37 +204,32 @@ pub const AST = struct
         if (node) |n|
         {
             // Not already created.
-            std.debug.assert(n.data == invalidDataIndex);
+            std.debug.assert(n.data.eql(invalidDataId));
         }
 
-        const dataIndex = self.nodeDatas.items.len;
-        const data = try self.nodeDatas.addOne();
-        data.* = params.value;
-
+        const dataId = try self.nodeDatas.append(params.value);
         if (node) |n|
         {
-            n.data = dataIndex;
+            n.data = dataId;
         }
 
-        return dataIndexToId(dataIndex);
+        return encodeDataId(dataId);
     }
 
     pub fn setNodeDataValue(self: *AST, params: NodeOperations.NodeDataParams) 
         NodeOperations.Error!void
     {
-        const dataIndex = dataIdToIndex(params.id);
-        // TODO: Maybe use a multiarray.
-        const data = &self.nodeDatas.items[dataIndex];
+        const dataId = decodeDataId(params.id);
+        const data = self.nodeDatas.get(dataId);
         
         // Changing the type halfway is disallowed, unless it's not been set yet.
-        if (data.* != .None)
         {
-            const currentTag = @intFromEnum(data.*);
+            const currentTag = @intFromEnum(data);
             const newTag = @intFromEnum(params.value);
             std.debug.assert(currentTag == newTag);
         }
 
-        data.* = params.value;
+        self.nodeDatas.set(dataId, params.value);
     }
 
     pub fn deinit(self: *AST, parserAllocator: std.mem.Allocator) void

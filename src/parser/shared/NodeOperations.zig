@@ -107,13 +107,13 @@ pub const SyntaxNodeSemanticLinkParams = struct
 pub const NodeDataCreationParams = struct
 {
     associatedNode: ast.NodeId = ast.invalidNodeId,
-    value: ast.NodeData = .None,
+    value: ast.NodeData,
 };
 
 pub const NodeDataParams = struct
 {
     id: ast.NodeDataId,
-    value: ast.NodeData = .None,
+    value: ast.NodeData,
 };
 
 pub const Error = std.mem.Allocator.Error;

@@ -59,8 +59,6 @@ pub const NodeType = union(enum)
 
 pub const NodeData = union(enum)
 {
-    None: void,
-
     LiteralString: []const u8,
     // The memory is from the context's allocator.
     OwnedString: std.ArrayListUnmanaged(u8),
