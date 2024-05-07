@@ -156,8 +156,6 @@ const crcTable = crcTable:
     var result: [256]u32 = undefined;
     @setEvalBranchQuota(256 * 8 * 2);
 
-
-
     for (0 .., &result) |i, *r|
     {
         var c: u32 = i;
