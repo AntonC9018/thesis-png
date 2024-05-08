@@ -187,6 +187,12 @@ fn updateNodePathForPosition(
     bytePosition: usize,
     nodePath: *std.ArrayList(ast.NodeIndex)) !void
 {
+    const nodePosition = parser.ast.Position
+    {
+        .byte = bytePosition,
+        .bit = 0,
+    };
+
     nodePath.clearRetainingCapacity();
     const rootNodeIndex = rootNode:
     {
@@ -194,8 +200,7 @@ fn updateNodePathForPosition(
         for (tree.rootNodes.items) |rootIndex|
         {
             const node = &tree.syntaxNodes.items[rootIndex];
-            if (node.span.start.byte <= bytePosition
-                and node.span.endInclusive.byte >= bytePosition)
+            if (node.span.includesPosition(nodePosition))
             {
                 break :rootNode rootIndex;
             }
@@ -217,8 +222,7 @@ fn updateNodePathForPosition(
         for (node.syntaxChildren.array.items) |childIndex|
         {
             const child = &tree.syntaxNodes.items[childIndex];
-            if (child.span.start.byte >= bytePosition
-                and child.span.endInclusive.byte <= bytePosition)
+            if (child.span.includesPosition(nodePosition))
             {
                 try nodePath.append(childIndex);
             }

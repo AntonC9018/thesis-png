@@ -212,34 +212,29 @@ pub const Position = struct
 pub const NodeSpan = struct
 {
     start: Position,
-    endInclusive: Position,
+    endExclusive: Position,
 
-    pub fn bitLen(span: *const NodeSpan) usize
+    pub fn bitLen(span: NodeSpan) usize
     {
-        const difference = span.start.offsetTo(span.endInclusive);
-        const bitsDiff = difference.byte * @bitSizeOf(u8) + difference.bit + 1;
+        const difference = span.start.offsetTo(span.endExclusive);
+        const bitsDiff = difference.byte * @bitSizeOf(u8) + difference.bit;
         return bitsDiff;
     }
 
-    pub fn fromStartAndEndExclusive(startPos: Position, endPosExclusive: Position) NodeSpan
+    pub fn includesPosition(span: NodeSpan, pos: Position) bool
     {
-        const comparison = endPosExclusive.compareTo(startPos);
-        std.debug.assert(comparison > 0);
-        const endInclusive_ = endPosExclusive.add(.{ .bit = -1 });
-        return .{
-            .start = startPos,
-            .endInclusive = endInclusive_,
-        };
+        return span.start.compareTo(pos) <= 0
+            and pos.compareTo(span.endExclusive) < 0;
     }
 
     pub fn fromStartAndLen(startPos: Position, len: NodePositionOffset) NodeSpan
     {
-        const endOffset = len.addBits(-1);
+        const endOffset = len;
         std.debug.assert(!endOffset.isLessThanOrEqualToZero());
 
         return .{
             .start = startPos,
-            .endInclusive = startPos.add(endOffset),
+            .endExclusive = startPos.add(endOffset),
         };
     }
 };

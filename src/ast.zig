@@ -129,7 +129,7 @@ pub const AST = struct
         {
             .span = .{
                 .start = params.start,
-                .endInclusive = params.start,
+                .endExclusive = params.start,
             },
         });
 
@@ -157,7 +157,7 @@ pub const AST = struct
         const dataIndex = decodeDataId(params.dataId);
 
         const node = &self.syntaxNodes.items[nodeIndex];
-        node.span.endInclusive = end:
+        node.span.endExclusive = end:
         {
             const comparison = params.endExclusive.compareTo(node.span.start);
             std.debug.assert(comparison >= 0);
@@ -168,7 +168,7 @@ pub const AST = struct
             }
             else
             {
-                break :end params.endExclusive.add(.{ .bit = -1 });
+                break :end params.endExclusive;
             }
         };
         node.nodeType = params.nodeType;
@@ -248,99 +248,3 @@ pub const AST = struct
     }
 };
 
-pub fn createTestTree(allocator: std.mem.Allocator) !AST
-{
-    var tree: AST = .{
-        .rootNodes = std.ArrayList(usize).init(allocator),
-        .nodes = std.ArrayList(Node).init(allocator),
-        .nodeData = std.ArrayList(NodeData).init(allocator),
-    };
-    const data = try tree.nodeDatas.addManyAsArray(10);
-    const defaultType = NodeType { .TopLevel = .Chunk };
-    data.*[0] = .{
-        .type = defaultType,
-        .value = .{
-            .String = "Test",
-        },
-    };
-    data.*[1] = .{
-        .type = defaultType,
-        .value = .{
-            .String = "Hello world, this is a longer piece of text",
-        },
-    };
-    for (2 .. data.len) |i|
-    {
-        data.*[i] = .{
-            .type = defaultType,
-            .value = .{
-                .Number = i,
-            },
-        };
-    }
-
-    var position = parser.ast.Position
-    {
-        .byte = 0,
-        .bit = 0,
-    };
-
-    {
-        const endPosition = position.add(.{ .byte = 1 });
-        const node = Node
-        {
-            .span = parser.ast.NodeSpan.fromStartAndEndExclusive(position, endPosition),
-            .nodeData = null,
-            .children = .{},
-        };
-        try tree.syntaxNodes.append(node);
-        position = endPosition;
-    }
-    // Make a couple nodes to serve as children.
-    const childrenCount = 3;
-    const parentNode = try tree.syntaxNodes.addOne();
-
-    var children: SyntaxChildrenList = .{};
-    try children.array.ensureTotalCapacity(tree.childrenAllocator(), childrenCount);
-
-    for (0 .. childrenCount) |i|
-    {
-        const endPosition = position.add(.{
-            .byte = @intCast(i + 1),
-            .bit = @intCast(i * 6),
-        });
-        // std.debug.print("From: {d},{d}\n", .{ position.byte, position.bit });
-        // std.debug.print("To: {d},{d}\n", .{ endPosition.byte, endPosition.bit });
-        const node = Node
-        {
-            .span = parser.ast.NodeSpan.fromStartAndEndExclusive(position, endPosition),
-            .nodeData = i,
-            .children = .{},
-        };
-        const currentIndex = tree.syntaxNodes.items.len;
-        try children.array.append(tree.childrenAllocator(), currentIndex);
-        try tree.syntaxNodes.append(node);
-        position = endPosition;
-    }
-
-    {
-        const childIndices = children.array.items;
-        const firstChild = childIndices[0];
-        const lastChild = childIndices[childIndices.len - 1];
-
-        const start = tree.syntaxNodes.items[firstChild].span.start;
-        const end = tree.syntaxNodes.items[lastChild].span.endInclusive;
-        parentNode.* = Node
-        {
-            .span = .{
-                .start = start,
-                .endInclusive = end,
-            },
-            .nodeData = null,
-            .children = children,
-        };
-    }
-
-    (try tree.rootNodes.addManyAsArray(2)).* = .{ 0, 1 };
-    return tree;
-}
