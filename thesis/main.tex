@@ -3,7 +3,7 @@
 
 % Description
 \newcommand{\authorName}{CURMANSCHII Anton}
-\newcommand{\thesisTitle}{PNG}
+\newcommand{\thesisTitle}{Explorarea formatului de fișier PNG}
 \newcommand{\uniGroupName}{IA1901}
 \newcommand{\thesisType}{master}
 \newcommand{\programulDeStudii}{master}
@@ -31,6 +31,8 @@
   \acro{ICC}{International Color Consortium}
   \acro{WSL}{Windows Subsystem for Linux}
   \acro{CRC}{Cyclic Redundancy Check}
+  \acro{JPEG}{Joint Photographic Experts Group}
+  \acro{GIF}{Graphics Interchange Format}
 \end{acronym}
 
 
@@ -44,7 +46,7 @@ Teza constă din: Introducere, \total{num_chapters} capitole, Concluzii generale
 Textul de bază cuprinde \usefulPageCount{} de pagini și \anexeCount{} de anexe.
 
 \textbf{Cuvinte-cheie:}
-\textit{\ac{PNG}, \ac{Zlib}, \ac{Deflate}, format de fișier, arbore sintactic, aplicație pentru vizualizare.}
+\textit{\ac{PNG}, \ac{Zlib}, \ac{DEFLATE}, format de fișier, arbore sintactic, aplicație pentru vizualizare.}
 
 \textbf{Actualitatea.}
 
@@ -72,7 +74,7 @@ focusând anume la structura formatului.
 
 \textbf{Valoarea aplicativă.} Ca rezultat a fost implementată o aplicație care poate fi folosită pentru vizualizare a formatului \ac{PNG}.
 
-Rezultatele obținute au fost raportate la Conferința \textbf{\conferencesList}.
+Rezultatele obținute au fost raportate la conferința \textbf{\conferencesList}.
 
 % I think this one's required to be capitalized.
 \unnumberedChapter{INTRODUCERE}
@@ -103,10 +105,10 @@ creând un parser și oarecare alte instrumente necesare în proces.
 
 \textbf{Suportul metodologic și tehnologic.}
 
-Structura formatului \ac{PNG} și a formaturilor de comprimare integrate \ac{Zlib} și Deflate
+Structura formatului \ac{PNG} și a formaturilor de comprimare integrate Zlib și DEFLATE
 a fost studiată din specificațiile acestora \cite{png_spec} \cite{zlib_spec} \cite{deflate_spec}.
 Programul a fost implementat în limbajul de programare Zig \cite{zig} care a fost învățat prin documentație.
-Pentru implementarea formatului Deflate ca referință a fost într-o măsură scăzută folosit codul librăriei uzlib \cite{gzip_impl}.
+Pentru implementarea formatului DEFLATE ca referință a fost într-o măsură scăzută folosit codul librăriei uzlib \cite{gzip_impl}.
 A fost folosită librăria Raylib \cite{raylib} drept librăria grafică.
 
 Deoarece a fost luată abordarea explorativă la dezvoltarea aplicației,
@@ -154,8 +156,284 @@ Al treilea capitol, \nameref{implementation_chapter_title}, urmează implementar
 
 \chapter{Capitol introducere}\label{intro_chapter_title}
 
-\chapterConclusionSection{intro_chapter_title}
+\section{Descrierea la nivel înalt a formatului de fișier \ac{PNG}}
 
+Formatul de fișier \ac{PNG} este unul din cele mai răspândite formaturi de imagine.
+Formatul acesta este folosit în numeroase domenii pe scară largă, incluzând majoritatea aplicațiilor
+web, aplicații grafice care salvează sau încarcă imagini din fișiere, precum și în dezvoltarea de jocuri.
+
+În continuare vor fi descrise principiile de bază a acestui format,
+precum și cele mai importante decizii de proiectare care au adus creatorii formatului la structura lui actuală.
+
+\subsection{Scopul formatului}
+
+Formatul \ac{PNG} este un format portabil destinat pentru reprezentarea imaginilor fără pierderi.
+
+Fraza ``fără pierderi'' reprezintă faptul că pixelile imaginii
+pot fi comprimate într-un fișier \ac{PNG},
+după ce decomprimate din acest fișier de către cititor,
+întorcându-le în forma lor inițială.
+Deci datele pixelilor vor fi \textit{exact echivalente} cu datele înainte de comprimare.
+
+Pe de altă parte, formaturile care folosesc comprimarea \textit{cu pierderi},
+ca, de exemplu, \ac{JPEG}, semnifică că aceste date pot diferi,
+însă vizual, adică pentru ochiul omului, imaginea va arăta bine.
+Deci termenul \textit{pierderi} se referă la pierderea de informație în urma comprimării.
+
+Formatul \ac{PNG} a fost inițial creat pentru a înlocui formatul \ac{GIF},
+pentru care nu era posibil de creat un comprimător de uz liber atunci\cite{gif_unusable_reason}.
+În plus, inginerii care au inventat \ac{PNG} s-a străduit să îmbunătățească algoritmul de comprimare,
+precum și structura formatului nou, și unele capacități neaccesibile în \ac{GIF},
+ca posibilitatea de a comprima imagini în culori reale (truecolor images),
+posibilitatea de a folosi un canal separat pentru transparența,
+robustețea împotrivă erorilor de transmisie, și altele.
+
+\subsection{Catacteristici principale}
+
+Mai jos sunt enumerate capacitățile principale ale formatului \ac{PNG} (reinterpretat din specificație).
+
+Capacitățile păstrate din GIF:
+
+\begin{itemize}
+    \item
+        Imagini cu paletă de culori de până la 256 de culori.
+        
+    \item
+        Posibilitatea de a fi transmis în flux:
+        fișierele pot fi citite și scrise în serie, permițând astfel utilizarea formatului
+        PNG ca protocol de comunicare pentru generarea și afișarea imaginilor dinamic.
+
+    \item
+        Afișare progresivă: un fișier de imagine pregătit corespunzător poate fi
+        afișat pe măsură ce este primit pe canalul de comunicare,
+        furnizând o imagine cu o rezoluție redusă foarte repede,
+        urmată de îmbunătățirea graduală a detaliilor.
+
+    \item
+        Transparență: porțiuni ale imaginii pot fi marcate ca transparente,
+        creând efectul unei imagini non-rectangulare.
+
+    \item 
+        Informații auxiliare: comentarii textuale și alte date pot fi
+        stocate în interiorul fișierului de imagine.
+
+    \item
+        Complet independenți de hardware și platformă.
+
+    \item
+        Compresie eficientă, 100\% fără pierderi.
+\end{itemize}
+
+Caracteristicile noi ale PNG, indisponibile în GIF, includ:
+
+\begin{itemize}
+    \item Imagini truecolor de până la 48 de biți per pixel.
+
+    \item Imagini gri de până la 16 biți per pixel.
+
+    \item Canal de transparență independent.
+
+    \item 
+        Informații gamma ale imaginii, care permit afișarea automată a imaginilor
+        cu luminozitate/contrast corecte indiferent de mașinile utilizate
+        pentru a origina și afișa imaginea.
+
+    \item Asigurarea integrității imaginii printr-un algoritm simplu.
+
+    \item Prezentare inițială mai rapidă în modul de afișare progresivă.
+\end{itemize}
+
+PNG este conceput să fie:
+
+\begin{itemize}
+    \item
+        Simplu și portabil: dezvoltatorii ar trebui să poată implementa PNG ușor.
+
+    \item
+        Fără sarcini juridice: s-a depus un efort semnificativ pentru a asigura
+        că PNG va fi mereu un format liber și gratuit.
+
+    \item
+        Bine comprimat: atât imaginile cu paletă de culori,
+        cât și imaginile cu culoarea reală (truecolor images)
+        sunt comprimate la fel de eficient ca și în alte
+        algorimte existente de comprimare fără pierderi,
+        dar des și mai eficient.
+
+    \item
+        Interschimbabilitatea: orice decodor PNG care conformă standardului
+        va putea citi toate fișierele PNG conforme.
+
+    \item
+        Flexibil: formatul permite extensii viitoare,
+        fără a compromite interschimbabilitatea PNG de bază.
+
+    \item
+        Robust: designul susține verificarea completă a integrității fișierului,
+        precum și detectarea simplă și rapidă a erorilor comune de transmisie.
+\end{itemize}
+
+Datorită capacităților enumerate mai sus, formatul \ac{PNG} este folosit
+pe larg pentru imagini pe Internet, însă este o alegere bună și în artă digitală,
+și în dezvoltarea jocurilor.
+
+
+\subsection{Structura formatului}
+
+Structura fișierelor \ac{PNG} este bazată pe o serie de blocuri,
+cunoscute sub numele de \textbf{chunk-uri}.
+Fiecare chunk are o structură specifică și o funcție definită,
+contribuind la crearea și interpretarea corectă a imaginii.
+
+Chunk-urile pot fi ori critice, ori auxiliare.
+Chunk-urile critice sunt neapărat necesare pentru a putea interpreta imaginea.
+Dacă decodorul nu poate interpreta un chunk critic, nici nu va putea prezenta imaginea,
+de aceea acest lucru nu se permite conform specificației.
+Chunk-urile auxiliare se folosesc pentru a îmbunătăți imaginea 
+(ca de exemplu informații gama pentru a selecta o culoare mai favorabilă),
+sau pentru a adăuga informații suplimentare la imagine
+(ca chunk-ul text pentru titlul imaginii).
+Din această cauză, chiar dacă toate chunk-urile auxiliare ar fi ignorate de către un decodor,
+acesta ar putea arăta imaginea.
+La chunk-uri critice prima literă din tip este majusculă,
+iar la cele auxiliare este minusculă.
+
+\begin{itemize}
+  \item
+      \textbf{Antetul imaginii (Image Header sau \texttt{IHDR})}:
+      Acesta este primul chunk din orice fișier \ac{PNG}.
+      Conține informații esențiale despre imagine, cum ar fi lățimea,
+      înălțimea, tipul de culoare, compresia, filtrarea și întrelățarea (interlacing).
+
+  \item
+      \textbf{Paleta de culori (\texttt{PLTE})}:
+      Conține secvența de culori utilizate în imagine.
+
+  \item
+      \textbf{Datele imaginii (Image Data sau \texttt{IDAT})}:
+      Aceste chunk-uri conțin datele imaginii,
+      comprimate conform algoritmului de comprimare fără pierderi al formatului \ac{PNG}.
+      Specificația oficială suportă doar algoritmul Zlib de comprimare.
+
+  \item
+      \textbf{Transparența (\texttt{tRNS})}:
+      Oferă informații despre transparența anumitor culori din imagine,
+      permițând, de exemplu, un fundal transparent sau ca imaginea să apare nerectangulară.
+
+  \item
+      \textbf{Chunk-urile cu informații textuale (\texttt{tEXt}, \texttt{zTXt}, \texttt{iTXt})}:
+      Aceste chunk-uri pot conține text pentru informații diverse despre imagine,
+        cum ar fi titlul, autorul, descrierea, etc.
+
+  \item
+      \textbf{Chunk de sfârșit (\texttt{IEND})}:
+      Acest chunk marchează sfârșitul fișierului \ac{PNG} și nu conține date.
+\end{itemize}
+
+\subsection{Întrelățarea}
+
+\ac{PNG} utilizează un mecanism numit întrelățare,
+care permite o încărcare progresivă a imaginii.
+În formatul \ac{PNG}, înterlățarea este realizată prin algoritmul Adam7,
+care împarte imaginea în mai multe trepte de încărcare,
+îmbunătățind experiența vizuală în timpul încărcării continue a imaginii.
+
+Ideea este că imaginea se subdivizează la mai multe pătrate de dimensiuni $8 \times 8$,
+iar întreaga imagine este transmisă în 7 pași, conform tabelului \ref{fig:pixel_order_table}:
+
+\begin{figure}[!ht]
+\centering
+\begin{tabular}{c c c c c c c c}
+    1 & 6 & 4 & 6 & 2 & 6 & 4 & 6 \\
+    7 & 7 & 7 & 7 & 7 & 7 & 7 & 7 \\
+    5 & 6 & 5 & 6 & 5 & 6 & 5 & 6 \\
+    7 & 7 & 7 & 7 & 7 & 7 & 7 & 7 \\
+    3 & 6 & 4 & 6 & 3 & 6 & 4 & 6 \\
+    7 & 7 & 7 & 7 & 7 & 7 & 7 & 7 \\
+    5 & 6 & 5 & 6 & 5 & 6 & 5 & 6 \\
+    7 & 7 & 7 & 7 & 7 & 7 & 7 & 7 \\
+\end{tabular}
+\caption{Tabelul ordonării pixelilor. Fiecare celulă indică pasul la care este transmis acel pixel.}
+\label{fig:pixel_order_table}
+\end{figure}
+
+\subsection{Utilizări și Limitări}
+
+Deși formatul \ac{PNG} este versatil și oferă o calitate ridicată a imaginii, are și câteva limitări.
+Nu suportă animații native (spre deosebire de formatul \ac{GIF})
+și nu este ideal pentru fotografii datorită dimensiunii mai mari a fișierului comparativ
+cu formatele comprimate cu pierderi, cum ar fi \ac{JPEG}.
+Cu toate acestea, este foarte popular pentru grafică web,
+datorită transparenței și calității imaginii.
+
+
+\section{Limbajul de programare Zig}
+
+Limbajul de programare Zig este un limbaj de programare de nivel scăzut, aproape de C.
+Zig se conține într-un spațiu special, în acel sens că scopul lui este de
+a îmbunătăți securitatea programelor eliminând neajunsurile limbajului C
+și adăugând diverse tipuri de verificări stricte la compilare,
+dar fără a deveni un limbaj de nivel înalt.
+
+De exemplu, Zig provizionează programatorul la nivel de limbaj cu așa funcționalități ca 
+uniuni etichetate, uniuni neetichetate verificate în modul de compilare debug,
+slice-uri, tablouri de mărime fixă ca valori (la fel ca \texttt{std::array} din C++),
+nulabilitatea foarte strictă, inclusiv la pointeri, modalități convenabile de procesare a erorilor,
+tipuri întregi de orice mărime fixă și foarte multe alte.
+
+Însă, în același timp, nu se provizionează o abstracție pentru interfețe sau clase virtuale,
+moștenirea tipurilor, capacitățile programării funcționale ca expresii lambda,
+capturarea stivei implicită.
+Nu există constructori și destructori la structuri, deci nu există conceptul de \ac{RAII}.
+\ac{RAII} sau în alte cuvinte conceptul de proprietare este modul principal
+prin care limbajele ca C++ și Rust se străduiesc să rezolve problema siguranței memoriei.
+Zig rezolvă această problemă folosind verificări meticuloase la compilare și în timpul rulării,
+dacă este compilat în mod debug.
+
+Încă o idee cheie în Zig este ca toate alocările a memoriei să fie vizibile la utilizator.
+Pentru a aloca memoria, utilizatorul trebuie să transmite funcției care solicită alocarea memoriei
+un obiect de alocator în mod explicit (ca parametru).
+Acest obiect poate fi înlocuit cu o implementare personalizată
+pentru a monitoriza alocările, de exemplu, în mod trivial.
+Pur și simplu se transmite un obiect de alocator diferit.
+
+Zig este mult mai strict, și de aceea mai sigur în ceea ce ține de numere întregi.
+Dacă, de exemplu, codul C este compilat cu comanda de compilare implicită,
+adică fără flaguri \texttt{-Wconversion -Werror}, situațiile unde se pierd informații,
+ca conversiunea de la tipuri întregi cu semn la tipuri fără semn, sau conversiuni întregilor
+de la 64 de biți la 32 de biți, sunt acceptate de către compilator fără nici o eroare sau avertizare,
+iar cazurile unde așa conversiuni de fapt se întâmplă în timpul rulării
+sunt specificate ca ``undefined behavior'' în C!
+Deci ele nici nu sunt detectate în timpul rulării și produc rezultate necunoscute.
+În Zig, compilatorul înserează verificări în timpul rulării pentru așa cazuri.
+Dacă oarecare pierdere de informație neașteptată are loc,
+programul va da eroarea (ar ``panica'') cu stack trace-ul execuției.
+În plus, fiecare loc unde pierderea de informație este posibilă trebuie numaidecât
+să fie notată explicit în cod, altfel compilatorul nu îl acceptă.
+
+Este clar de ce C nu poate implementa așa ceva --
+C are o specificație fixă cărei acesta trebuie să conforme.
+C are probleme care nu pot fi rezolvate din cauza că C nu se mai poate schimba semnificativ.
+
+Abordarea limbajului Zig este că el își permite schimbarea,
+în orice mod, deoarece nu are versiunea 1.0.
+Deci dacă o persoană decide să programeze în Zig,
+trebuie să fie gata să accepte schimbări dramatice ale limbajului.
+Aceasta se face pentru a putea repara problemele fundamentale
+ale limbajului dacă așa probleme sunt observate în viitor.
+
+Zig are mai multe capacități minunate, însă nu va ajunge spațiu pentru a le enumera.
+
+Luând în considerare toate aceastea, s-a decis că limbajul Zig ar fi ideal pentru astfel de aplicație.
+Partea majoră a aplicației lucrează la nivel foarte scăzut,
+citind octeții sau chiar biții din fluxul de date.
+Capacitățile de erori ca valori validate în timpul compilării,
+enumerații pentru stări și pentru tipurile chunk-urilor,
+chiar unele capacități de metaprogramare puternice dar intuitive ale limbajului,
+precum și posibilitatea de interoperabilitate între Zig și C pentru a putea lucra cu librăria grafică,
+au ajutat considerabil în dezvoltare.
+
+\chapterConclusionSection{intro_chapter_title}
 
 \chapter{Arhitectura Aplicației}\label{architecture_chapter_title}
 
@@ -164,7 +442,7 @@ Al treilea capitol, \nameref{implementation_chapter_title}, urmează implementar
 
 \chapter{Implementarea Sistemului}\label{implementation_chapter_title}
 
-În continuare, se va prezenta implementarea unui decoder \ac{PNG} care va fi folosit pentru
+În continuare, se va prezenta implementarea unui decodor \ac{PNG} care va fi folosit pentru
 a vizualiza formatul \ac{PNG} printr-o aplicație \ac{GUI}.
 Decoderul va fi implementat în limbajul de programare Zig\cite{zig}
 după specificația \ac{PNG}, versiunea 1.2\cite{png_spec}.
@@ -392,7 +670,7 @@ Cu toate că abordarea aceasta s-ar putea fi aplicată la unele chunk-uri,
 integrarea acestui subsistem cu logica obișnuită procedurală a celorlalte chunk-uri
 ar fi complicată și ar reduce semnificativ meritul acestei abordări. 
 
-\section{Zlib și Deflate}
+\section{Zlib și DEFLATE}
 
 Formatul \ac{PNG} folosește comprimarea datelor prin algoritmul Zlib.
 Comprimarea se folosește pentru chunk-urile \texttt{zTXt} (text comprimat),
@@ -762,7 +1040,7 @@ nu trebuie să țină cont de tipul de nod.
 
 \section{Dezvoltarea în \ac{WSL}}
 
-Dezvoltarea pe Linux este eclipsează dezvoltarea pe Windows -- aceasta este un fapt incontestabil.
+Dezvoltarea pe Linux eclipsează dezvoltarea pe Windows -- aceasta este un fapt incontestabil.
 \begin{itemize}
     \item 
         Windows nu are un manager de pachete integrat în sistem.
@@ -788,7 +1066,7 @@ Dezvoltarea pe Linux este eclipsează dezvoltarea pe Windows -- aceasta este un 
 
     \item
         Unele aplicații așteaptă sistemul de tip Unix.
-        De exemplu, abordarea răspândite pentru dezvoltarea plugin-urilor
+        De exemplu, abordarea răspândită pentru dezvoltarea plugin-urilor
         pentru Neovim este să se presupună că sistemul este Unix,
         deoarece dezvoltatorul oricum trebuie să folosescă Unix pentru a fi productiv.
 \end{itemize}
@@ -800,7 +1078,7 @@ pe scurt \ac{WSL} poate fi explicat ca un sistem de Linux integrat în Windows, 
 Destul de recent a fost introdusă și capacitatea de a rula aplicații grafice prin \ac{WSL}.
 Ferestrele create în așa mod pot fi manipulate ca orice altă fereastră pe Windows.
 
-Mulțumită WSL, toata dezvoltarea a fost realizată practic pe Linux, 
+Mulțumită \ac{WSL}, toata dezvoltarea a fost realizată practic pe Linux, 
 ce a simplificat lucrul cu librării externe, și instalarea instrumentelor adăugătoare, nemenționate explicit în text.
 
 \section{Construirea arborelui sintactic}
@@ -1021,10 +1299,10 @@ Deoarece scopul aplicației este de a realiza \textit{citirea} unui fișier \ac{
 dar nu generarea unui așa fișier, acestea nu vor fi menționate în continuare.
 Câmpurile cu aceste date însă sunt citite și validate în mod normal, conform specificației.
 
-\subsection{Subformatul \texttt{Deflate}}
+\subsection{Subformatul \texttt{DEFLATE}}
 
-Partea esențială a formatului Zlib este subformatul integrat \texttt{Deflate}.
-Deflate definește 3 mecanisme de comprimare: datele \textit{fără comprimare},
+Partea esențială a formatului Zlib este subformatul integrat \texttt{DEFLATE}.
+DEFLATE definește 3 mecanisme de comprimare: datele \textit{fără comprimare},
 și comprimarea folosind arbori Huffman, metoda \textit{fixă} și metoda \textit{dinamică}.
 
 Metoda fixă se implementează mai ușor, deoarece nu necesită constuirea unei structuri de date.
@@ -1048,6 +1326,7 @@ dar sunt codificate folosind un arbore Huffman.
 \subsection{Arbori Huffman pe scurt}
 
 Merită a fi menționată ideea arborilor Huffman fără a explica întregul algoritm adânc.
+
 Fiecărui simbol este atribuit un cod de o lungime în funcția frecvenței de apariție a acestui simbol
 în secvența de ieșire.
 Adică simbolurile care apar mai des sunt atribuite coduri mai mici,
@@ -1057,17 +1336,22 @@ fără nici un separator, secvența de început al unui cod trebuie să ajungă 
 deoarece aceasta este necesară pentru a putea citi numărul corect de biți și a realiza transformarea din cod în simbol.
 
 În caz general, această problemă este rezolvată construind un arbore Huffman general,
-însă codurile din algoritm Deflate sunt atriuite într-un mod special, astfel încât ele sunt atribuite consecutiv.
-Aceasta permite să simplifică codul care realizează decodificarea.
+însă codurile din algoritm DEFLATE sunt distribuite într-un mod special,
+astfel încât ele sunt atribuite la simboluri în mod consecutiv și consistent.
+Aceasta permite să simplifice codul care realizează decodificarea.
 
 În abordarea generală, se realizează o traversare a arborelui Huffman,
 care ia drumul stâng dacă în secvența apare un zerou, și drept, dacă apare o unitate.
-Algoritmul se termină atunci când ajunge la un nod terminal, semnificând că codul s-a potrivit simbolului din acest nod.
+Algoritmul se termină atunci când ajunge la un nod terminal,
+semnificând că codul s-a potrivit simbolului din acest nod.
+Însă acea proprietate de consecutivitate,
+de fapt limitând structura arborilor admisibile,
+schimbă semnificativ acest proces.
 
 \subsection{Specificul implementării arborelui Huffman în metoda dinamică}
 
 Folosind proprietatea alocării consecutive a codurilor,
-implementarea arborilor dinamice Huffman în Deflate se simplifică în următorul mod:
+implementarea arborilor dinamice Huffman în DEFLATE se simplifică în următorul mod:
 \begin{itemize}
     \item 
         Se stabilește un set de sloturi reprezentând lungimi diferite de secvențe.
@@ -1080,10 +1364,10 @@ implementarea arborilor dinamice Huffman în Deflate se simplifică în următor
         Fiecare slot salvează și numărul de coduri cumulativ înaintea tuturor codurilor din sloturi precedente.
         Deci, notând numărul acesta ca \( S_i \), iar numărul de noduri în fiecare slot ca \( N_i \),
 
-        \begin{equation}\label{cod_prop}
+        \begin{gather*}
             S_0 = 0 \\
-            S_i = S_{i - 1} + N_{i - 1}
-        \end{equation}
+            S_i = S_{i - 1} + N_{i - 1}.
+        \end{gather*}
 \end{itemize}
 
 Datorită proprietății că fiecare cod este atribuit consecutiv,
@@ -1091,7 +1375,7 @@ de la cea mai scurtă lungime a codului la cea mai lungă,
 procesul de decodificare poate fi sumarizat în următoarea secvență de cod:
 
 \begin{minted}{c}
-lungime = 1
+lungime = 1;
 while (lungime < sloturi.lungime)
 {
     cod = citeșteBiți(fluxDeBiți, lungime);
@@ -1151,75 +1435,73 @@ ca la abordarea cu codurile fixe, deci este mai ușor de implementat.
 \setcounter{chapter}{1}
 
 \unnumberedChapter{Anexe}
-% insert appendices here
 
-\end{document}
-% vim: fdm=syntax
-
-
-\section{ast.zig}\label{appendix:main__ast}
-\inputminted{zig}{../src/ast.zig}
+% \section{ast.zig}\label{appendix:main__ast}
+% \inputminted{zig}{../src/ast.zig}
 
 \section{TaggedArrayList.zig}\label{appendix:main__TaggedArrayList}
 \inputminted{zig}{../src/TaggedArrayList.zig}
 
-\section{main.zig}\label{appendix:main__main}
-\inputminted{zig}{../src/main.zig}
+% \section{main.zig}\label{appendix:main__main}
+% \inputminted{zig}{../src/main.zig}
 
-\section{module.zig}\label{appendix:main__parser_module}
-\inputminted{zig}{../src/parser/module.zig}
+% \section{module.zig}\label{appendix:main__parser_module}
+% \inputminted{zig}{../src/parser/module.zig}
 
-\section{pipelines.zig}\label{appendix:main__parser_pipelines}
-\inputminted{zig}{../src/parser/pipelines.zig}
+% \section{pipelines.zig}\label{appendix:main__parser_pipelines}
+% \inputminted{zig}{../src/parser/pipelines.zig}
 
-\section{common.zig}\label{appendix:main__parser_png_common}
-\inputminted{zig}{../src/parser/png/common.zig}
+% \section{common.zig}\label{appendix:main__parser_png_common}
+% \inputminted{zig}{../src/parser/png/common.zig}
 
-\section{chunks.zig}\label{appendix:main__parser_png_chunks}
-\inputminted{zig}{../src/parser/png/chunks.zig}
+% \section{chunks.zig}\label{appendix:main__parser_png_chunks}
+% \inputminted{zig}{../src/parser/png/chunks.zig}
 
-\section{parser.zig}\label{appendix:main__parser_png_parser}
-\inputminted{zig}{../src/parser/png/parser.zig}
+% \section{parser.zig}\label{appendix:main__parser_png_parser}
+% \inputminted{zig}{../src/parser/png/parser.zig}
 
-\section{utils.zig}\label{appendix:main__parser_png_utils}
-\inputminted{zig}{../src/parser/png/utils.zig}
+% \section{utils.zig}\label{appendix:main__parser_png_utils}
+% \inputminted{zig}{../src/parser/png/utils.zig}
 
-\section{zlib.zig}\label{appendix:main__parser_zlib_zlib}
-\inputminted{zig}{../src/parser/zlib/zlib.zig}
+% \section{zlib.zig}\label{appendix:main__parser_zlib_zlib}
+% \inputminted{zig}{../src/parser/zlib/zlib.zig}
 
-\section{helper.zig}\label{appendix:main__parser_zlib_helper}
-\inputminted{zig}{../src/parser/zlib/helper.zig}
+% \section{helper.zig}\label{appendix:main__parser_zlib_helper}
+% \inputminted{zig}{../src/parser/zlib/helper.zig}
 
-\section{deflate.zig}\label{appendix:main__parser_zlib_deflate}
-\inputminted{zig}{../src/parser/zlib/deflate.zig}
+% \section{deflate.zig}\label{appendix:main__parser_zlib_deflate}
+% \inputminted{zig}{../src/parser/zlib/deflate.zig}
 
-\section{huffmanTree.zig}\label{appendix:main__parser_zlib_huffmanTree}
-\inputminted{zig}{../src/parser/zlib/huffmanTree.zig}
+% \section{huffmanTree.zig}\label{appendix:main__parser_zlib_huffmanTree}
+% \inputminted{zig}{../src/parser/zlib/huffmanTree.zig}
 
-\section{noCompression.zig}\label{appendix:main__parser_zlib_noCompression}
-\inputminted{zig}{../src/parser/zlib/noCompression.zig}
+% \section{noCompression.zig}\label{appendix:main__parser_zlib_noCompression}
+% \inputminted{zig}{../src/parser/zlib/noCompression.zig}
 
-\section{dynamic.zig}\label{appendix:main__parser_zlib_dynamic}
-\inputminted{zig}{../src/parser/zlib/dynamic.zig}
+% \section{dynamic.zig}\label{appendix:main__parser_zlib_dynamic}
+% \inputminted{zig}{../src/parser/zlib/dynamic.zig}
 
-\section{fixed.zig}\label{appendix:main__parser_zlib_fixed}
-\inputminted{zig}{../src/parser/zlib/fixed.zig}
+% \section{fixed.zig}\label{appendix:main__parser_zlib_fixed}
+% \inputminted{zig}{../src/parser/zlib/fixed.zig}
 
-\section{ast.zig}\label{appendix:main__parser_shared_ast}
-\inputminted{zig}{../src/parser/shared/ast.zig}
+% \section{ast.zig}\label{appendix:main__parser_shared_ast}
+% \inputminted{zig}{../src/parser/shared/ast.zig}
 
-\section{Settings.zig}\label{appendix:main__parser_shared_Settings}
-\inputminted{zig}{../src/parser/shared/Settings.zig}
+% \section{Settings.zig}\label{appendix:main__parser_shared_Settings}
+% \inputminted{zig}{../src/parser/shared/Settings.zig}
 
-\section{level.zig}\label{appendix:main__parser_shared_level}
-\inputminted{zig}{../src/parser/shared/level.zig}
+% \section{level.zig}\label{appendix:main__parser_shared_level}
+% \inputminted{zig}{../src/parser/shared/level.zig}
 
-\section{NodeOperations.zig}\label{appendix:main__parser_shared_NodeOperations}
-\inputminted{zig}{../src/parser/shared/NodeOperations.zig}
+% \section{NodeOperations.zig}\label{appendix:main__parser_shared_NodeOperations}
+% \inputminted{zig}{../src/parser/shared/NodeOperations.zig}
 
-\section{CommonContext.zig}\label{appendix:main__parser_shared_CommonContext}
-\inputminted{zig}{../src/parser/shared/CommonContext.zig}
+% \section{CommonContext.zig}\label{appendix:main__parser_shared_CommonContext}
+% \inputminted{zig}{../src/parser/shared/CommonContext.zig}
 
-\section{pngDebug.zig}\label{appendix:main__pngDebug}
-\inputminted{zig}{../src/pngDebug.zig}
+% \section{pngDebug.zig}\label{appendix:main__pngDebug}
+% \inputminted{zig}{../src/pngDebug.zig}
 
+
+\end{document}
+% vim: fdm=syntax
