@@ -23,7 +23,6 @@
 \clearpage
 \unnumberedChapter{Lista Abrevierelor}
 \begin{acronym}
-  \acro{CI/CD}{Continuous Integration / Continuous Delivery}
   \acro{GUI}{Graphical User Interface}
   \acro{PNG}{Portable Network Graphics}
   \acro{I/O}{Input/Output}
@@ -33,6 +32,8 @@
   \acro{CRC}{Cyclic Redundancy Check}
   \acro{JPEG}{Joint Photographic Experts Group}
   \acro{GIF}{Graphics Interchange Format}
+  \acro{RAII}{Resource Acquisition Is Initialization}
+  \acro{POO}{Programarea orientată pe obiect}
 \end{acronym}
 
 
@@ -366,6 +367,23 @@ cu formatele comprimate cu pierderi, cum ar fi \ac{JPEG}.
 Cu toate acestea, este foarte popular pentru grafică web,
 datorită transparenței și calității imaginii.
 
+\subsection{Datele imaginii}
+
+Datele imaginii, adică valorile de culoare pentru fiecare pixel, se regăsesc în chunk-uri \texttt{IDAT}.
+Fiecare chunk \texttt{IDAT} atașat unul după altul conține fluxul de aceste date, mereu comprimat cu formatul Zlib.
+
+Pentru a restabili culorile pixelilor, pe fiecare linie se aplică câte un filtru.
+Fiecare filtru are o formulă simplă care derivă valoarea unui pixel
+din valorile octetutului decomprimat și valorile pixelilor din sus și din stânga-sus.
+Identificatorul filtrului este păstrat ca primul octet din secvența decomprimată. 
+
+Filtrele sunt necesare pentru a permite o compresie mai optimă.
+Ele exploatează pattern-uri din imagine, aducând datele într-o formă mai favorabilă pentru Zlib.
+
+Acestea n-au fost implementate în program, deoarece sunt necesare
+doar pentru a restabili valorile concrete ale pixelilor,
+ceea ce se folosește pentru prezentarea imaginii dar nu este util pentru vizualizarea formatului de fișier.
+
 
 \section{Limbajul de programare Zig}
 
@@ -448,6 +466,10 @@ Decoderul va fi implementat în limbajul de programare Zig\cite{zig}
 după specificația \ac{PNG}, versiunea 1.2\cite{png_spec}.
 Interfața grafică va fi implementată folosind Raylib\cite{raylib}, tot în Zig.
 
+\section{Modulul \texttt{pipelines}}
+
+\subsection{Motivarea abstracției}
+
 Pentru a facilita interacțiunea cu fluxuri de date și a crea o abstracție în acest sens,
 a fost dezvoltată o mică bibliotecă.
 Experiența anterioară cu biblioteca \texttt{System.IO.Pipelines}\cite{system_io_pipelines}
@@ -480,6 +502,198 @@ din C\# a relevat mai multe avantaje în utilizarea unei astfel de abordări:
 Un prototip al unei biblioteci similare în Zig a fost dezvoltat,
 omitând însă separarea modulelor de citire și scriere pentru a reduce complexitatea.
 Această parte poate fi adăugată ulterior, nefiind esențială pentru un \ac{MVP}.
+
+\subsection{Principiile de funcționare}
+
+Librăria folosește următoarele idei de bază:
+\begin{itemize}
+    \item 
+        Datele din fișier sunt încărcate după necesitate.
+        Într-o implementare optimă, datele sunt încărcate în față, în același timp în care sunt procesate
+        datele încărcate la o etapă precedentă.
+
+    \item
+        Codul care dorește să foloseasă aceste date nu lucrează cu cititorul,
+        dar cu \textit{secvența} produsă de către cititor.
+        Secvența este acea abstracție cheie care dă acces la date citite.
+
+    \item
+        După ce datele din secvență sunt procesate,
+        funcția \texttt{advance} a cititorului este invocată pentru
+        a ``mișca'' poziția de început curentă la poziția de început 
+        a secvenței după ce datele din aceasta au fost procesate.
+
+    \item
+        Datele procesate sunt considerate consumate,
+        iar cititorul decide ce se va întâmpla cu partea buferului consumată.
+        Aceasta poate fi ștearsă din memorie, sau păstrată pe viitor, în dependența de implementare.
+\end{itemize}
+
+Codul va arăta aproximativ în următorul fel:
+
+\begin{minted}{zig}
+var reader = .{};
+var processingState = .{};
+while (true)
+{
+    var readResult = reader.read();
+    const sequence = &readResult.sequence;
+
+    processing:
+    {
+        processSequence(&processingState, sequence) catch |err|
+        {
+            // A fost sugerată continuarea,
+            // secvența era consumată până la sfârșit.
+            if (err == error.NotEnoughBytes)
+            {
+                break :processing;
+            }
+            // Eroarea nu este legată de secvență,
+            // ci este o eroare internă a procesării.
+            else
+            {
+                return err;
+            }
+        };
+    }
+
+    // Este ultimul segment care va fi citit.
+    // Apelări la read.read() nu mai sunt valide.
+    if (readResult.isEnd)
+    {
+        // Procesorul de octeți nu a consumat întreaga intrare.
+        if (sequence.len() != 0)
+        {
+            // ...
+        }
+        // Procesorul nu a terminat procesarea
+        if (!processingState.isTerminal())
+        {
+            // ...
+        }
+        return .success;
+    }
+
+    // Se schimbă poziția de început.
+    // Aceasta potențial elimină segmentele veche.
+    reader.advance(sequence.start());
+}
+\end{minted}
+
+Ideea este de a da funcției de procesare accesul la octeții cruzi din fișier,
+și a-i permite lucra prin această abstracție minimă de o secvență.
+
+\subsection{Structura secvenței}
+
+Secvența în esența este prezentată prin două poziții din buferi cu datele.
+Prima poziție este poziția de început, și a doua este poziția de sfârșit.
+
+Fiecare poziție conține ofset-ul de la începutul segmentului cu date,
+și o legătură (un pointer) la segmentul cu date.
+Segmentele sunt legate între sine într-o listă simplu înlănțuită, adică
+fiecare segment conține pointerul la următorul segment.
+
+Deci pentru a trece prin toți octeții unei secvențe, trebuie să:
+\begin{itemize}
+    \item
+        Treacă întregimea primului segment, începând la ofset-ul păstrat în poziția de început;
+    \item
+        Treacă restul segmentelor pline.
+        Adică se urmăresc pointerii segmentelor, până când se ajunge la ultimul segment,
+        pointerul la care este păstrat în poziția de sfârșit.
+    \item
+        Ultimul segment este citit nu în întregime, dar până la ofset-ul,
+        indicat în poziția de sfârșit.
+\end{itemize}
+
+\imageWithCaption{sequence_example.png}{
+    Ilustrarea principiului de funcționare a unei secvențe.
+    Zona hășurată reprezintă octeții care corespund secvenței}
+
+Această idee este realizată conform unei interfețe de iterator care permite codului de procesare
+să treacă print-o secvență de tablouri de octeți, fără a realiza logica descrisă de fiecare dată.
+A se vede anexa \ref{appendix:sequence_iterator}.
+
+\subsection{Operații pe secvențe}
+
+Operația de ``mișcare'' a secvenței este destul de simplă -- se suprascrie poziție de început a secvenței.
+Începutul nou poate fi derivat ori în urmă iterării prin iterator,
+ori calculat prin numărul de octeți care trebuie să fie omiși,
+adică poziția de început va fi mișcată înainte cu acel număr de octeți
+pentru a ajunge la poziția nouă, posibil trecând peste limitele chunk-ului de început.
+
+Se mai permite operația de limitare a lungimii -- este creată o secvență nouă,
+calculând o poziție nouă de sfârșit, la un ofset de la poziția de început,
+dar care nu depășește poziția de sfârșit.
+Această metodă poate fi folosit pentru a împărți o secvență în două bucăți, de exemplu,
+secvența consumată și secvența restantă.
+
+O idee folositoare care se derivă din aceste operații este ilustrată în bucata de cod ce urmează.
+Funcția ia ca parametru un pointer la obiectul secvenței de pe stack a funcției care deține secvența.
+Modificările aplicate la acea secvența vor fi folosite pentru a avansa cititorul.
+
+\begin{minted}{zig}
+fn process(sequence: *Sequence)
+{
+    const sequenceCopy = sequence.*;
+    otherProcess(sequence);
+
+    const newStart = sequence.start();
+    const removedSequence = sequenceCopy.sliceToExclusive(newStart);
+    // Iterând prin removedSequence se poate de exemplu calcula CRC-ul.
+}
+\end{minted}
+
+Această idee este de fapt folosită pentru a implementa câmpul \ac{CRC} din \ac{PNG} și Adler32 din Zlib.
+A se vede anexa \ref{appendix:crc_sequence_defer_example}.
+
+\subsection{Suprascrierea temporară a segmentelor}
+
+Datorită faptului că structura segmentelor și a secvențelor este atât de transparentă,
+este posibil de a ``deturna'' o secvență, definind, de exemplu, segmentul propriu de început.
+Principal ca acest segment să fie legat la restul listei de segmente pentru a putea ajunge la poziția de sfârșit.
+
+Codul de mai jos ilustrează ideea.
+Implementarea este puțin simplificată,
+permițând doar secvențele de două sau mai multe segmente pentru a avea efectul corect.
+Așa operație solicită mai mult cod pentru a se asigura că este corectă în orice caz.
+
+Această idee a fost folosită pentru a implementa corect chunk-urile \texttt{IDAT}.
+
+\begin{minted}{zig}
+fn process(sequence: *Sequence)
+{
+    const tempBuffer = "ABC";
+    const secondSegment = sequence.start().segment.next;
+    const segment = Segment
+    {
+        .buffer = tempBuffer,
+        .len = tempBuffer.len,
+        .bytePosition = secondSegment.bytePosition - tempBuffer.len,
+        .next = secondSegment,
+    };
+    const newStart = SequencePosition
+    {
+        .segment = &segment,
+        .offset = 0,
+    };
+    var updatedSequence = Sequence
+    {
+        .range = .{
+            .start = newStart,
+            .end = sequence.end(),
+        };
+    };
+    otherProcess(&updatedSequence);
+
+    // Se presupune că acel prim bufer temporar
+    // va fi consumat până la capăt de fiecare dată.
+    std.debug.assert(updatedSequence.start().segment != &segment);
+
+    sequence.* = updatedSequence;
+}
+\end{minted}
 
 \section{Ideea aplicației la nivel înalt}
 
@@ -672,6 +886,8 @@ ar fi complicată și ar reduce semnificativ meritul acestei abordări.
 
 \section{Zlib și DEFLATE}
 
+\subsection{Zlib în \ac{PNG}}
+
 Formatul \ac{PNG} folosește comprimarea datelor prin algoritmul Zlib.
 Comprimarea se folosește pentru chunk-urile \texttt{zTXt} (text comprimat),
 \texttt{iCCP} (profil \ac{ICC}), \texttt{IDAT} (datele pixelilor), precum și altele.
@@ -700,7 +916,7 @@ A fost realizată o abordare simplă --- se păstrează toți octeții într-un 
 S-ar putea aplica o abordare mai complexă, însă acest element al programului
 nu este atât de important sau interesant din punct de vedere a formatului pentru a merita optimizarea.
 
-\subsection{Testarea}
+\subsection{Testarea implementării}
 
 Problema legată de testare este faptul că, deoarece programul este orientat
 la decomprimare și nici nu realizează un compresor,
@@ -1376,7 +1592,7 @@ procesul de decodificare poate fi sumarizat în următoarea secvență de cod:
 
 \begin{minted}{c}
 lungime = 1;
-while (lungime < sloturi.lungime)
+while (lungime <= sloturi.lungime)
 {
     cod = citeșteBiți(fluxDeBiți, lungime);
     slot = sloturi[lungime];
@@ -1402,6 +1618,50 @@ Merită de menționat doar faptul că arborele este prezentat nu direct,
 dar este și acesta codificat folosind o altă codificare Huffman,
 însă acelea sunt codificate tot folosind un set de coduri prestabilit
 ca la abordarea cu codurile fixe, deci este mai ușor de implementat.
+
+\section{Abstracțiile înăuntru modulului parserului}
+
+\subsection{Starea parsării}
+
+Parserul nu este un obiect în sensul lui din \ac{POO}, ci un modul.
+El conține structuri și funcții care lucrează cu aceste structuri ca parametri.
+
+Una din cele mai principale structuri din acest modul este structura de \textbf{stare}.
+Această structură conține toate datele necesare pentru a returna la etapa corectă a parsării.
+Această structură reprezintă starea sistemului în mașina de stări a parserului,
+precum și toate datele suplimentare necesare pentru a realiza validarea,
+sau pentru a putea interpreta unele chunk-uri corect.
+
+De exemplu, structura chunk-ului \texttt{tRNS} depinde de datele despre
+tipul de culoare din chunk-ul \texttt{PLTE}, iar în cazul în care tipul culorii este \texttt{indexed color},
+chunk-ul definește valoarea transparenței pentru fiecare culoare din \texttt{PLTE},
+deci folosește și numărul de culori pentru a realiza validarea numărului de biți din acest chunk.
+
+\subsection{Contextul}
+
+Contextul este structura principală care este transmisă ca primul parametru
+în aproape toate funcțiile din acest modul.
+
+Contextul conține toate resursele indisponibile pentru parsare:
+\begin{itemize}
+    \item O referință la secvența curentă;
+    \item Alocatorul care poate fi folosit pentru alocarea memoriei temporare dinamice;
+    \item Contextul modulului care permite accesul la \texttt{NodeOperations} și stiva curentă de noduri;
+    \item O referință la starea parserului;
+    \item Setările parserului.
+\end{itemize}
+
+Deoarece unele funcții de ajutor precum și modulul \texttt{LevelContext}
+pot lucra cu orice tip de context de parsare (ori din Zlib, ori din DEFLATE, ori din \ac{PNG}),
+fiecare context care le folosește trebuie să implementeze o interfață statică comună,
+care permite accesul la unele date din această listă care sunt necesare pentru unele funcții,
+iar în cazul modulului \texttt{LevelContext},
+accesul la poziția curentă din fluxul de octeți.
+Această poziție este necesară pentru a o sălva în arbore sintactic,
+și poate diferi de poziția simplă de octet,
+deoarece DEFLATE folosește un flux de biți, dar nu de octeți,
+și prin urmare nodurile din DEFLATE nu sunt pe limite întregi de octet ale fluxului de date.
+
 
 \chapterConclusionSection{implementation_chapter_title}
 
@@ -1441,6 +1701,12 @@ ca la abordarea cu codurile fixe, deci este mai ușor de implementat.
 
 \section{TaggedArrayList.zig}\label{appendix:main__TaggedArrayList}
 \inputminted{zig}{../src/TaggedArrayList.zig}
+
+\section{Iteratorul segmentelor unei secvențe}\label{appendix:sequence_iterator}
+\inputminted[firstline=705, lastline=763]{zig}{../src/parser/pipelines.zig}
+
+\section{Calculul CRC}\label{appendix:crc_sequence_defer_example}
+% \inputminted[firstline=705, lastline=763]{zig}{../src/parser/pipelines.zig}
 
 % \section{main.zig}\label{appendix:main__main}
 % \inputminted{zig}{../src/main.zig}

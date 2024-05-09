@@ -154,3 +154,15 @@
 
 \usepackage{amsmath}
 \renewcommand{\thefigure}{\arabic{figure}}
+
+% Inserting pictures
+\usepackage{graphicx}
+
+\graphicspath{{./images/}}
+
+\newcommand{\imageWithCaption}[2]{%
+  \begin{figure}[H]
+      \includegraphics[width={\textwidth},height={\textheight},keepaspectratio]{#1}
+      \caption{#2}\label{fig:#1}
+      \centering
+  \end{figure}}
