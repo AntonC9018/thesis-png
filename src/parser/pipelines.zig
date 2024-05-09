@@ -105,7 +105,7 @@ pub const Segment = struct
 
 fn ptrSub(a: anytype, b: @TypeOf(a)) usize
 {
-    return @divExact(@intFromPtr(b) - @intFromPtr(a), @sizeOf(@TypeOf(a))); 
+    return @divExact(@intFromPtr(a) - @intFromPtr(b), @sizeOf(@TypeOf(a))); 
 }
 
 pub const BufferManager = struct 
@@ -169,6 +169,13 @@ pub const BufferManager = struct
         {
             return newStart;
         }
+        else if (newStart.segment == &SequencePosition.StartSentinelSegment)
+        {
+            return .{
+                .offset = 0,
+                .segment = &self.segments.items[0],
+            };
+        }
 
         const firstSegmentToKeepInMemory = if (self.lowerLimitHint) |hint|
         hint:
@@ -186,8 +193,13 @@ pub const BufferManager = struct
         } 
         else null;
 
-        const newStartSegmentIndex = segmentIndexOfStart:
+        const newStartSegmentIndex, const shouldResetOffset = segmentIndexOfStart:
         {
+            if (newStart.segment == &SequencePosition.EndSentinelSegment)
+            {
+                break :segmentIndexOfStart .{ self.segments.items.len, true };
+            }
+
             const startAddress = &self.segments.items[0];
             const targetAddress = newStart.segment;
             const index = ptrSub(targetAddress, startAddress);
@@ -195,9 +207,9 @@ pub const BufferManager = struct
             const isAtEndOfSegment = newStart.offset == newStart.segment.len();
             if (isAtEndOfSegment)
             {
-                break :segmentIndexOfStart index + 1;
+                break :segmentIndexOfStart .{ index + 1, true };
             }
-            break :segmentIndexOfStart index;
+            break :segmentIndexOfStart .{ index, false };
         };
 
         const deleteUntilSegmentIndex = if (firstSegmentToKeepInMemory) |s|
@@ -222,11 +234,17 @@ pub const BufferManager = struct
         }
         segs.len -= deleteUntilSegmentIndex;
 
+        if (segs.len == 0)
+        {
+            return SequencePosition.Start;
+        }
+
         restoreConsecutiveLinks(segs.*[(deleteUntilSegmentIndex - 1) .. segs.len]);
 
+        const index = newStartSegmentIndex - deleteUntilSegmentIndex;
         return .{
-            .offset = newStart.offset,
-            .segment = &segs.*[newStartSegmentIndex - deleteUntilSegmentIndex],
+            .offset = if (shouldResetOffset) 0 else newStart.offset,
+            .segment = &segs.*[index],
         };
     }
 
@@ -858,7 +876,8 @@ pub fn Reader(ReaderType: type) type
             self: *Self,
             consumedPosition: ?SequencePosition) !void
         {
-            const desiredStart = consumedPosition orelse self.currentSequence().end();
+            const desiredStart = consumedPosition orelse self.currentSequence().start();
+
             const newStartPosition = self.buffer()
                 .cleanUpUnneededSegments(self.allocator, desiredStart);
 

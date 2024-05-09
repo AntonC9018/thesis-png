@@ -24,7 +24,7 @@ pub fn openTestReader(allocator: std.mem.Allocator) !TestReaderContext
     var testDir = try cwd.openDir("test_data", .{ .access_sub_paths = true, });
     errdefer testDir.close();
 
-    var file = try testDir.openFile("test.png", .{ .mode = .read_only, });
+    var file = try testDir.openFile("dynamic.png", .{ .mode = .read_only, });
     errdefer file.close();
 
     const reader = pipelines.Reader(@TypeOf(file.reader()))

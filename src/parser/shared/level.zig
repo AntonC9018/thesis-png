@@ -232,7 +232,10 @@ pub fn LevelContext(Context: type) type
 
         pub fn completeNodeWithValue(self: Self, value: ast.NodeData) !void
         {
-            std.debug.print("Node {} {} \n", .{ self.currentNode().nodeType, value });
+            if (self.context.settings().logChunkStart)
+            {
+                std.debug.print("Node {} {} \n", .{ self.currentNode().nodeType, value });
+            }
             try self.setDataValue(value);
             try self.completeNode();
         }

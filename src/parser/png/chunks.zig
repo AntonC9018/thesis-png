@@ -1156,7 +1156,6 @@ fn parseImageData(context: *Context) !bool
             // Double carry overs are not implemented yet.
             std.debug.assert(!usesCarryOverSegment);
 
-
             {
                 try context.level().captureSemanticContextForHierarchy(&imageData.zlibStreamSemanticContext);
             }
@@ -1180,7 +1179,13 @@ fn parseImageData(context: *Context) !bool
             return true;
         };
 
-    return context.isLastChunkSequenceSlice and sequence.len() == 0;
+    const isDone = context.isLastChunkSequenceSlice and sequence.len() == 0; 
+    if (isDone)
+    {
+        try context.level().captureSemanticContextForHierarchy(&imageData.zlibStreamSemanticContext);
+    }
+
+    return isDone;
 }
 
 pub fn parseChunkData(context: *Context) !bool

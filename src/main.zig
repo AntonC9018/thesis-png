@@ -56,7 +56,6 @@ fn parseIntoTree(allocator: std.mem.Allocator) !AppContext
 
     outerLoop: while (true)
     {
-        std.debug.print("Reading sequence\n", .{});
         const readResult = reader.read() catch unreachable;
 
         var sequence = readResult.sequence;
@@ -70,8 +69,9 @@ fn parseIntoTree(allocator: std.mem.Allocator) !AppContext
             {
                 if (err != error.NotEnoughBytes)
                 {
-                    std.debug.print("Non recoverable error {}", .{ err });
-                    break :outerLoop;
+                    std.debug.print("Non recoverable error {}\n", .{ err });
+                    // break :outerLoop;
+                    return err;
                 }
 
                 break :innerLoop;

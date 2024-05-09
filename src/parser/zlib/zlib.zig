@@ -161,6 +161,10 @@ pub const Context = struct
     {
         return self.common.nodeContext();
     }
+    pub fn settings(self: *Context) *const helper.Settings
+    {
+        return self.common.settings();
+    }
 };
 
 pub fn decode(context: *Context) !bool
@@ -270,7 +274,10 @@ pub fn decode(context: *Context) !bool
             });
 
             const computedChecksum = state.adler32.getChecksum();
-            std.debug.print("Checksum expected: {x:0>16}, Computed: {x:0>16}\n", .{ checksum, computedChecksum });
+            if (context.settings().logChecksum)
+            {
+                std.debug.print("Checksum expected: {x:0>16}, Computed: {x:0>16}\n", .{ checksum, computedChecksum });
+            }
 
             if (checksum != computedChecksum)
             {

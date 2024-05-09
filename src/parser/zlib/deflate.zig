@@ -53,6 +53,10 @@ pub const Context = struct
     {
         return self.common.nodeContext();
     }
+    pub fn settings(self: *Context) *const helper.Settings
+    {
+        return self.common.settings();
+    }
 };
 
 pub const State = struct
@@ -255,4 +259,128 @@ pub fn skipToWholeByte(context: *Context) void
 test
 {
     _ = huffman;
+}
+
+fn readAllTextAllocRelative(allocator: std.mem.Allocator, relativePath: []const u8) ![]u8
+{
+    const cwd = std.fs.cwd();
+    const absolutePath = try cwd.realpathAlloc(allocator, relativePath);
+    defer allocator.free(absolutePath);
+
+    var file = try std.fs.openFileAbsolute(absolutePath, .{
+        .mode = .read_only,
+    });
+    defer file.close();
+
+    const maxBytes = 99999;
+    const compressedBytes = try file.readToEndAlloc(allocator, maxBytes);
+    return compressedBytes;
+}
+
+test "Romeo dynamic"
+{
+    const allocator = std.heap.page_allocator;
+
+    const compressedBytes = try readAllTextAllocRelative(allocator, "test_data/romeo.txt.deflate");
+    defer allocator.free(compressedBytes);
+
+    const decompressedBytes = try readAllTextAllocRelative(allocator, "test_data/romeo.txt");
+    defer allocator.free(decompressedBytes);
+
+
+    const segment = helper.pipelines.Segment
+    {
+        .data = .{
+            .bytePosition = 0,
+            .capacity = compressedBytes.len,
+            .items = compressedBytes,
+        },
+        .nextSegment = null,
+    };
+    var sequence = helper.pipelines.Sequence
+    {
+        .range = .{
+            .len = segment.len(),
+            .start = .{
+                .offset = 0,
+                .segment = &segment, 
+            },
+            .end = .{
+                .offset = @intCast(compressedBytes.len),
+                .segment = &segment,
+            },
+        },
+    };
+
+    const FakeNodeOperations = struct
+    {
+        const h = parser.NodeOperations;
+        pub fn createSyntaxNode(_: *anyopaque, _: h.SyntaxNodeCreationParams) h.Error!parser.ast.NodeId
+        {
+            return 0;
+        }
+        pub fn completeSyntaxNode(_: *anyopaque, _: h.SyntaxNodeCompletionParams) h.Error!void
+        {
+        }
+        pub fn linkSemanticParent(_: *anyopaque, _: h.SyntaxNodeSemanticLinkParams) h.Error!void
+        {
+        }
+        pub fn createNodeData(_: *anyopaque, _: h.NodeDataCreationParams) h.Error!parser.ast.NodeDataId
+        {
+            return 0;
+        }
+        pub fn setNodeDataValue(_: *anyopaque, _: h.NodeDataParams) h.Error!void
+        {
+        }
+    };
+    var fakeAst = FakeNodeOperations{};
+    var nodeContext = parser.NodeContext
+    {
+        .allocator = allocator,
+        .operations = parser.NodeOperations.create(&fakeAst),
+    };
+
+    const settings = parser.Settings
+    {
+        .logChunkStart = true,
+    };
+
+    var outputBuffer = std.ArrayListUnmanaged(u8){};
+    var windowSize: usize = 32000;
+    var outputBufferThing = helper.OutputBuffer
+    {
+        .allocator = allocator,
+        .array = &outputBuffer,
+        .windowSize = &windowSize,
+    };
+
+    var commonContext = helper.CommonContext
+    {
+        .common = .{
+            .allocator = allocator,
+            .level = .{},
+            .nodeContext = &nodeContext,
+            .settings = &settings,
+            .sequence = &sequence,
+        },
+        .output = &outputBufferThing,
+    };
+    var state = State
+    {
+    };
+
+    var deflateContext = Context
+    {
+        .common = &commonContext,
+        .state = &state,
+    };
+
+    while (sequence.len() > 0)
+    {
+        _ = try deflate(&deflateContext);
+    }
+
+    const testing = std.testing;
+
+    try testing.expectEqualStrings(decompressedBytes, outputBuffer.items);
 }

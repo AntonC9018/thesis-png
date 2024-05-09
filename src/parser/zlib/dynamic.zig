@@ -28,7 +28,6 @@ const CodeFrequencyState = struct
     currentBitCount: u5,
 
     decodedLen: u5,
-    repeatCount: u7,
 
     pub fn huffmanContext(self: *CodeFrequencyState) helper.HuffmanContext
     {
@@ -81,12 +80,12 @@ pub const CodeDecodingState = struct
 
     pub fn getLenCodeCount(self: *const Self) usize
     {
-        return self.codeLenCodeCount + 4;
+        return @as(usize, self.codeLenCodeCount) + 4;
     }
 
     pub fn getDistanceCodeCount(self: *const Self) usize
     {
-        return self.distanceCodeCount + 1;
+        return @as(usize, self.distanceCodeCount) + 1;
     }
 
     pub fn deinit(self: *Self, allocator: std.mem.Allocator) void
@@ -154,7 +153,6 @@ pub fn decodeCodes(
                 .Number = count,
             });
             state.action = .CodeLens;
-
             return false;
         },
         .CodeLens =>
@@ -188,17 +186,18 @@ pub fn decodeCodes(
                 };
                 const remappedIndex = orderArray[i];
                 state.codeLenCodeLens[remappedIndex] = copy[i];
-
-                // TODO: A semantic node for this? Or a higher level node?
-                const tree = try huffman.createTree(
-                    @ptrCast(&state.codeLenCodeLens),
-                    context.allocator());
-                state.codeFrequencyState = std.mem.zeroInit(CodeFrequencyState, .{
-                    .action = .LiteralLen,
-                    .tree = tree,
-                });
             }
-            return true;
+
+            // TODO: A semantic node for this? Or a higher level node?
+            const tree = try huffman.createTree(
+                @ptrCast(&state.codeLenCodeLens),
+                context.allocator());
+            state.codeFrequencyState = std.mem.zeroInit(CodeFrequencyState, .{
+                .action = .LiteralLen,
+                .tree = tree,
+            });
+
+            return false;
         },
         .LiteralOrLenCodeLens =>
         {
@@ -216,7 +215,7 @@ pub fn decodeCodes(
             state.readListItemCount = 0;
 
             try context.level().completeNode();
-            return true;
+            return false;
         },
         .DistanceCodeLens =>
         {
@@ -255,7 +254,6 @@ fn readCodeLenEncodedFrequency(
         {
             const character = try helper.readAndDecodeCharacter(context, freqState.huffmanContext());
             const len: u5 = @intCast(character);
-            state.literalOrLenCodeCount = len;
 
             std.debug.assert(len <= 18);
 
@@ -263,10 +261,10 @@ fn readCodeLenEncodedFrequency(
                 .Number = len,
             });
             
-            // Value above 16 means the bits that follow are the repeat count.
             if (len >= 16)
             {
                 freqState.action = .RepeatCount;
+                freqState.decodedLen = len;
 
                 if (readCount.* == 0)
                 {
@@ -286,7 +284,7 @@ fn readCodeLenEncodedFrequency(
         {
             const repeatBitCount = freqState.repeatBitCount();
             const repeatCount = try helper.readNBits(context, repeatBitCount);
-            freqState.repeatCount = @intCast(repeatCount);
+
             try context.level().completeNodeWithValue(.{
                 .Number = repeatCount,
             });
@@ -349,20 +347,39 @@ pub fn initializeDecompressionState(
     // Make sure this runs even on errors.
     // There should be some sort of global dispose that works on any state.
     // NOTE: has to be done before tree creation, because we're using the arrays.
-    defer decodingState.deinit(allocator);
+    const decompressionState = result:
+    {
+        defer decodingState.deinit(allocator);
 
-    const literalTree = try huffman.createTree(
-        @ptrCast(decodingState.literalOrLenCodeLens),
-        allocator);
-    const distanceTree = try huffman.createTree(
-        @ptrCast(decodingState.distanceCodeLens),
-        allocator);
-
-    state.* = .{
-        .decompression = std.mem.zeroInit(DecompressionState, .{
+        const literalTree = try huffman.createTree(
+            @ptrCast(decodingState.literalOrLenCodeLens),
+            allocator);
+        const distanceTree = try huffman.createTree(
+            @ptrCast(decodingState.distanceCodeLens),
+            allocator);
+        break :result std.mem.zeroInit(DecompressionState, .{
             .literalOrLenTree = literalTree,
             .distanceTree = distanceTree,
-        }),
+        });
+    };
+    std.debug.print("Decompression state: {}\n", .{ decompressionState });
+    const sum = sum:
+    {
+        var s: usize = 0;
+        for (decompressionState.literalOrLenTree.decodedCharactersLookup) |l|
+        {
+            s += l.len;
+        }
+        // for (decompressionState.distanceTree.decodedCharactersLookup) |l|
+        // {
+        //     s += l.len;
+        // }
+        break :sum s;
+    };
+    std.debug.print("Sum: {}\n", .{ sum });
+
+    state.* = .{
+        .decompression = decompressionState,
     };
 }
 
@@ -386,6 +403,7 @@ pub fn decompressSymbol(
                 .tree = &state.literalOrLenTree,
                 .currentBitCount = &state.currentBitCount,
             });
+            std.debug.print("Decoded value: {}\n", .{ value });
 
             switch (value)
             {
@@ -455,3 +473,4 @@ pub const DecompressionNodeWriter = struct
         });
     }
 };
+

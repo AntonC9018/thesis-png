@@ -430,6 +430,7 @@ fn peekAndDecodeCharacter(context: *DeflateContext, huffman_: HuffmanContext) !D
         const decoded = try huffman_.tree.tryDecode(
             @intCast(code.bits),
             huffman_.currentBitCount.*);
+        std.debug.print("Code: {}\n", .{ code.bits });
         switch (decoded)
         {
             .DecodedCharacter => |ch|
@@ -453,7 +454,7 @@ pub const HuffmanContext = struct
     tree: *huffman.Tree,
     // Could make this store the currently read number as well if needed for optimization.
     // Adding on just a single bit is easier than rereading the whole thing.
-    // So this ideally should be wrapped in a HuffamState sort of struct.
+    // So this ideally should be wrapped in a HuffmanState sort of struct.
     currentBitCount: *u5,
 };
 
@@ -497,7 +498,7 @@ pub const CommonContext = struct
     {
         return self.common.allocator;
     }
-    pub fn settings(self: *CommonContext) *Settings
+    pub fn settings(self: *CommonContext) *const Settings
     {
         return self.common.settings;
     }
