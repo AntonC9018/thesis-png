@@ -1455,7 +1455,7 @@ chiar dacă sunt realizate folosind căutarea cea mai simplă liniară după fii
 iar ștergerea nodurilor care au trecut peste zona de vizibilitate
 n-a fost implementată deoarece n-a fost considerată importantă pentru funcționarea aplicației.
 
-\subsection{Datele nodurilor}.
+\subsection{Datele nodurilor}
 
 În mod asemănător, datele din noduri sunt păstrate după un index într-un tablou separat.
 Deoarece datele sunt reprezentate printr-o uniune etichetată (tagged union),
@@ -1621,10 +1621,10 @@ ca la abordarea cu codurile fixe, deci este mai ușor de implementat.
 
 \section{Abstracțiile înăuntru modulului parserului}
 
-\subsection{Starea parsării}
-
 Parserul nu este un obiect în sensul lui din \ac{POO}, ci un modul.
 El conține structuri și funcții care lucrează cu aceste structuri ca parametri.
+
+\subsection{Starea parsării}
 
 Una din cele mai principale structuri din acest modul este structura de \textbf{stare}.
 Această structură conține toate datele necesare pentru a returna la etapa corectă a parsării.
@@ -1635,7 +1635,7 @@ sau pentru a putea interpreta unele chunk-uri corect.
 De exemplu, structura chunk-ului \texttt{tRNS} depinde de datele despre
 tipul de culoare din chunk-ul \texttt{PLTE}, iar în cazul în care tipul culorii este \texttt{indexed color},
 chunk-ul definește valoarea transparenței pentru fiecare culoare din \texttt{PLTE},
-deci folosește și numărul de culori pentru a realiza validarea numărului de biți din acest chunk.
+deci folosește și numărul de culori pentru a realiza validarea numărului de octeți de date din acest chunk.
 
 \subsection{Contextul}
 
@@ -1661,6 +1661,41 @@ Această poziție este necesară pentru a o sălva în arbore sintactic,
 și poate diferi de poziția simplă de octet,
 deoarece DEFLATE folosește un flux de biți, dar nu de octeți,
 și prin urmare nodurile din DEFLATE nu sunt pe limite întregi de octet ale fluxului de date.
+
+Deci, fiecare tip de context are un set de proprietăți (funcții) standarte
+care permit acces la unele resurse în mod uniform.
+
+\subsection{Modul de accesare a datelor din secvență}
+
+Faptul că parserul lucrează ca un automat finit deja a fost
+menționată în secțiunea despre proiectare a parserului.
+Acest fapt adaugă și restricții de implementare.
+
+Restricția principală este că, la fiecare etapă, starea parserului trebuie să fie actualizată
+între două instanțe a citirii din secvență, sau, de exemplu, imediat după o operație de citire.
+Altfel, starea intermediară între aceste două instanțe de citire ar fi pierdută,
+iar secvența, deoarece este adresată prin referință, va rămâne actualizată.
+
+Ideea este că fiecare instanță de citire poate da eroarea
+că nu i-a ajuns numărul de octeți din secvență (\texttt{error.NotEnoughBytes}).
+În acest caz, se așteapă că parserul va termina execuția,
+transmitând eroarea la codul care a rulat-o.
+După ce codul de rulare adaugă încă un segment în secvență,
+parserul este invocat din nou, și trebuie să se întoarcă
+la aceeași linie de cod pentru a continua execuția,
+ceea ce se face urmărind starea, într-un fel prin niște expresii \texttt{switch}.
+
+Deoarece nu este posibil de întors în mijlocul unui bloc de cod,
+și deoarece fiecare operație de citire poate termina execuția parserului,
+într-un fel operația de citire este prima operație din majoritatea starilor,
+și îi permite să-și actualizeze starea pentru a mișca la următoarea stare.
+De aceea, întregul cod este organizat în așa mod.
+Aceasta include și codul din parserul \ac{PNG}, și codul din Zlib.
+
+Sunt excepții ca unele stări să nu fie asociate acțiuni concrete din parser,
+însă acestea de obicei nu conțin operații de citire.
+
+\subsection{Adâncimea stivei de noduri și imbricarea stărilor}
 
 
 \chapterConclusionSection{implementation_chapter_title}
