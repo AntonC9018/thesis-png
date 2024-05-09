@@ -34,6 +34,7 @@
   \acro{GIF}{Graphics Interchange Format}
   \acro{RAII}{Resource Acquisition Is Initialization}
   \acro{POO}{Programarea orientată pe obiect}
+  \acro{RGB}{Red Green Blue}
 \end{acronym}
 
 
@@ -330,6 +331,22 @@ iar la cele auxiliare este minusculă.
       \textbf{Chunk de sfârșit (\texttt{IEND})}:
       Acest chunk marchează sfârșitul fișierului \ac{PNG} și nu conține date.
 \end{itemize}
+
+\subsection{Structura chunk-ului}
+
+Chunk-ul este alcătuit din 4 câmpuri:
+\begin{itemize}
+    \item \textbf{Lungimea}. Este un număr întreg pe 4 octeți care indică numărul de octeți în câmpul datelor chunk-ului;
+    \item \textbf{Tipul chunk-ului}. Acestea sunt 4 octeți, de obicei 4 litere, care identifică tipul chunk-ului.
+    \item \textbf{Datele chunk-ului}. Conțin datele specifice tipului de chunk dat, de lungimea dată.
+    \item \textbf{\ac{CRC}}.
+        Este calculat pe baza tuturor octeților din câmpurile de tip al chunk-ului și de datele chunk-ului. 
+        Se folosește un algoritm standart, pseudocodul pentru care este în specificație.
+        A se vedea implementarea în anexa \ref{appendix:crc}.
+\end{itemize}
+
+Structura datelor păstrate în câmpul cu datele chunk-ului sunt diferite pentru fiecare tip de chunk.
+Ele sunt descrise pe larg în specificație, dar nu vor fi explicit menționate în această lucrare.
 
 \subsection{Întrelățarea}
 
@@ -968,16 +985,11 @@ Acestea implică transferul diferit al contextului de eroare și
 urmează în poziții diferite înregistrate ale secvenței curente de intrare.
 
 \begin{minted}{zig}
-pub fn impl(context: *Context) !void
-{
+pub fn impl(context: *Context) !void {
     // ...
-
-    switch (context.state.action)
-    {
+    switch (context.state.action) {
         // ...
-
-        .Number =>
-        {
+        .Number => {
             // Citirea unui întreg, modificarea fluxului.
             const number = try pipelines.readInt(context.sequence());
 
@@ -985,43 +997,30 @@ pub fn impl(context: *Context) !void
             context.state.number = number;
 
             // Validarea.
-            if (number == 256)
-            {
+            if (number == 256) {
                 return error.CannotBe256;
             }
         },
-
         // ...
     }
 }
 
-pub fn callSite()
-{
+pub fn callSite() {
     // ...
-
-    impl(&context)
-    catch |err|
-    {
-        switch (err)
-        {
-            error.CannotBe256 =>
-            {
+    impl(&context) catch |err| {
+        switch (err) {
+            error.CannotBe256 => {
                 // Dacă mai multe stări pot produce această eroare,
                 // Trebuie să se verifice în care stare se află parserul.
-                switch (context.state.action)
-                {
+                switch (context.state.action) {
                     // ...
-
-                    .Number =>
-                    {
+                    .Number => {
                         std.debug.print("The number {} is invalid while parsing Number\n", .{
                             context.state.number
                         });
                     },
-
                     // ...
                 }
-
                 return error.ParsingFailed;
             },
         }
@@ -1668,7 +1667,7 @@ care permit acces la unele resurse în mod uniform.
 \subsection{Modul de accesare a datelor din secvență}
 
 Faptul că parserul lucrează ca un automat finit deja a fost
-menționată în secțiunea despre proiectare a parserului.
+menționat în secțiunea despre proiectare a parserului.
 Acest fapt adaugă și restricții de implementare.
 
 Restricția principală este că, la fiecare etapă, starea parserului trebuie să fie actualizată
@@ -1693,10 +1692,91 @@ De aceea, întregul cod este organizat în așa mod.
 Aceasta include și codul din parserul \ac{PNG}, și codul din Zlib.
 
 Sunt excepții ca unele stări să nu fie asociate acțiuni concrete din parser,
-însă acestea de obicei nu conțin operații de citire.
+însă acestea de obicei nu conțin operații de citire și țin de inițializarea nodurilor
+sau prepararea stării de o singură dată.
 
 \subsection{Adâncimea stivei de noduri și imbricarea stărilor}
 
+Structura ierarhică a parserului reflectă structura ierarhică a formatului.
+Fiecare stare a parserului poate fi asociată o mulțime de stări imbricate, recursiv.
+
+Fiecare stare se întâmplă la un anumit \textit{nivel}. 
+Nivelul înseamnă numărul de imbricări consecutive care au adus la o anumită stare.
+
+La fiecare nivel înainte unui anumit nivel există stările intermediare, care includ starea curentă.
+Aceasta în mod natural aduce la o structură arborescentă.
+
+Arborele este construit folosind o stivă de noduri care
+indică drumul la nodul care corespunde stării curente,
+conținând și toate nodurile părinte intermediare.
+\texttt{LevelContext} exploatează această idee pentru a permite accesul la
+nodul curent folosind indexul nivelului (adâncimii) curent.
+Adâncimea este actualizată de fiecare dată când are loc intrarea în codul procesării unei stări imbricate.
+Mai precis, acesta este incrementat.
+După părăsirea codului care procesează o anumită stare, acesta este numaidecât decrementat.
+
+Proprietatea \texttt{level} accesibilă pe orice context crează un \texttt{LevetContext}
+pentru a realiza operațiile ce țin de actualizarea adâncimii (\texttt{push}),
+decrementarea adâncimii (\texttt{pop}) și de lucru cu nodurile
+din arbore (\texttt{completeNode}, \texttt{completeNodeWithData} și alte).
+\texttt{defer} permite ca \texttt{pop}-ul să fie locuit alături de \texttt{push},
+și să se aplice în cazul unei erori. 
+
+Un exemplu simplificat poate fi următorul:
+
+\begin{minted}{zig}
+fn parseTopLevel(context: *Context) bool
+{
+    // Acest cod este la începutul fiecărei funcții.
+    // Codul de program folosește varianta acestei funcții care mai setează tipul de nod.
+    context.level().push();
+    defer context.level().push();
+
+    const action = &context.state.topLevelAction;
+
+    switch (action.*)
+    {
+        // Starea de rădăcină.
+        .State1 =>
+        {
+            const isDone = try parseState1(context);
+            if (isDone)
+            {
+                action.* = .State2;
+                try context.level().completeNode();
+            }
+            return isDone;
+        },
+        .State2 =>
+        {
+            // ...
+        },
+    }
+}
+
+fn parseState1(context: *Context)
+{
+    context.level().push();
+    defer context.level().pop();
+    // ...
+    switch (...)
+    {
+        // Starea imbricată.
+        State3 =>
+        {
+            const isDone = parseState3(context);
+            // ...
+        }
+    }
+}
+\end{minted}
+
+Un exemplu proeminent de această idee poate fi tablourile de culori:
+\begin{itemize}
+    \item La cel mai înalt nivel se află nodul întregului tablou;
+    \item La primul nivel imbricat se află nodul unei culori \texttt{\ac{RGB}};
+    \item La ultimul nivel se află nodul componentei culoarei (\texttt{R}, \texttt{G} sau \texttt{B}).
+\end{itemize}
 
 \chapterConclusionSection{implementation_chapter_title}
 
@@ -1740,9 +1820,11 @@ Sunt excepții ca unele stări să nu fie asociate acțiuni concrete din parser,
 \section{Iteratorul segmentelor unei secvențe}\label{appendix:sequence_iterator}
 \inputminted[firstline=705, lastline=763]{zig}{../src/parser/pipelines.zig}
 
-\section{Calculul CRC}\label{appendix:crc_sequence_defer_example}
+\section{Calculul CRC în parser}\label{appendix:crc_sequence_defer_example}
 % \inputminted[firstline=705, lastline=763]{zig}{../src/parser/pipelines.zig}
 
+\section{Funcția actualizării valorii CRC}\label{appendix:crc}
+\inputminted[firstline=154, lastline=197]{zig}{../src/parser/png/common.zig}
 % \section{main.zig}\label{appendix:main__main}
 % \inputminted{zig}{../src/main.zig}
 
