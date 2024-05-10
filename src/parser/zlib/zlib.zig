@@ -317,191 +317,39 @@ test
     _ = helper;
 }
 
-test "failing tests"
+test
 {
-    // The examples are gzip, not zlib.
-    // We don't parse gzip.
-    if (true)
-    {
-        return;
-    }
-
-    const examplesDirectoryPath = "references/uzlib/tests/decomp-bad-inputs";
-
-    const cwd = std.fs.cwd();
-
-    const allocator = std.heap.page_allocator;
-
-    if (false)
-    {
-        const cwdPath = try cwd.realpathAlloc(allocator, "");
-        std.debug.print("cwd: {s}\n", .{ cwdPath });
-        allocator.free(cwdPath);
-    }
-
-    var allExamplesDirectory = try cwd.openDir(examplesDirectoryPath, .{
-        .iterate = true,
-    });
-    defer allExamplesDirectory.close();
-
-    var exampleDirectories = allExamplesDirectory.iterate();
-    while (try exampleDirectories.next()) |exampleDirectoryEntry|
-    {
-        std.debug.assert(exampleDirectoryEntry.kind == .directory);
-
-        var exampleDirectory = try allExamplesDirectory.openDir(exampleDirectoryEntry.name, .{
-            .iterate = true,
-        });
-        defer exampleDirectory.close();
-
-        var exampleFiles = exampleDirectory.iterate();
-        while (try exampleFiles.next()) |exampleFileEntry|
-        {
-            if (false)
-            {
-                if (!std.mem.eql(u8, exampleDirectoryEntry.name, "00"))
-                {
-                    continue;
-                }
-
-                if (!std.mem.eql(u8, exampleFileEntry.name, "id_000000_sig_11_src_000000_op_flip1_pos_10"))
-                {
-                    continue;
-                }
-            }
-
-            const exampleFile = try exampleDirectory.openFile(exampleFileEntry.name, .{});
-            defer exampleFile.close();
-            const reader = exampleFile.reader();
-
-            const testResult = try doTest(reader, allocator);
-            if (testResult.err) |_| {}
-            else
-            {
-                std.debug.print("Test {s} didn't fail\n", .{ exampleFileEntry.name });
-                return;
-            }
-        }
-    }
+    try doTest("test_data/romeo.txt", "test_data/romeo.txt.zlib");
+    try doTest("test_data/DCI-P3-D65.icc", "test_data/DCI-P3-D65.icc.zlib");
 }
 
-fn doTest(file: anytype, allocator: std.mem.Allocator)
-    !struct
-    {
-        err: ?anyerror,
-        state: State,
-        filePosition: usize,
-    }
+fn doTest(decompressedFileName: []const u8, compressedFileName: []const u8) !void
 {
-    var reader = pipelines.Reader(@TypeOf(file))
+    const allocator = std.heap.page_allocator;
+
+    const compressedBytes = try helper.readAllTextAllocRelative(allocator, compressedFileName);
+    defer allocator.free(compressedBytes);
+
+    const decompressedBytes = try helper.readAllTextAllocRelative(allocator, decompressedFileName);
+    defer allocator.free(decompressedBytes);
+
+    var testContext = helper.TestContext
     {
-        .dataProvider = file,
         .allocator = allocator,
-        .preferredBufferSize = 4096 * 4,
     };
-    defer reader.deinit();
-
-    var outputBuffer = outputBuffer:
+    testContext.init(compressedBytes);
+    var context = testContext.getZlibContext();
+    while (true)
     {
-        break :outputBuffer helper.OutputBuffer
+        const done = try decode(&context);
+        if (done and context.sequence().len() == 0)
         {
-            .buffer = .{
-                .allocator = allocator,
-            },
-            .position = 0,
-            .windowSize = undefined,
-        };
-    };
-    defer outputBuffer.deinit(allocator);
-
-    var state = State{};
-    var resultError: ?anyerror = null;
-    var sequence: pipelines.Sequence = undefined;
-    var settings: helper.Settings = .{};
-
-    outerLoop: while (true)
-    {
-        const readResult = try reader.read();
-        sequence = readResult.sequence;
-
-        const common = CommonContext
-        {
-            .sequence = &sequence,
-            .output = &outputBuffer,
-            .allocator = allocator,
-            .settings = &settings,
-        };
-
-        const context = Context
-        {
-            .state = &state,
-            .common = &common,
-        };
-
-        decodeAsMuchAsPossible(&context)
-        catch |err|
-        {
-            const isRecoverableError = err:
-            {
-                switch (err)
-                {
-                    error.NotEnoughBytes => break :err true,
-                    else =>
-                    {
-                        std.debug.print("Error: {}\n", .{ err });
-                        break :err false;
-                    },
-                }
-            };
-
-            if (!isRecoverableError)
-            {
-                resultError = err;
-                break :outerLoop;
-            }
-        };
-
-        if (readResult.isEnd)
-        {
-            const remaining = context.sequence().len();
-            if (remaining > 0)
-            {
-                std.debug.print("Not all input consumed. Remaining length: {}\n", .{remaining});
-                resultError = error.NotAllInputConsumed;
-                break :outerLoop;
-            }
-
-            if (context.state.action != .Done)
-            {
-                std.debug.print("Ended in a non-terminal state.\n", .{});
-                resultError = error.UnexpectedEndOfInput;
-                break :outerLoop;
-            }
+            break;
         }
     }
 
-    for (0 .., outputBuffer.buffer()) |i, byte|
-    {
-        if (i % 16 == 0)
-        {
-            std.debug.print("\n", .{});
-        }
-        switch (byte)
-        {
-            ' ' ... '~' =>
-            {
-                std.debug.print("{c}  ", .{ byte });
-            },
-            else =>
-            {
-                std.debug.print("{x:02} ", .{ byte });
-            },
-        }
-    }
+    const testing = std.testing;
 
-    return .{
-        .err = resultError,
-        .state = state,
-        .filePosition = sequence.getStartBytePosition(),
-    };
+    try testing.expectEqualStrings(decompressedBytes, testContext.outputBufferMem.items);
+    try testing.expect(false);
 }

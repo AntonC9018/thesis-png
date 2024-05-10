@@ -44,9 +44,9 @@ pub const LenCode = enum(u8)
 
 const lengthCodeStart = 257;
 
-fn adjustStart(offset: u16) u8
+fn adjustStart(code: u16) u8
 {
-    return @intCast(offset - lengthCodeStart);
+    return @intCast(code - lengthCodeStart);
 }
 
 fn getLengthBitCount(code: u8) u6
@@ -69,8 +69,9 @@ test
     try testLengthBitCount(0, 257);
     try testLengthBitCount(1, 267);
     try testLengthBitCount(4, 280);
-    try testLengthBitCount(5, 281);
-    try testLengthBitCount(5, 282);
+    try testLengthBitCount(5, 283);
+    try testLengthBitCount(5, 284);
+    try testLengthBitCount(0, 285);
 }
 
 const baseLengthLookup = l:
@@ -112,7 +113,7 @@ fn testBaseLength(expected: u16, code: u16) !void
     try expect(expected, @as(u16, getBaseLength(adjustStart(code))) + 3);
 }
 
-test "Base length"
+test "Length base length"
 {
     try testBaseLength(3, 257);
     try testBaseLength(11, 265);
@@ -126,9 +127,22 @@ fn getDistanceBitCount(distanceCode: u5) u6
 {
     return switch (distanceCode)
     {
-        0 ... 1 => 0,
+        0 ... 3 => 0,
         else => distanceCode / 2 - 1,
     };
+}
+
+fn testDistanceBitCount(expected: u16, code: u5) !void
+{
+    const expect = std.testing.expectEqual;
+    try expect(expected, getDistanceBitCount(code));
+}
+
+test "Distance bit count"
+{
+    try testDistanceBitCount(0, 3);
+    try testDistanceBitCount(5, 13);
+    try testDistanceBitCount(13, 29);
 }
 
 const baseDistanceLookup = l:
@@ -168,4 +182,5 @@ test "Base distance"
     try testBaseDistance(33, 10);
     try testBaseDistance(1025, 20);
     try testBaseDistance(24577, 29);
+    try testBaseDistance(4097, 24);
 }

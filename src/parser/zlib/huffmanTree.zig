@@ -119,6 +119,8 @@ pub const Tree = struct
         const prefix = self.prefixes[bitIndex];
         const lookup = self.decodedCharactersLookup[bitIndex];
 
+        // std.debug.print("Code: {}, Prefix: {}, bitCount: {}, Lookup len: {}.\n", .{ code, prefix, bitCount, lookup.len });
+
         if (code >= prefix and code < prefix + lookup.len)
         {
             const index = code - prefix;
@@ -129,7 +131,10 @@ pub const Tree = struct
         else
         {
             const nextBitCount = self.getNextBitCount(bitCount)
-                orelse return error.InvalidCode;
+                orelse
+                {
+                    return error.InvalidCode;
+                };
 
             return .{
                 .NextBitCount = nextBitCount
@@ -144,7 +149,7 @@ pub fn createTree(
 {
     const t = try generateTreeCreationContext(bitLensBySymbol);
     const tree = try createTreeFromContext(&t, allocator);
-    std.debug.print("Tree: {}\n", .{ tree });
+    std.debug.print("Tree: {}.\n", .{ tree });
     return tree;
 }
 

@@ -120,6 +120,11 @@ pub const NodePositionOffset = struct
         };
     }
 
+    pub fn sub(a: NodePositionOffset, b: NodePositionOffset) NodePositionOffset
+    {
+        return a.add(b.negate());
+    }
+
     pub fn normalized(self: NodePositionOffset) NodePositionOffset
     {
         return .{
@@ -175,7 +180,7 @@ pub const Position = struct
         return bitDiff;
     }
 
-    fn asOffset(self: Position) NodePositionOffset
+    pub fn asOffset(self: Position) NodePositionOffset
     {
         return .{
             .byte = @intCast(self.byte),

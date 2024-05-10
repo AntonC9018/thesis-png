@@ -225,7 +225,6 @@ pub fn decodeCodes(
                 return false;
             }
 
-            std.debug.print("Done with literal codes\n", .{});
             state.action = .DistanceCodeLens;
             state.distanceCodeLens = try context.allocator()
                 .alloc(u8, state.getDistanceCodeCount());
@@ -241,7 +240,6 @@ pub fn decodeCodes(
 
             if (readAllArray)
             {
-                std.debug.print("Done with distance codes\n", .{});
                 try context.level().completeNode();
                 return true;
             }
@@ -428,8 +426,7 @@ pub fn decompressSymbol(
         },
         .LenExtraBits =>
         {
-            const extraBitCount = state.lenCode.extraBitCount();
-            const len = switch (extraBitCount)
+            const len = switch (state.lenCode.extraBitCount())
             {
                 0 => 0,
                 else => |x| try helper.readNBits(context, x),

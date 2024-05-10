@@ -259,193 +259,35 @@ pub fn skipToWholeByte(context: *Context) void
 test
 {
     _ = huffman;
-}
-
-fn readAllTextAllocRelative(allocator: std.mem.Allocator, relativePath: []const u8) ![]u8
-{
-    const cwd = std.fs.cwd();
-    const absolutePath = try cwd.realpathAlloc(allocator, relativePath);
-    defer allocator.free(absolutePath);
-
-    var file = try std.fs.openFileAbsolute(absolutePath, .{
-        .mode = .read_only,
-    });
-    defer file.close();
-
-    const maxBytes = 99999;
-    const compressedBytes = try file.readToEndAlloc(allocator, maxBytes);
-    return compressedBytes;
+    _ = helper;
 }
 
 test "Romeo dynamic"
 {
     const allocator = std.heap.page_allocator;
 
-    const compressedBytes = try readAllTextAllocRelative(allocator, "test_data/romeo.txt.deflate");
+    const compressedBytes = try helper.readAllTextAllocRelative(allocator, "test_data/romeo.txt.deflate");
     defer allocator.free(compressedBytes);
 
-    const decompressedBytes = try readAllTextAllocRelative(allocator, "test_data/romeo.txt");
+    const decompressedBytes = try helper.readAllTextAllocRelative(allocator, "test_data/romeo.txt");
     defer allocator.free(decompressedBytes);
 
-
-    const segment = helper.pipelines.Segment
-    {
-        .data = .{
-            .bytePosition = 0,
-            .capacity = compressedBytes.len,
-            .items = compressedBytes,
-        },
-        .nextSegment = null,
-    };
-    var sequence = helper.pipelines.Sequence
-    {
-        .range = .{
-            .len = segment.len(),
-            .start = .{
-                .offset = 0,
-                .segment = &segment, 
-            },
-            .end = .{
-                .offset = @intCast(compressedBytes.len),
-                .segment = &segment,
-            },
-        },
-    };
-
-    const FakeNodeOperations = struct
-    {
-        const h = parser.NodeOperations;
-        const Self = @This();
-
-        dataId: parser.ast.NodeDataId = 1,
-        nodeId: parser.ast.NodeId = 1,
-        mappings: std.ArrayListUnmanaged(struct
-            {
-                nodeId: parser.ast.NodeId,
-                dataId: parser.ast.NodeDataId,
-                value: parser.ast.NodeData,
-            }) = .{},
-        allocator: std.mem.Allocator,
-
-        pub fn createSyntaxNode(self: *Self, _: h.SyntaxNodeCreationParams) h.Error!parser.ast.NodeId
-        {
-            const result = self.nodeId;
-            self.nodeId += 1;
-
-            try self.mappings.append(self.allocator, .{
-                .nodeId = result,
-                .dataId = parser.ast.invalidNodeDataId,
-                .value = undefined,
-            });
-
-            return result;
-        }
-        pub fn completeSyntaxNode(self: *Self, value: h.SyntaxNodeCompletionParams) h.Error!void
-        {
-            for (0 .., self.mappings.items) |i, *m|
-            {
-                if (m.nodeId == value.id)
-                {
-                    if (m.dataId != parser.ast.invalidNodeDataId)
-                    {
-                        std.debug.print("Value {}\n", .{ m.value });
-                    }
-                    // std.debug.print("Type {}, Value {?}\n", .{
-                    //     value.nodeType,
-                    //     if (m.dataId != parser.ast.invalidNodeDataId)
-                    //         m.value
-                    //     else
-                    //         null
-                    // });
-                    _ = self.mappings.orderedRemove(i);
-                    return;
-                }
-            }
-        }
-        pub fn linkSemanticParent(_: *Self, _: h.SyntaxNodeSemanticLinkParams) h.Error!void
-        {
-        }
-        pub fn createNodeData(self: *Self, params: h.NodeDataCreationParams) h.Error!parser.ast.NodeDataId
-        {
-            if (params.associatedNode == parser.ast.invalidNodeId)
-            {
-                return 0;
-            }
-
-            for (self.mappings.items) |*m|
-            {
-                if (m.nodeId == params.associatedNode)
-                {
-                    const result = self.dataId;
-                    m.dataId = result;
-                    m.value = params.value;
-                    self.dataId += 1;
-                    return result;
-                }
-            }
-            return 0;
-        }
-        pub fn setNodeDataValue(self: *Self, params: h.NodeDataParams) h.Error!void
-        {
-            for (self.mappings.items) |*m|
-            {
-                if (m.dataId == params.id)
-                {
-                    m.value = params.value;
-                    return;
-                }
-            }
-        }
-    };
-    var fakeAst = FakeNodeOperations
+    var testContext = helper.TestContext
     {
         .allocator = allocator,
     };
-    var nodeContext = parser.NodeContext
-    {
-        .allocator = allocator,
-        .operations = parser.NodeOperations.create(&fakeAst),
-    };
-
-    const settings = parser.Settings
-    {
-        .logChunkStart = false,
-    };
-
-    var outputBuffer = std.ArrayListUnmanaged(u8){};
-    var windowSize: usize = 32000;
-    var outputBufferThing = helper.OutputBuffer
-    {
-        .allocator = allocator,
-        .array = &outputBuffer,
-        .windowSize = &windowSize,
-    };
-
-    var commonContext = helper.CommonContext
-    {
-        .common = .{
-            .allocator = allocator,
-            .level = .{},
-            .nodeContext = &nodeContext,
-            .settings = &settings,
-            .sequence = &sequence,
-        },
-        .output = &outputBufferThing,
-    };
-    var state = State
-    {
-    };
-
-    var deflateContext = Context
-    {
-        .common = &commonContext,
-        .state = &state,
-    };
-
+    testContext.init(compressedBytes);
+    var deflateContext = testContext.getDeflateContext();
     while (true)
     {
         const done = try deflate(&deflateContext);
-        if (done and sequence.len() <= 1)
+        const currentPosition = deflateContext.getStartBytePosition();
+        const endPosition = parser.ast.NodePositionOffset
+        {
+            .byte = @intCast(compressedBytes.len),
+        };
+        const diff = endPosition.sub(currentPosition.asOffset()).normalized();
+        if (done and diff.byte == 0)
         {
             break;
         }
@@ -453,6 +295,5 @@ test "Romeo dynamic"
 
     const testing = std.testing;
 
-    try testing.expectEqualStrings(decompressedBytes, outputBuffer.items);
+    try testing.expectEqualStrings(decompressedBytes, testContext.outputBufferMem.items);
 }
-

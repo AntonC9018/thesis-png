@@ -1157,10 +1157,6 @@ fn parseImageData(context: *Context) !bool
             std.debug.assert(!usesCarryOverSegment);
 
             {
-                try context.level().captureSemanticContextForHierarchy(&imageData.zlibStreamSemanticContext);
-            }
-
-            {
                 if (sequence.len() == 0)
                 {
                     return true;
@@ -1180,10 +1176,6 @@ fn parseImageData(context: *Context) !bool
         };
 
     const isDone = context.isLastChunkSequenceSlice and sequence.len() == 0; 
-    if (isDone)
-    {
-        try context.level().captureSemanticContextForHierarchy(&imageData.zlibStreamSemanticContext);
-    }
 
     return isDone;
 }
@@ -1380,6 +1372,8 @@ pub fn parseChunkData(context: *Context) !bool
             const done = try parseImageData(context);
             if (done)
             {
+                try context.level().captureSemanticContextForHierarchy(
+                    &context.state.imageData.zlibStreamSemanticContext);
                 try context.level().completeNode();
             }
 
