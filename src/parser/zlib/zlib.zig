@@ -351,5 +351,4 @@ fn doTest(decompressedFileName: []const u8, compressedFileName: []const u8) !voi
     const testing = std.testing;
 
     try testing.expectEqualStrings(decompressedBytes, testContext.outputBufferMem.items);
-    try testing.expect(false);
 }
