@@ -5,6 +5,7 @@ pub const pipelines = parser.pipelines;
 pub const DeflateContext = deflate.Context;
 pub const std = @import("std");
 pub const huffman = @import("huffmanTree.zig");
+pub const symbolLimits = @import("symbolLimits.zig");
 
 pub const levels = parser.level;
 
@@ -430,7 +431,6 @@ fn peekAndDecodeCharacter(context: *DeflateContext, huffman_: HuffmanContext) !D
         const decoded = try huffman_.tree.tryDecode(
             @intCast(code.bits),
             huffman_.currentBitCount.*);
-        std.debug.print("Code: {}\n", .{ code.bits });
         switch (decoded)
         {
             .DecodedCharacter => |ch|
@@ -574,8 +574,8 @@ pub const OutputBuffer = struct
 
 pub const BackReference = struct
 {
-    distance: u16,
-    len: u16,
+    distance: symbolLimits.Distance,
+    len: symbolLimits.Len,
 };
 
 pub const Symbol = union(enum)
@@ -618,3 +618,29 @@ fn writeSymbolToOutput_switch(context: *DeflateContext, symbol: Symbol) !bool
     return false;
 }
 
+pub const DecompressionValueType = enum
+{
+    Literal,
+    Len,
+    EndBlock,
+    Distance,
+
+    // TODO: allow semantic nodes to store more useful data.
+    LenCodeExtra,
+    DistanceExtra,
+};
+
+pub const DecompressionNodeWriter = struct
+{
+    context: *DeflateContext,
+
+    pub fn create(self: @This(), t: DecompressionValueType, value: usize) !void
+    {
+        self.context.level().setNodeType(.{
+            .SymbolDecompression = t,
+        });
+        try self.context.level().completeNodeWithValue(.{
+            .Number = value,
+        });
+    }
+};

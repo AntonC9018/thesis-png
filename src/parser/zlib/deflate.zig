@@ -9,6 +9,7 @@ pub const noCompression = @import("noCompression.zig");
 pub const fixed = @import("fixed.zig");
 pub const dynamic = @import("dynamic.zig");
 pub const Symbol = helper.Symbol;
+pub const DecompressionValueType = helper.DecompressionValueType;
 
 pub const BlockType = enum(u2)
 {
@@ -115,7 +116,6 @@ pub fn deflate(context: *Context) !bool
             const blockType = try helper.readBits(.{ .context = context }, u2);
             const typedBlockType: BlockType = @enumFromInt(blockType);
 
-            std.debug.print("Block type value: {}\n", .{typedBlockType});
             try context.level().completeNodeWithValue(.{
                 .BlockType = typedBlockType,
             });
@@ -315,25 +315,92 @@ test "Romeo dynamic"
     const FakeNodeOperations = struct
     {
         const h = parser.NodeOperations;
-        pub fn createSyntaxNode(_: *anyopaque, _: h.SyntaxNodeCreationParams) h.Error!parser.ast.NodeId
+        const Self = @This();
+
+        dataId: parser.ast.NodeDataId = 1,
+        nodeId: parser.ast.NodeId = 1,
+        mappings: std.ArrayListUnmanaged(struct
+            {
+                nodeId: parser.ast.NodeId,
+                dataId: parser.ast.NodeDataId,
+                value: parser.ast.NodeData,
+            }) = .{},
+        allocator: std.mem.Allocator,
+
+        pub fn createSyntaxNode(self: *Self, _: h.SyntaxNodeCreationParams) h.Error!parser.ast.NodeId
         {
+            const result = self.nodeId;
+            self.nodeId += 1;
+
+            try self.mappings.append(self.allocator, .{
+                .nodeId = result,
+                .dataId = parser.ast.invalidNodeDataId,
+                .value = undefined,
+            });
+
+            return result;
+        }
+        pub fn completeSyntaxNode(self: *Self, value: h.SyntaxNodeCompletionParams) h.Error!void
+        {
+            for (0 .., self.mappings.items) |i, *m|
+            {
+                if (m.nodeId == value.id)
+                {
+                    if (m.dataId != parser.ast.invalidNodeDataId)
+                    {
+                        std.debug.print("Value {}\n", .{ m.value });
+                    }
+                    // std.debug.print("Type {}, Value {?}\n", .{
+                    //     value.nodeType,
+                    //     if (m.dataId != parser.ast.invalidNodeDataId)
+                    //         m.value
+                    //     else
+                    //         null
+                    // });
+                    _ = self.mappings.orderedRemove(i);
+                    return;
+                }
+            }
+        }
+        pub fn linkSemanticParent(_: *Self, _: h.SyntaxNodeSemanticLinkParams) h.Error!void
+        {
+        }
+        pub fn createNodeData(self: *Self, params: h.NodeDataCreationParams) h.Error!parser.ast.NodeDataId
+        {
+            if (params.associatedNode == parser.ast.invalidNodeId)
+            {
+                return 0;
+            }
+
+            for (self.mappings.items) |*m|
+            {
+                if (m.nodeId == params.associatedNode)
+                {
+                    const result = self.dataId;
+                    m.dataId = result;
+                    m.value = params.value;
+                    self.dataId += 1;
+                    return result;
+                }
+            }
             return 0;
         }
-        pub fn completeSyntaxNode(_: *anyopaque, _: h.SyntaxNodeCompletionParams) h.Error!void
+        pub fn setNodeDataValue(self: *Self, params: h.NodeDataParams) h.Error!void
         {
-        }
-        pub fn linkSemanticParent(_: *anyopaque, _: h.SyntaxNodeSemanticLinkParams) h.Error!void
-        {
-        }
-        pub fn createNodeData(_: *anyopaque, _: h.NodeDataCreationParams) h.Error!parser.ast.NodeDataId
-        {
-            return 0;
-        }
-        pub fn setNodeDataValue(_: *anyopaque, _: h.NodeDataParams) h.Error!void
-        {
+            for (self.mappings.items) |*m|
+            {
+                if (m.dataId == params.id)
+                {
+                    m.value = params.value;
+                    return;
+                }
+            }
         }
     };
-    var fakeAst = FakeNodeOperations{};
+    var fakeAst = FakeNodeOperations
+    {
+        .allocator = allocator,
+    };
     var nodeContext = parser.NodeContext
     {
         .allocator = allocator,
@@ -342,7 +409,7 @@ test "Romeo dynamic"
 
     const settings = parser.Settings
     {
-        .logChunkStart = true,
+        .logChunkStart = false,
     };
 
     var outputBuffer = std.ArrayListUnmanaged(u8){};
@@ -375,12 +442,17 @@ test "Romeo dynamic"
         .state = &state,
     };
 
-    while (sequence.len() > 0)
+    while (true)
     {
-        _ = try deflate(&deflateContext);
+        const done = try deflate(&deflateContext);
+        if (done and sequence.len() <= 1)
+        {
+            break;
+        }
     }
 
     const testing = std.testing;
 
     try testing.expectEqualStrings(decompressedBytes, outputBuffer.items);
 }
+

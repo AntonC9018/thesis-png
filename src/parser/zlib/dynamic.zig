@@ -1,6 +1,7 @@
 const helper = @import("helper.zig");
 const huffman = helper.huffman;
 const std = helper.std;
+const symbolLimits = helper.symbolLimits;
 
 const DeflateContext = helper.DeflateContext;
 
@@ -24,10 +25,9 @@ const CodeFrequencyState = struct
 {
     action: CodeFrequencyAction = .LiteralLen,
 
+    decodedLen: u5,
     tree: huffman.Tree,
     currentBitCount: u5,
-
-    decodedLen: u5,
 
     pub fn huffmanContext(self: *CodeFrequencyState) helper.HuffmanContext
     {
@@ -37,13 +37,24 @@ const CodeFrequencyState = struct
         };
     }
 
-    pub fn repeatBitCount(self: *const CodeFrequencyState) u5
+    pub fn repeatBitCount(self: CodeFrequencyState) u5
     {
         return switch (self.decodedLen)
         {
             16 => 2,
             17 => 3,
             18 => 7,
+            else => unreachable,
+        };
+    }
+
+    pub fn baseRepeatCount(self: CodeFrequencyState) u5
+    {
+        return switch (self.decodedLen)
+        {
+            16 => 3,
+            17 => 3,
+            18 => 11,
             else => unreachable,
         };
     }
@@ -99,7 +110,9 @@ pub const CodeDecodingState = struct
 pub const DecompressionAction = enum
 {
     LiteralOrLen,
-    Distance,
+    LenExtraBits,
+    DistanceCode,
+    DistanceExtraBits,
 };
 
 const DecompressionState = struct
@@ -109,7 +122,9 @@ const DecompressionState = struct
     currentBitCount: u5,
 
     action: DecompressionAction,
-    len: u5,
+    lenCode: symbolLimits.LenCode,
+    len: symbolLimits.Len,
+    distanceCode: symbolLimits.DistanceCode,
 };
 
 pub fn decodeCodes(
@@ -176,6 +191,7 @@ pub fn decodeCodes(
                 .alloc(u8, state.getLiteralOrLenCodeCount());
 
             const copy = state.codeLenCodeLens;
+            @memset(&state.codeLenCodeLens, 0);
             for (0 .. state.getLenCodeCount()) |i|
             {
                 const orderArray = &[_]u5{
@@ -209,6 +225,7 @@ pub fn decodeCodes(
                 return false;
             }
 
+            std.debug.print("Done with literal codes\n", .{});
             state.action = .DistanceCodeLens;
             state.distanceCodeLens = try context.allocator()
                 .alloc(u8, state.getDistanceCodeCount());
@@ -224,6 +241,7 @@ pub fn decodeCodes(
 
             if (readAllArray)
             {
+                std.debug.print("Done with distance codes\n", .{});
                 try context.level().completeNode();
                 return true;
             }
@@ -265,12 +283,6 @@ fn readCodeLenEncodedFrequency(
             {
                 freqState.action = .RepeatCount;
                 freqState.decodedLen = len;
-
-                if (readCount.* == 0)
-                {
-                    return error.NothingToRepeat;
-                }
-
                 return false;
             }
             else
@@ -283,24 +295,23 @@ fn readCodeLenEncodedFrequency(
         .RepeatCount =>
         {
             const repeatBitCount = freqState.repeatBitCount();
-            const repeatCount = try helper.readNBits(context, repeatBitCount);
+            const value = try helper.readNBits(context, repeatBitCount);
 
             try context.level().completeNodeWithValue(.{
-                .Number = repeatCount,
+                .Number = value,
             });
 
+            const repeatCount = freqState.baseRepeatCount() + value;
             const maxCanReadCount = outputArray.len - readCount.*;
             if (repeatCount > maxCanReadCount)
             {
                 return error.InvalidRepeatCount;
             }
 
-            const repeatedLen = outputArray[readCount.* - 1];
-
             for (0 .. repeatCount) |i|
             {
                 const index = readCount.* + i;
-                outputArray[index] = repeatedLen;
+                outputArray[index] = 0;
             }
             readCount.* += repeatCount;
             return true;
@@ -334,6 +345,9 @@ fn fullyReadCodeLenEncodedFrequency(
             }
         }
     }
+
+    std.debug.print("Read count is now at {}\n", .{ readCount.* });
+
     return readCount.* == outputArray.len;
 }
 
@@ -362,21 +376,6 @@ pub fn initializeDecompressionState(
             .distanceTree = distanceTree,
         });
     };
-    std.debug.print("Decompression state: {}\n", .{ decompressionState });
-    const sum = sum:
-    {
-        var s: usize = 0;
-        for (decompressionState.literalOrLenTree.decodedCharactersLookup) |l|
-        {
-            s += l.len;
-        }
-        // for (decompressionState.distanceTree.decodedCharactersLookup) |l|
-        // {
-        //     s += l.len;
-        // }
-        break :sum s;
-    };
-    std.debug.print("Sum: {}\n", .{ sum });
 
     state.* = .{
         .decompression = decompressionState,
@@ -390,7 +389,7 @@ pub fn decompressSymbol(
     try context.level().push();
     defer context.level().pop();
 
-    var createNode = DecompressionNodeWriter
+    var createNode = helper.DecompressionNodeWriter
     {
         .context = context,
     };
@@ -403,7 +402,6 @@ pub fn decompressSymbol(
                 .tree = &state.literalOrLenTree,
                 .currentBitCount = &state.currentBitCount,
             });
-            std.debug.print("Decoded value: {}\n", .{ value });
 
             switch (value)
             {
@@ -420,57 +418,56 @@ pub fn decompressSymbol(
                 },
                 257 ... 285 =>
                 {
-                    const len: u5 = @intCast(value - 257);
-                    state.action = .Distance;
-                    state.len = len;
-                    try createNode.create(.Len, len);
+                    state.action = .LenExtraBits;
+                    state.lenCode = symbolLimits.LenCode.fromUnadjustedCode(@intCast(value));
+                    try createNode.create(.Len, @intFromEnum(state.lenCode));
                     return null;
                 },
                 else => unreachable,
             }
         },
-        .Distance =>
+        .LenExtraBits =>
+        {
+            const extraBitCount = state.lenCode.extraBitCount();
+            const len = switch (extraBitCount)
+            {
+                0 => 0,
+                else => |x| try helper.readNBits(context, x),
+            };
+            const computedLen = state.lenCode.base() + @as(symbolLimits.Len, @intCast(len));
+            state.action = .DistanceCode;
+            state.len = computedLen;
+
+            try createNode.create(.LenCodeExtra, len);
+            return null;
+        },
+        .DistanceCode =>
         {
             const distance = try helper.readAndDecodeCharacter(context, .{
                 .tree = &state.distanceTree,
                 .currentBitCount = &state.currentBitCount,
             });
-            state.action = .LiteralOrLen;
+            state.action = .DistanceExtraBits;
+            state.distanceCode = @enumFromInt(distance);
 
             try createNode.create(.Distance, distance);
-
+            return null;
+        },
+        .DistanceExtraBits =>
+        {
+            const distance = switch (state.distanceCode.extraBitCount())
+            {
+                0 => 0,
+                else => |x| try helper.readNBits(context, x),
+            };
+            state.action = .LiteralOrLen;
+            try createNode.create(.DistanceExtra, distance);
             return .{
                 .BackReference = .{
-                    .distance = distance,
+                    .distance = state.distanceCode.base() + @as(symbolLimits.Distance, @intCast(distance)),
                     .len = state.len,
                 },
             };
         },
     }
 }
-
-pub const DecompressionValueType = enum
-{
-    Literal,
-    Len,
-    EndBlock,
-    Distance,
-};
-
-pub const DecompressionNodeWriter = struct
-{
-    context: *DeflateContext,
-
-    pub fn create(self: @This(), t: DecompressionValueType, value: usize) !void
-    {
-        self.context.level().setNodeType(.{
-            .DynamicHuffman = .{
-                .DecompressionValue = t,
-            },
-        });
-        try self.context.level().completeNodeWithValue(.{
-            .Number = value,
-        });
-    }
-};
-

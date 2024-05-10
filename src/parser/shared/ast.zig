@@ -32,11 +32,10 @@ pub const NodeType = union(enum)
     Deflate: deflate.Action,
     DeflateCode: void,
     NoCompression: deflate.noCompression.InitStateAction,
-    FixedHuffmanDecompression: deflate.fixed.DecompressionValueType,
+    SymbolDecompression: deflate.DecompressionValueType,
     ZlibSymbol: void,
     DynamicHuffman: union(enum)
     {
-        DecompressionValue: deflate.dynamic.DecompressionValueType,
         CodeDecoding: deflate.dynamic.CodeDecodingAction,
         CodeFrequency: deflate.dynamic.CodeFrequencyAction,
         EncodedFrequency: void,

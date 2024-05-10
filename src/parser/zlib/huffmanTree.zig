@@ -119,7 +119,7 @@ pub const Tree = struct
         const prefix = self.prefixes[bitIndex];
         const lookup = self.decodedCharactersLookup[bitIndex];
 
-        if (code < prefix + lookup.len)
+        if (code >= prefix and code < prefix + lookup.len)
         {
             const index = code - prefix;
             return .{ 
@@ -144,6 +144,7 @@ pub fn createTree(
 {
     const t = try generateTreeCreationContext(bitLensBySymbol);
     const tree = try createTreeFromContext(&t, allocator);
+    std.debug.print("Tree: {}\n", .{ tree });
     return tree;
 }
 
@@ -204,8 +205,7 @@ fn generateTreeCreationContext(bitLensBySymbol: []const u5)
         const count = r.numberOfCodesByCodeLen()[bitIndex];
         r.codeStartingValuesByLen()[bitIndex] = code;
 
-        if (false)
-        {
+        if (false) {
             // I think this needs an overflow check?
             // TODO: Something is wrong with this check, I can't quite put my finger on it.
             const allowedMask = (~@as(u16, 0)) >> @intCast(16 - bitIndex - 1);
@@ -308,10 +308,6 @@ test "huffman tree correct"
 
 fn maxValue(array: anytype) @TypeOf(array[0])
 {
-    if (array.len == 0)
-    {
-        return 0;
-    }
     var result = array[0];
     for (array[1 ..]) |value|
     {
