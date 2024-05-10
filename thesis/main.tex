@@ -4,6 +4,7 @@
 % Description
 \newcommand{\authorName}{CURMANSCHII Anton}
 \newcommand{\thesisTitle}{Explorarea formatului de fișier PNG}
+\newcommand{\thesisTitleEng}{Exploration of the PNG file format}
 \newcommand{\uniGroupName}{IA1901}
 \newcommand{\thesisType}{master}
 \newcommand{\programulDeStudii}{master}
@@ -11,7 +12,7 @@
 
 % Hardcoded for now
 \newcommand{\anexeCount}{20}
-\newcommand{\conferencesList}{SESIUNEA NAŢIONALĂ CU PARTICIPARE INTERNAȚIONALĂ DE COMUNICĂRI ŞTIINŢIFICE STUDENŢEŞTI, EDIŢIA A XXVIII-A}
+\newcommand{\conferencesList}{Conferința Studențească, Editia XXVIII-a, 2024}
 
 \begin{document}
 
@@ -22,19 +23,21 @@
 
 \clearpage
 \unnumberedChapter{Lista Abrevierelor}
-\begin{acronym}
-  \acro{GUI}{Graphical User Interface}
-  \acro{PNG}{Portable Network Graphics}
-  \acro{I/O}{Input/Output}
-  \acro{MVP}{Produs Minim Viabil}
-  \acro{ICC}{International Color Consortium}
-  \acro{WSL}{Windows Subsystem for Linux}
-  \acro{CRC}{Cyclic Redundancy Check}
-  \acro{JPEG}{Joint Photographic Experts Group}
-  \acro{GIF}{Graphics Interchange Format}
-  \acro{RAII}{Resource Acquisition Is Initialization}
-  \acro{POO}{Programarea orientată pe obiect}
-  \acro{RGB}{Red Green Blue}
+\begin{acronym}[RAII]
+    \acro{GUI}{Graphical User Interface}
+    \acro{PNG}{Portable Network Graphics}
+    \acro{I/O}{Input/Output}
+    \acro{MVP}{Produs Minim Viabil}
+    \acro{ICC}{International Color Consortium}
+    \acro{WSL}{Windows Subsystem for Linux}
+    \acro{CRC}{Cyclic Redundancy Check}
+    \acro{JPEG}{Joint Photographic Experts Group}
+    \acro{GIF}{Graphics Interchange Format}
+    \acro{RAII}{Resource Acquisition Is Initialization}
+    \acro{POO}{Programarea orientată pe obiect}
+    \acro{RGB}{Red Green Blue}
+    \acro{2D}{2-dimensional}
+    \acro{3D}{3-dimensional}
 \end{acronym}
 
 
@@ -76,7 +79,51 @@ focusând anume la structura formatului.
 
 \textbf{Valoarea aplicativă.} Ca rezultat a fost implementată o aplicație care poate fi folosită pentru vizualizare a formatului \ac{PNG}.
 
-Rezultatele obținute au fost raportate la conferința \textbf{\conferencesList}.
+Rezultatele obținute au fost raportate la \textbf{\conferencesList}.
+
+\clearpage
+\unnumberedChapter{Annotation}
+
+\textbf{of the thesis \thesisType ``\thesisTitleEng'' of the student \authorName{}, group \uniGroupName, study program \programulDeStudii.}
+
+\textbf{The structure of the thesis}
+The thesis is made up of: Introduction, \total{num_chapters} chapters,
+General conclusions and recommendations, Bibliography of \bibliographyEntryCount{} titles.
+Base text takes up \usefulPageCount{} pages and has \anexeCount appendicies.
+
+\textbf{Keywords:}
+\textit{\ac{PNG}, \ac{Zlib}, \ac{DEFLATE}, file format, syntax tree, visualization application.}
+
+\textbf{Relevance.}
+
+The \ac{PNG} file format is an image format widely used on the internet,
+graphics application development, as well as in other various domains.
+Understanding of the structure of the format can be useful for extending it,
+using it in a more efficient way.
+The format's structure can also serve as a reference for designing new file formats.
+
+\textbf{Purpose and objectives of this research}
+
+The scientific work has an educational purpose
+-- it aims introduce the structure of the \ac{PNG} file format.
+The main objective of the thesis is the exploration of the file format
+through building of a graphical application designed for its visualization.
+
+The goal of the thesis is explicitly \textit{not} to show the \ac{PNG} image on to the screen,
+neither it is to generate an image encoded in the \ac{PNG} format, focusing specifically
+on the structure of the format.
+
+\textbf{The planned and obtained results} are the following:
+(1) learning and understanding of the \ac{PNG} file format and of the associated compression formats
+(2) implementation a parser in code
+(3) implementation of a graphical application on top of the parser.
+
+\textbf{Important resolved problems} are: poor understanding of the \ac{PNG} file format.
+
+\textbf{Applicative value.} 
+As a result of the work, a graphical application has been implemented which can be used for visualizing of the \ac{PNG} file format.
+
+The obtained results were reported on \textbf{\conferencesList}.
 
 % I think this one's required to be capitalized.
 \unnumberedChapter{INTRODUCERE}
@@ -156,9 +203,11 @@ Al doilea capitol, \nameref{architecture_chapter_title}, concretizează cerințe
 Al treilea capitol, \nameref{implementation_chapter_title}, urmează implementarea.
 
 
-\chapter{Capitol introducere}\label{intro_chapter_title}
+\chapter{Introducere în formatul de fișier \ac{PNG}}\label{intro_chapter_title}
 
-\section{Descrierea la nivel înalt a formatului de fișier \ac{PNG}}
+\section{Descriere la nivel înalt a formatului de fișier \ac{PNG}}
+
+\subsection{Scopul formatului}
 
 Formatul de fișier \ac{PNG} este unul din cele mai răspândite formaturi de imagine.
 Formatul acesta este folosit în numeroase domenii pe scară largă, incluzând majoritatea aplicațiilor
@@ -166,8 +215,6 @@ web, aplicații grafice care salvează sau încarcă imagini din fișiere, precu
 
 În continuare vor fi descrise principiile de bază a acestui format,
 precum și cele mai importante decizii de proiectare care au adus creatorii formatului la structura lui actuală.
-
-\subsection{Scopul formatului}
 
 Formatul \ac{PNG} este un format portabil destinat pentru reprezentarea imaginilor fără pierderi.
 
@@ -357,7 +404,8 @@ care împarte imaginea în mai multe trepte de încărcare,
 îmbunătățind experiența vizuală în timpul încărcării continue a imaginii.
 
 Ideea este că imaginea se subdivizează la mai multe pătrate de dimensiuni $8 \times 8$,
-iar întreaga imagine este transmisă în 7 pași, conform tabelului \ref{fig:pixel_order_table}:
+iar întreaga imagine este transmisă în 7 pași, conform figurii \ref{fig:pixel_order_table} unde
+fiecare celulă indică pasul la care este transmis acel pixel.
 
 \begin{figure}[!ht]
 \centering
@@ -371,7 +419,7 @@ iar întreaga imagine este transmisă în 7 pași, conform tabelului \ref{fig:pi
     5 & 6 & 5 & 6 & 5 & 6 & 5 & 6 \\
     7 & 7 & 7 & 7 & 7 & 7 & 7 & 7 \\
 \end{tabular}
-\caption{Tabelul ordonării pixelilor. Fiecare celulă indică pasul la care este transmis acel pixel.}
+\caption{Tabelul ordonării pixelilor.}
 \label{fig:pixel_order_table}
 \end{figure}
 
@@ -403,6 +451,8 @@ ceea ce se folosește pentru prezentarea imaginii dar nu este util pentru vizual
 
 
 \section{Limbajul de programare Zig}
+
+\subsection{}
 
 Limbajul de programare Zig este un limbaj de programare de nivel scăzut, aproape de C.
 Zig se conține într-un spațiu special, în acel sens că scopul lui este de
@@ -476,6 +526,8 @@ au ajutat considerabil în dezvoltare.
 
 
 \chapter{Implementarea Sistemului}\label{implementation_chapter_title}
+
+\section{Introducere în capitol}
 
 În continuare, se va prezenta implementarea unui decodor \ac{PNG} care va fi folosit pentru
 a vizualiza formatul \ac{PNG} printr-o aplicație \ac{GUI}.
@@ -624,9 +676,11 @@ Deci pentru a trece prin toți octeții unei secvențe, trebuie să:
         indicat în poziția de sfârșit.
 \end{itemize}
 
+Ideea este ilustrată pe \refFigure{sequence_example.png}.
+Zona hășurată reprezintă octeții care corespund secvenței
+
 \imageWithCaption{sequence_example.png}{
-    Ilustrarea principiului de funcționare a unei secvențe.
-    Zona hășurată reprezintă octeții care corespund secvenței}
+    Ilustrarea principiului de funcționare a unei secvențe.}
 
 Această idee este realizată conform unei interfețe de iterator care permite codului de procesare
 să treacă print-o secvență de tablouri de octeți, fără a realiza logica descrisă de fiecare dată.
@@ -1578,6 +1632,7 @@ implementarea arborilor dinamice Huffman în DEFLATE se simplifică în următor
     \item
         Fiecare slot salvează și numărul de coduri cumulativ înaintea tuturor codurilor din sloturi precedente.
         Deci, notând numărul acesta ca \( S_i \), iar numărul de noduri în fiecare slot ca \( N_i \),
+        se obține următoarea formulă recurentă:
 
         \begin{gather*}
             S_0 = 0 \\
@@ -1778,11 +1833,66 @@ Un exemplu proeminent de această idee poate fi tablourile de culori:
     \item La ultimul nivel se află nodul componentei culoarei (\texttt{R}, \texttt{G} sau \texttt{B}).
 \end{itemize}
 
+\section{Modulul de interfață grafică}
+
+\subsection{Raylib}
+
+Raylib este una din cele mai populare librării grafice.
+Este implementată în C, deci poate fi accesată prin biniding-uri C în orice limbaj de programare.
+
+Raylib conține numeroase funcții pentru orice tip de operație, printre care:
+\begin{itemize}
+    \item Funcțiile pentru lucrul cu text care permit desenarea și măsurarea textului;
+    \item Sistemul de încărcare a font-urilor în orice format;
+    \item Funcții pentru desenare a obiectelor \ac{2D}, ca cerc, dreptunghi, etc.;
+    \item Funcții de lucru la nivel scăzut care dau acces la structuri, shader-uri, etc.;
+    \item Module pentru lucru cu audio, modele \ac{3D};
+    \item Sublibrării suplimentare pentru o cameră de personaj \ac{3D}, operații matematice, interfețe grafice, etc.
+\end{itemize}
+
+Scopul principal al librării este de a prezenta o mulțime completă de funcționalități,
+rămânând în același timp o librărie simplă și intuitivă.
+
+Raylib este cross-platform rulând-se pe Windows, Mac, Linux și tocmai Android, iPhone și console.
+Este gratuit și cu sursa deschisă.
+
+Este clar, că nu este necesară o parte majoră a acestor capacități pentru a implementa sistemul în cauză,
+însă datorită simplității și modularității sale, este o soluție bună.
+
+
+\subsection{Integrarea librăriei Raylib în Zig}
+
+Zig include un instrument minunat pentru dezvoltatorii cât Zig,
+atât și ai oricării librării C. Acesta se numește \texttt{zig build}.
+
+\texttt{zig build} permite utilizatorului să specifice procesul de build al unui proiect,
+cu un sprijin minunat pentru codul Zig și C.
+Include posibilitatea de a crea librării statice și dinamice, și de a compila programul în mod cross-platform,
+de exemplu, facilitând de exemplu compilarea pentru Windows de pe Linux.
+
+Raylib folosește acest instrument pentru build-urile sale.
+Procesul lor de build este modularizat, astfel încât să fie posibil a executa funcțiile de build,
+importând fișierele respective și executând funcțiile din ele în mod normal în codul propriu de build.
+Aceasta permite realizarea build-ului librăriei Raylib ca un pas de compilare a aplicației.
+
+Există și un set de binding-uri, adică niște funcții declarate în Zig care sunt definite în C, pe partea Raylib.
+
+Funcțiile învelitoare sunt funcțiile facilitează modul de folosire a funcțiilor din librăria,
+făcând declarațiile mai idiomatice, sau schimând unele tipuri de parametri,
+de exemplu folosirea slice-urilor în loc de doi parametri separați de pointer și lungime,
+Aceste funcții tot de obicei se consideră ca binding-uri.
+
+Există așa se de binding-uri și pentru Raylib\cite{raylib_zig}.
+Acesta se integrează cu proiectul folosind sistemul \texttt{zig build}
+după ce devine posibilă importarea funcțiilor din librărie în cod.
+
+
 \chapterConclusionSection{implementation_chapter_title}
 
 
 \unnumberedChapter{Concluziile Finale și Recomandările}
 
+Rezultatele obținute au fost raportate la \textbf{\conferencesList}.
 
 \newpage
 \markpage{usefulStuffEnd}
@@ -1796,9 +1906,7 @@ Un exemplu proeminent de această idee poate fi tablourile de culori:
 % Appendices
 \appendix
 
-% Number with arabic numbers instead of Roman
-\renewcommand{\thechapter}{\arabic{chapter}}
-% Prepend Anexa to section names, center them
+\renewcommand{\thesection}{\arabic{section}}
 \titleformat{\section}[block]{\normalfont\normalsize\bfseries\filcenter}{Anexa \thesection~}{0pt}{}
 
 % Every section on new page
@@ -1825,6 +1933,7 @@ Un exemplu proeminent de această idee poate fi tablourile de culori:
 
 \section{Funcția actualizării valorii CRC}\label{appendix:crc}
 \inputminted[firstline=154, lastline=197]{zig}{../src/parser/png/common.zig}
+
 % \section{main.zig}\label{appendix:main__main}
 % \inputminted{zig}{../src/main.zig}
 

@@ -64,6 +64,9 @@
   fontsize=\footnotesize
   % Prevent it from spilling over margins for especially long lines
   ,breakanywhere=true
+  % Make it use the same margins as regular text.
+  ,xleftmargin=\leftmargin
+  ,xrightmargin=\rightmargin
 }
 
 % Chapters should count with roman numerals
@@ -83,7 +86,7 @@
 % https://mirror.marwan.ma/ctan/macros/latex/contrib/titlesec/titlesec.pdf#page=4&zoom=200,67,627
 % It gets pretty involved...
 \def\tabSize{1cm}
-\titleformat{\chapter}[block]{\normalfont\large\bfseries\filcenter}{\thechapter~}{\tabSize}{}
+\titleformat{\chapter}[block]{\normalfont\large\bfseries\filcenter}{\thechapter~}{\tabSize}{\MakeUppercase}
 \titleformat{\section}[block]{\normalfont\normalsize\bfseries\filright}{\thesection~}{\tabSize}{}
 \titleformat{\subsection}[block]{\normalfont\normalsize\bfseries\filright}{\thesubsection~}{\tabSize}{}
 
@@ -152,17 +155,26 @@
 \newcommand\chapterConclusionSection[1]{\section{Concluziile la capitol \arabic{chapter}}}
 \newcommand{\bibliographyEntryCount}{\total{citnum}}
 
+% Some math stuff? I don't even know.
 \usepackage{amsmath}
-\renewcommand{\thefigure}{\arabic{figure}}
+
+% Make figures use Fig. instead of Figura.
+% Has to be set per-language, otherwise it gets overridden.
+\addto\captionsromanian{\renewcommand{\figurename}{Fig.}}
+% Their numbering has to use the chapter number.
+\renewcommand{\thefigure}{\arabic{chapter}.\arabic{figure}}
 
 % Inserting pictures
 \usepackage{graphicx}
 
 \graphicspath{{./images/}}
 
+% Center and name image figures
 \newcommand{\imageWithCaption}[2]{%
   \begin{figure}[H]
       \includegraphics[width={\textwidth},height={\textheight},keepaspectratio]{#1}
       \caption{#2}\label{fig:#1}
       \centering
   \end{figure}}
+
+\newcommand\refFigure[1]{Fig. \ref{fig:#1}}
