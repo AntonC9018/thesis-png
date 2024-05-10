@@ -222,7 +222,7 @@ pub const NodeSpan = struct
     {
         const difference = span.start.offsetTo(span.endExclusive);
         const bitsDiff = difference.byte * @bitSizeOf(u8) + difference.bit;
-        return bitsDiff;
+        return @intCast(bitsDiff);
     }
 
     pub fn includesPosition(span: NodeSpan, pos: Position) bool
