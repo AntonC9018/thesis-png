@@ -688,8 +688,8 @@ A se vede anexa \ref{appendix:sequence_iterator}.
 
 \subsection{Operații pe secvențe}
 
-Operația de ``mișcare'' a secvenței este destul de simplă -- se suprascrie poziție de început a secvenței.
-Începutul nou poate fi derivat ori în urmă iterării prin iterator,
+Operația de ``mișcare'' a secvenței este destul de simplă -- se suprascrie poziția de început a secvenței.
+Începutul nou poate fi derivat ori în urma iterării prin iterator,
 ori calculat prin numărul de octeți care trebuie să fie omiși,
 adică poziția de început va fi mișcată înainte cu acel număr de octeți
 pentru a ajunge la poziția nouă, posibil trecând peste limitele chunk-ului de început.
@@ -697,12 +697,12 @@ pentru a ajunge la poziția nouă, posibil trecând peste limitele chunk-ului de
 Se mai permite operația de limitare a lungimii -- este creată o secvență nouă,
 calculând o poziție nouă de sfârșit, la un ofset de la poziția de început,
 dar care nu depășește poziția de sfârșit.
-Această metodă poate fi folosit pentru a împărți o secvență în două bucăți, de exemplu,
+Această metodă poate fi folosită pentru a împărți o secvență în două bucăți, de exemplu,
 secvența consumată și secvența restantă.
 
 O idee folositoare care se derivă din aceste operații este ilustrată în bucata de cod ce urmează.
-Funcția ia ca parametru un pointer la obiectul secvenței de pe stack a funcției care deține secvența.
-Modificările aplicate la acea secvența vor fi folosite pentru a avansa cititorul.
+Funcția ia ca parametru un pointer la obiectul secvenței de pe stivă a funcției care deține secvența.
+Modificările aplicate la acea secvență vor fi folosite pentru a avansa cititorul.
 
 \begin{minted}{zig}
 fn process(sequence: *Sequence)
@@ -717,7 +717,7 @@ fn process(sequence: *Sequence)
 \end{minted}
 
 Această idee este de fapt folosită pentru a implementa câmpul \ac{CRC} din \ac{PNG} și Adler32 din Zlib.
-A se vede anexa \ref{appendix:crc_sequence_defer_example}.
+A se vedea anexa \ref{appendix:crc_sequence_defer_example}.
 
 \subsection{Suprascrierea temporară a segmentelor}
 
@@ -769,15 +769,15 @@ fn process(sequence: *Sequence)
 \section{Ideea aplicației la nivel înalt}
 
 Având la bază o abordare explorativă, s-a decis programarea aplicației
-pornind de la o imagine vagă a rezultatului dorit,
+pornindu-se de la o imagine vagă a rezultatului dorit,
 însă cu o direcție clară în ceea ce privește obiectivul general.
 
 Având în vedere faptul că scopul principal al aplicației
 este de a facilita explorarea structurii fișierelor \ac{PNG},
 s-ar dori ca funcționalitatea să fie direct
 influențată și determinată de această structură.
-Designul interfeței grafice este conceput pentru a reflecta
-caracteristicile specifice ale fișierelor \ac{PNG}.
+Proiectarea interfeței grafice are ca scopul principal reflectarea
+caracteristicilor specifice ale fișierelor \ac{PNG}.
 
 Fișierele \ac{PNG} sunt compuse din secvențe denumite chunk-uri,
 fiecare având o funcție specifică.
@@ -785,7 +785,7 @@ De exemplu, chunk-ul \texttt{IHDR} conține informații vitale despre imagine,
 precum lățimea, înălțimea, numărul de biți per pixel ș.a.
 Se intenționează ca interfața aplicației să pună
 în evidență aceste chunk-uri, oferind detalii despre ele utilizatorilor
-și permițând modificarea valorilor într-un mod
+și, poate, permițând modificarea valorilor într-un mod
 care nu afectează integritatea fișierului.
 Informațiile ar fi prezentate per chunk, atunci când utilizatorul îl alege,
 iar fiecare chunk trebuie să fie evidențiat, pentru a-l putea alege și vizualiza.

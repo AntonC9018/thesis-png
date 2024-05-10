@@ -247,7 +247,111 @@ fn updateNodePathForPosition(
     }
 }
 
+const TextSizes = struct
+{
+    spacing: f32,
+    columnSpacing: f32,
+    fontSize: f32,
+    byte: raylib.Vector2,
+    byteSpacing: raylib.Vector2,
+    bytePadded: raylib.Vector2,
+
+    const Self = @This();
+
+    fn getBytePositionFromCoord(self: Self, pos: raylib.Vector2i) raylib.Vector2
+    {
+        const textPos = componentwiseMult(pos.float(), self.bytePadded);
+        return textPos;
+    }
+
+    fn getByteBox(self: Self, pos: raylib.Vector2i) raylib.Rectangle
+    {
+        const textPos = self.getBytePositionFromCoord(pos);
+        const textRect = rectFromTopLeftAndSize(textPos, self.byte);
+        const paddedRect = addPaddingToRect(textRect, .{
+            .x = self.columnSpacing / 2,
+            .y = 0,
+        });
+        return paddedRect;
+    }
+
+    fn getMultibyteBox(self: Self, rect: raylib.RectangleI) raylib.Rectangle
+    {
+        const topLeftCoord = .{
+            .x = rect.x,
+            .y = rect.y,
+        };
+        const topLeft = self.getBytePositionFromCoord(topLeftCoord);
+
+        const bottomRightCoord = .{
+            .x = rect.x + rect.width - 1,
+            .y = rect.y + rect.height - 1,
+        };
+        const bottomRightTopLeft = self.getBytePositionFromCoord(bottomRightCoord);
+
+        const bottomRightBottomRight = bottomRightTopLeft.add(self.byte);
+
+        return addPaddingToRect(raylib.Rectangle
+            {
+                .x = topLeft.x,
+                .y = topLeft.y,
+                .width = bottomRightBottomRight.x - topLeft.x,
+                .height = bottomRightBottomRight.y - topLeft.y,
+            }, .{
+                .x = self.columnSpacing / 2,
+                .y = 0,
+            });
+    }
+};
+
 const raylib = @import("raylib");
+
+const DrawMultilineTextArgs = struct
+{
+    font: raylib.Font,
+    buffer: *std.ArrayList(u8),
+    textSizes: TextSizes,
+    position: *raylib.Vector2,
+    color: raylib.Color,
+};
+
+fn drawTextMultiline(p: DrawMultilineTextArgs) !void
+{
+    if (p.buffer.items.len == 0)
+    {
+        return error.NothingToDraw;
+    }
+    try p.buffer.append(0);
+
+    var start: usize = 0;
+    var end: usize = 0;
+    while (end < p.buffer.items.len)
+    {
+        const ch = &p.buffer.items[end];
+
+        if (ch.* == '\n')
+        {
+            ch.* = 0;
+        }
+        if (ch.* == 0)
+        {
+            const slice = p.buffer.items[start .. end : 0];
+
+            raylib.DrawTextEx(
+                p.font,
+                slice,
+                p.position.*,
+                p.textSizes.fontSize,
+                p.textSizes.spacing,
+                p.color); 
+
+            p.position.y += p.textSizes.bytePadded.y;
+            end += 1;
+            start = end;
+        }
+        end += 1;
+    }
+}
 
 pub fn main() !void
 {
@@ -302,6 +406,8 @@ pub fn main() !void
             {
                 rangeIndex = newIndex;
                 clickedPosition = null;
+                displayingPosition = null;
+                currentNodePath.clearRetainingCapacity();
             }
         }
 
@@ -320,61 +426,9 @@ pub fn main() !void
             };
             const byteTextSizePadded = byteTextSize.add(byteSpacing);
             
-            break :textSizes struct
+            break :textSizes TextSizes
             {
-                spacing: f32,
-                columnSpacing: f32,
-                byte: raylib.Vector2,
-                byteSpacing: raylib.Vector2,
-                bytePadded: raylib.Vector2,
-
-                const Self = @This();
-
-                fn getBytePositionFromCoord(self: Self, pos: raylib.Vector2i) raylib.Vector2
-                {
-                    const textPos = componentwiseMult(pos.float(), self.bytePadded);
-                    return textPos;
-                }
-
-                fn getByteBox(self: Self, pos: raylib.Vector2i) raylib.Rectangle
-                {
-                    const textPos = self.getBytePositionFromCoord(pos);
-                    const textRect = rectFromTopLeftAndSize(textPos, self.byte);
-                    const paddedRect = addPaddingToRect(textRect, .{
-                        .x = self.columnSpacing / 2,
-                        .y = 0,
-                    });
-                    return paddedRect;
-                }
-
-                fn getMultibyteBox(self: Self, rect: raylib.RectangleI) raylib.Rectangle
-                {
-                    const topLeftCoord = .{
-                        .x = rect.x,
-                        .y = rect.y,
-                    };
-                    const topLeft = self.getBytePositionFromCoord(topLeftCoord);
-
-                    const bottomRightCoord = .{
-                        .x = rect.x + rect.width - 1,
-                        .y = rect.y + rect.height - 1,
-                    };
-                    const bottomRightTopLeft = self.getBytePositionFromCoord(bottomRightCoord);
-
-                    const bottomRightBottomRight = bottomRightTopLeft.add(self.byte);
-
-                    return addPaddingToRect(raylib.Rectangle
-                    {
-                        .x = topLeft.x,
-                        .y = topLeft.y,
-                        .width = bottomRightBottomRight.x - topLeft.x,
-                        .height = bottomRightBottomRight.y - topLeft.y,
-                    }, .{
-                        .x = self.columnSpacing / 2,
-                        .y = 0,
-                    });
-                }
-            }{
+                .fontSize = fontSize,
                 .byte = byteTextSize,
                 .byteSpacing = byteSpacing,
                 .bytePadded = byteTextSizePadded,
@@ -382,7 +436,6 @@ pub fn main() !void
                 .columnSpacing = columnSpacing,
             };
         };
-
 
         const allTextRect = allTextRect:
         {
@@ -395,6 +448,35 @@ pub fn main() !void
                 raylib.Vector2.zero(),
                 componentwiseMult(rangeSizeAsVec, textSizes.bytePadded));
         };
+
+        {
+            defer tempBuffer.clearRetainingCapacity();
+
+            {
+                const writer = tempBuffer.writer();
+                try writer.print("{d}/{d}", .{
+                    rangeIndex + 1,
+                    rangeSize.getRangeCount(appContext.bufferManager.totalBytes) + 1,
+                });
+                try writer.writeByte(0);
+            }
+            const str = tempBuffer.items[0 .. tempBuffer.items.len - 1 : 0];
+            const size = raylib.MeasureTextEx(
+                fontTtf,
+                str,
+                textSizes.fontSize,
+                textSizes.spacing);
+            raylib.DrawTextEx(
+                fontTtf,
+                str,
+                allTextRect.bottomCenter().add(.{
+                    .x = -size.x * 0.5,
+                    .y = 0,
+                }),
+                fontSize,
+                textSizes.spacing,
+                raylib.WHITE);
+        }
 
         const newDisplayPosition = squareSelection:
         {
@@ -439,7 +521,6 @@ pub fn main() !void
                 currentNodePath.clearRetainingCapacity();
             }
         }
-
 
         if (currentNodePath.items.len > 0) highlightOfRange:
         {
@@ -617,7 +698,6 @@ pub fn main() !void
             }
         }
 
-
         // Draw the node info.
         {
             const nodeInfoBox = box:
@@ -647,6 +727,15 @@ pub fn main() !void
                         appContext.tree.nodeDatas.get(node.data);
 
                 const writer = tempBuffer.writer();
+
+                var drawMultilineTextArgs = DrawMultilineTextArgs
+                {
+                    .font = fontTtf,
+                    .buffer = &tempBuffer,
+                    .textSizes = textSizes,
+                    .position = &currentPos,
+                    .color = raylib.BLACK,
+                };
 
                 // Print the name based on the node type
                 {
@@ -705,17 +794,18 @@ pub fn main() !void
                         },
                     }
 
-                    try writer.writeByte(0);
-                    raylib.DrawTextEx(
-                        fontTtf,
-                        tempBuffer.items[0 .. (tempBuffer.items.len - 1):0],
-                        currentPos,
-                        fontSize,
-                        textSizes.spacing,
-                        raylib.WHITE);
-
-                    const titlePadding = 10;
-                    currentPos.y += textSizes.bytePadded.y + titlePadding;
+                    raylib.DrawLineV(currentPos, currentPos.add(.{
+                        .x = nodeInfoBox.width,
+                        .y = 0,
+                    }), raylib.WHITE);
+                    
+                    drawMultilineTextArgs.color = .{
+                        .r = 20,
+                        .g = 100,
+                        .b = 20,
+                        .a = 255,
+                    };
+                    try drawTextMultiline(drawMultilineTextArgs);
                 }
 
                 const itemPadding = 20;
@@ -835,20 +925,8 @@ pub fn main() !void
 
                     if (tempBuffer.items.len > 0)
                     {
-                        try writer.writeByte(0);
-                        const textMeasure = raylib.MeasureTextEx(
-                            fontTtf,
-                            tempBuffer.items[0 .. (tempBuffer.items.len - 1):0],
-                            fontSize,
-                            textSizes.spacing);
-                        raylib.DrawTextEx(
-                            fontTtf,
-                            tempBuffer.items[0 .. (tempBuffer.items.len - 1):0],
-                            currentPos,
-                            fontSize,
-                            textSizes.spacing,
-                            raylib.BLACK);
-                        currentPos.y += textMeasure.y;
+                        drawMultilineTextArgs.color = raylib.BLACK;
+                        try drawTextMultiline(drawMultilineTextArgs);
                         currentPos.y += itemPadding;
                         break :writeData;
                     }
