@@ -216,7 +216,7 @@ se propune o abordare îmbunătățită, și se explică detaliat varianta final
 acolo unde implementarea merită atenție sau este interesantă.
 Acest capitol include și programarea interfeței grafice.
 
-\chapter{Introducerea fundalului de informații}\label{intro_chapter_title}
+\chapter{Introducerea fundalului informativ}\label{intro_chapter_title}
 
 \section{Descriere la nivel înalt a formatului de fișier \acs{PNG}}
 
@@ -358,7 +358,7 @@ sau pentru a adăuga informații suplimentare la imagine
 Din această cauză, chiar dacă toate chunk-urile auxiliare ar fi ignorate de către un decodor,
 acesta ar putea arăta imaginea.
 La chunk-uri critice prima literă din tip este majusculă,
-iar la cele auxiliare este minusculă.
+iar la cele auxiliare ea este minusculă.
 
 \begin{itemize}
   \item
@@ -366,6 +366,8 @@ iar la cele auxiliare este minusculă.
       Acesta este primul chunk din orice fișier \ac{PNG}.
       Conține informații esențiale despre imagine, cum ar fi lățimea,
       înălțimea, tipul de culoare, compresia, filtrarea și întrelățarea (interlacing).
+      Este un exemplu de un chunk critic, ce poate fi dedus uitându-se
+      la prima literă din nume și observând că este majusculă.
 
   \item
       \textbf{Paleta de culori (\texttt{PLTE})}:
