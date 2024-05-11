@@ -3,7 +3,7 @@
 
 % Description
 \newcommand{\authorName}{CURMANSCHII Anton}
-\newcommand{\thesisTitle}{Explorarea formatului de fișier PNG}
+\newcommand{\thesisTitle}{Explorarea formatului PNG}
 \newcommand{\thesisTitleEng}{Exploration of the PNG file format}
 \newcommand{\uniGroupName}{IA1901}
 \newcommand{\thesisType}{master}
@@ -59,7 +59,7 @@ Textul de bază cuprinde \usefulPageCount{} de pagini și \anexeCount{} de anexe
 în dezoltarea aplicațiilor grafice, precum și în alte diverse domenii.
 Înțelegerea structurii formatului poate fi utilă pentru a-l putea extinde, 
 a-l utiliza într-un mod mai eficient și acesta poate servi drept referință pentru 
-crearea unor formate noi.
+crearea unor formaturi noi.
 
 \textbf{Scopul și obiectivele cercetării}.
 
@@ -71,7 +71,7 @@ nici nu în generarea unei imagini în formatul PNG,
 focusând anume la structura formatului.
 
 \textbf{Rezultatele preconizate și obținute} rezumă în: 
-(1) studierea și înțelegerea formatului \ac{PNG} și a formaturilor de comprimare asociate 
+(1) studierea și înțelegerea formatului \ac{PNG} și a formaturile de comprimare asociate 
 (2) implementarea unui parser în cod
 (3) implementarea unei aplicații grafice pe baza parser-ului.
 
@@ -141,7 +141,7 @@ octeții elementului \ac{CRC}.
 Reieșind din toate acestea, formatul \ac{PNG} merită să se învețe pentru a manipula eficient fișierele de
 acest format, pentru a putea extinde formatul prin niște chunk-uri personalizate, și pentru a afla despre
 metodele de asigurare a integrității, precum și despre algoritmii de comprimare folosite ca parte din \ac{PNG}
-(Zlib). Aceste idei pot ajuta și la crearea unor formate noi de fișier, nu neapărat de imagine.
+(Zlib). Aceste idei pot ajuta și la crearea unor formaturi noi de fișier, nu neapărat de imagine.
 
 \textbf{Scopul și obiectivele.}
 
@@ -163,7 +163,7 @@ A fost folosită librăria Raylib \cite{raylib} drept librăria grafică.
 Deoarece a fost luată abordarea explorativă la dezvoltarea aplicației,
 aproape n-au fost folosite referințe externe,
 fie coduri din diferite proiecte, alte lucrări științifice, sau cărți.
-Pentru a crea aplicația ajung documentele de specificație a formaturilor necesare,
+Pentru a crea aplicația ajung documentele de specificație a formaturile necesare,
 și o modalitate de a genera sau încărca niște imagini \ac{PNG}
 pentru verificarea corectitudinii întregului program,
 însă pentru aceasta poate fi folosit tocmai Paint care este prezent pe orice sistem Windows.
@@ -198,12 +198,25 @@ Toate acestea vor avea valoare în munca profesională a sudentului în viitor.
 
 \textbf{Sumarul tezei.}
 
-Primul capitol, \nameref{intro_chapter_title}, aduce informații generale.
-Al doilea capitol, \nameref{architecture_chapter_title}, concretizează cerințele.
-Al treilea capitol, \nameref{implementation_chapter_title}, urmează implementarea.
+Primul capitol, \nameref{intro_chapter_title}, aduce informații generale despre
+formaturile \acs{PNG} și formatul de comprimare Zlib folosit în \acs{PNG}.
+Este menționat și limbajul de programare Zig și de ce acesta a fost ales
+ca limbajul principal de dezvoltare a proiectului.
 
+Al doilea capitol, \nameref{architecture_chapter_title}, schițează implementarea,
+subliniind ideile la începutul dezvoltării și explică abordările selectate.
+Este explicat procesul de gândire în ceea ce ține divizarea aplicații la module,
+și luarea deciziilor în ceea ce ține arhitectura la nivel înalt a proiectului.
+Tot aici este introdusă imaginea inițială a întregii aplicații.
 
-\chapter{Introducere în formatul de fișier \acs{PNG}}\label{intro_chapter_title}
+Al treilea capitol, \nameref{implementation_chapter_title},
+urmează implementarea iterativă a modulelor introduse,
+adică se identifică problemele abordări inițiale,
+se propune o abordare îmbunătățită, și se explică detaliat varianta finală a implementării
+acolo unde implementarea merită atenție sau este interesantă.
+Acest capitol include și programarea interfeței grafice.
+
+\chapter{Introducerea fundalului de informații}\label{intro_chapter_title}
 
 \section{Descriere la nivel înalt a formatului de fișier \acs{PNG}}
 
@@ -428,7 +441,7 @@ fiecare celulă indică pasul la care este transmis acel pixel.
 Deși formatul \ac{PNG} este versatil și oferă o calitate ridicată a imaginii, are și câteva limitări.
 Nu suportă animații native (spre deosebire de formatul \ac{GIF})
 și nu este ideal pentru fotografii datorită dimensiunii mai mari a fișierului comparativ
-cu formatele comprimate cu pierderi, cum ar fi \ac{JPEG}.
+cu formaturile comprimate cu pierderi, cum ar fi \ac{JPEG}.
 Cu toate acestea, este foarte popular pentru grafică web,
 datorită transparenței și calității imaginii.
 
@@ -449,6 +462,38 @@ Acestea n-au fost implementate în program, deoarece sunt necesare
 doar pentru a restabili valorile concrete ale pixelilor,
 ceea ce se folosește pentru prezentarea imaginii dar nu este util pentru vizualizarea formatului de fișier.
 
+\section{Formatul de comprimare Zlib}
+
+\subsection{Informații generale}
+
+Zlib este formatul de comprimare folosit în scopul unelor chunk-uri din formatul \ac{PNG}.
+De exemplu, chunk-ul \texttt{zTXt} definește câmpul \texttt{Compressed text},
+care include direct șirul compresat în formatul Zlib.
+
+Toate datele pixelilor, adică datele chunk-urilor \texttt{IDAT}, sunt comprimate folosind acest algoritm.
+
+Asemănătoare cu formatul \ac{PNG}, Zlib include un câmp folosit pentru verificarea integrității datelor.
+Algoritmul folosit pentru calcularea acestui câmp este numit Adler32.
+Cheia este că acesta este calculat pe baza datelor \textit{decomprimate},
+deci poate fi folosit pentru a verifica și integritatea datelor, și corectitudinea programului implementat.
+
+Zlib are și alte capacități ca suportul pentru dicționare, permite setarea parametrilor de comprimare, etc.
+Însă, acestea nu sunt relevante pentru interpretarea unui fișier \ac{PNG}.
+Dicționarele absolut nu sunt folosite, și chiar sunt interzise după specificație \cite{png_spec_chapter_deflate}.
+Parametrii de comprimare sunt folositori doar pentru procesul de comprimare,
+adică, în context-ul formatului \ac{PNG}, generarea unui fișier din datele pixelilor.
+Deoarece scopul aplicației este de a realiza \textit{citirea} unui fișier \ac{PNG},
+dar nu generarea unui așa fișier, acestea nu vor fi menționate în continuare.
+Câmpurile cu aceste date însă sunt citite și validate în mod normal, conform specificației.
+
+\subsection{Zlib în \acs{PNG}}
+
+Formatul \ac{PNG} folosește comprimarea datelor prin algoritmul Zlib.
+Comprimarea se folosește pentru chunk-urile \texttt{zTXt} (text comprimat),
+\texttt{iCCP} (profil \ac{ICC}), \texttt{IDAT} (datele pixelilor), precum și altele.
+
+Structura acestui format se explică în mai multe detalii în capitolul \ref{implementation_chapter_title},
+deoarece este strâns legată de implementare.
 
 \section{Limbajul de programare Zig}
 
@@ -546,13 +591,24 @@ au ajutat considerabil în dezvoltare.
 
 \chapterConclusionSection{intro_chapter_title}
 
-\chapter{Arhitectura Aplicației}\label{architecture_chapter_title}
+În acest capitol au fost introduse formatul \ac{PNG} și
+formatul de comprimare Zlib care este folosit în formatului \ac{PNG}.
+A fost descrisă structura formatului \ac{PNG}: ce sunt chunk-urile,
+de ce sunt folosite, ce tipuri există, câmpurile principale, etc.
+
+S-au mai discutat princiile de înterlănțare și comprimare.
+Cu părere de rău, acestea nu se vor include în interfață, însă sunt niște părți importante ale formatului.
+
+Fiind echipat cu aceste cunoștințe,
+devine posibilă abordarea proiectării
+și programării aplicației orientate spre lucrul cu aceste formaturi.
 
 
+\chapter{Planificarea Aplicației}\label{architecture_chapter_title}
 
 \section{Planificarea implementării}
 
-\subsection{Dezvoltarea în \ac{WSL}}
+\subsection{Dezvoltarea în \acs{WSL}}
 
 Dezvoltarea pe Linux eclipsează dezvoltarea pe Windows -- aceasta este un fapt incontestabil.
 \begin{itemize}
@@ -740,15 +796,10 @@ A fost implementat un editor hexazecimal pentru vizualizare, posibilitatea de a 
 reprezentarea informațiilor despre câmpul selectat din fișier, și drag-and-drop pentru fișiere.
 În plus, intervalul câmpului curent terminal din fișier este evidențiat în editorul grafic.
 
-
-
 \section{Zlib și DEFLATE}
 
 \subsection{Zlib în \ac{PNG}}
 
-Formatul \ac{PNG} folosește comprimarea datelor prin algoritmul Zlib.
-Comprimarea se folosește pentru chunk-urile \texttt{zTXt} (text comprimat),
-\texttt{iCCP} (profil \ac{ICC}), \texttt{IDAT} (datele pixelilor), precum și altele.
 Pentru a înțelege problema mai bine, ar fi benefic să se înțeleagă cum funcționează algoritmul Zlib.
 În plus, deoarece algorimul este parte din standardul \ac{PNG},
 și structura acestuia poate fi decodificată și analizată,
@@ -815,10 +866,9 @@ care nu dau garanții exacte față de integritate, ci doar o certitudine înalt
 Mai târziu au fost găsite datele test pentru algoritmul DEFLATE,
 mecanismul dinamic, pentru depanare\cite{deflate_tests}.
 
-\section{Planificarea interfeței grafice}
-
 
 \chapterConclusionSection{architecture_chapter_title}
+
 
 \chapter{Implementarea Sistemului}\label{implementation_chapter_title}
 
@@ -1633,28 +1683,6 @@ iar tipul de noduri nu trebuie să fie schimbat, aceasta nu este groaznic.
 
 \section{Implementarea Zlib}
 
-\subsection{Introducere}
-
-Zlib este formatul de comprimare folosit în scopul unelor chunk-uri din formatul \ac{PNG}.
-De exemplu, chunk-ul \texttt{zTXt} definește câmpul \texttt{Compressed text},
-care include direct șirul compresat în formatul Zlib.
-
-Toate datele pixelilor, adică datele chunk-urilor \texttt{IDAT}, sunt comprimate folosind acest algoritm.
-
-Asemănătoare cu formatul \ac{PNG}, Zlib include un câmp folosit pentru verificarea integrității datelor.
-Algoritmul folosit pentru calcularea acestui câmp este numit Adler32.
-Cheia este că acesta este calculat pe baza datelor \textit{decomprimate},
-deci poate fi folosit pentru a verifica și integritatea datelor, și corectitudinea programului implementat.
-
-Zlib are și alte capacități ca suportul pentru dicționare, permite setarea parametrilor de comprimare, etc.
-Însă, acestea nu sunt relevante pentru interpretarea unui fișier \ac{PNG}.
-Dicționarele absolut nu sunt folosite, și chiar sunt interzise după specificație \cite{png_spec_chapter_deflate}.
-Parametrii de comprimare sunt folositori doar pentru procesul de comprimare,
-adică, în context-ul formatului \ac{PNG}, generarea unui fișier din datele pixelilor.
-Deoarece scopul aplicației este de a realiza \textit{citirea} unui fișier \ac{PNG},
-dar nu generarea unui așa fișier, acestea nu vor fi menționate în continuare.
-Câmpurile cu aceste date însă sunt citite și validate în mod normal, conform specificației.
-
 \subsection{Subformatul \texttt{DEFLATE}}
 
 Partea esențială a formatului Zlib este subformatul integrat \texttt{DEFLATE}.
@@ -2065,13 +2093,13 @@ La nivel de sistem, aceasta este implementat folosind un eveniment care poate fi
 Raylib definește niște funcții pentru procesarea acestui eveniment,
 permitând accesul la drumurile la fișiere transmise ca o listă.
 Acestea sunt \texttt{IsFileDropped}, \texttt{LoadDroppedFiles} și \texttt{UnloadDroppedFiles}.
-A se vedea anexa\ref{appendix:drag_and_drop}.
+A se vedea anexa \ref{appendix:drag_and_drop}.
 
 \chapterConclusionSection{implementation_chapter_title}
 
-În acest capitol au fost discutate dificultățile principale legate la realizarea sistemului,
+În acest capitol au fost discutate dificultățile principale legate de realizarea sistemului,
 cum acestea s-au manifestat și cum au fost depășite.
-S-a mai discutat despre detalii de implementare concrete la mai multe module de sistem.
+S-a mai discutat detaliile de implementare concrete la mai multe module de sistem.
 
 Au fost descrise principiile de funcționare a modulului \texttt{pipelines},
 inclusiv operațiile de bază și transparența structurii acestora.
@@ -2091,6 +2119,8 @@ cu exemple concrete a elementelor din interfață.
 
 
 \unnumberedChapter{Concluziile Finale și Recomandările}
+
+După implementarea unei aplicații de așa scop scăzut și tehnic,
 
 Rezultatele obținute au fost raportate la \textbf{\conferencesList}.
 
