@@ -389,6 +389,68 @@ const UiState = struct
     }
 };
 
+// Segment HexGrid begin
+fn drawHexBytes(
+    p: struct
+    {
+        sequence: pipelines.Sequence,
+        textSizes: TextSizes,
+        font: raylib.Font,
+        rangeSize: RangeSize,
+    }) !void
+{
+    var gridCoord = raylib.Vector2i
+    {
+        .x = 0,
+        .y = 0,
+    };
+
+    var iter = p.sequence.iterate() orelse return;
+    while (true)
+    {
+        const bytes = iter.current();
+
+        for (bytes) |b|
+        {
+            const cellPos = gridCoord.float();
+            const pos = componentwiseMult(cellPos, p.textSizes.bytePadded);
+
+            const hexString = hexString: {
+                var result: [2:0]u8 = undefined;
+                result[2] = 0;
+
+                const firstHalf: u4 = @intCast(b & 0x0F);
+                const secondHalf: u4 = @intCast((b >> 4) & 0x0F);
+
+                result[0] = toHexChar(firstHalf);
+                result[1] = toHexChar(secondHalf);
+
+                break :hexString result;
+            };
+
+            raylib.DrawTextEx(
+                p.font,
+                &hexString,
+                pos,
+                p.textSizes.fontSize,
+                p.textSizes.spacing,
+                raylib.WHITE);
+
+            gridCoord.x += 1;
+            if (gridCoord.x == p.rangeSize.cols)
+            {
+                gridCoord.x = 0;
+                gridCoord.y += 1;
+            }
+        }
+
+        if (!iter.advance())
+        {
+            break;
+        }
+    }
+}
+// Segment HexGrid end
 
 pub fn main() !void
 {
@@ -425,7 +487,7 @@ pub fn main() !void
     defer ui.deinit();
 
     raylib.SetConfigFlags(.{ .FLAG_WINDOW_RESIZABLE = true });
-    raylib.InitWindow(1200, 1200, "hello world!");
+    raylib.InitWindow(1000, 600, "PNG exploration");
     raylib.SetTargetFPS(60);
 
     defer raylib.CloseWindow();
@@ -707,60 +769,12 @@ pub fn main() !void
         }
 
         // Draw the hex bytes.
-        {
-            var gridCoord = raylib.Vector2i
-            {
-                .x = 0,
-                .y = 0,
-            };
-
-            var iter = sequence.iterate().?;
-            while (true)
-            {
-                const bytes = iter.current();
-
-                for (bytes) |b|
-                {
-                    std.debug.assert(gridCoord.x < ui.rangeSize.cols and gridCoord.y < ui.rangeSize.rows);
-
-                    const cellPos = gridCoord.float();
-                    const pos = componentwiseMult(cellPos, textSizes.bytePadded);
-
-                    const hexString = hexString: {
-                        var result: [2:0]u8 = undefined;
-                        result[2] = 0;
-
-                        const firstHalf: u4 = @intCast(b & 0x0F);
-                        const secondHalf: u4 = @intCast((b >> 4) & 0x0F);
-
-                        result[0] = toHexChar(firstHalf);
-                        result[1] = toHexChar(secondHalf);
-
-                        break :hexString result;
-                    };
-                    
-                    raylib.DrawTextEx(
-                        fontTtf,
-                        &hexString,
-                        pos,
-                        fontSize,
-                        textSizes.spacing,
-                        raylib.WHITE);
-
-                    gridCoord.x += 1;
-                    if (gridCoord.x == ui.rangeSize.cols)
-                    {
-                        gridCoord.x = 0;
-                        gridCoord.y += 1;
-                    }
-                }
-
-                if (!iter.advance())
-                {
-                    break;
-                }
-            }
-        }
+        try drawHexBytes(.{
+            .font = fontTtf,
+            .rangeSize = ui.rangeSize,
+            .sequence = sequence,
+            .textSizes = textSizes,
+        });
 
         // Draw the node info.
         {

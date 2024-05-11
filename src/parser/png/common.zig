@@ -151,6 +151,7 @@ pub const Chunk = struct
     crc: CyclicRedundancyCheck,
 };
 
+// Segment CRC begin
 const crcTable = crcTable:
 {
     var result: [256]u32 = undefined;
@@ -195,6 +196,7 @@ pub fn updateCrc(state: u32, sequence: pipelines.Sequence) u32
         }
     }
 }
+// Segment CRC end
 
 pub const ChunkState = struct
 {

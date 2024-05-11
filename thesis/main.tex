@@ -123,7 +123,7 @@ on the structure of the format.
 \textbf{Applicative value.} 
 As a result of the work, a graphical application has been implemented which can be used for visualizing of the \ac{PNG} file format.
 
-The obtained results were reported on \textbf{\conferencesList}.
+The obtained results were reported on \textbf{\conferencesList}\cite{self}.
 
 % I think this one's required to be capitalized.
 \unnumberedChapter{INTRODUCERE}
@@ -679,8 +679,7 @@ Deci pentru a trece prin toți octeții unei secvențe, trebuie să:
 Ideea este ilustrată pe \refFigure{sequence_example.png}.
 Zona hășurată reprezintă octeții care corespund secvenței
 
-\imageWithCaption{sequence_example.png}{
-    Ilustrarea principiului de funcționare a unei secvențe.}
+\imageWithCaption{sequence_example.png}{Ilustrarea principiului de funcționare a unei secvențe.}
 
 Această idee este realizată conform unei interfețe de iterator care permite codului de procesare
 să treacă print-o secvență de tablouri de octeți, fără a realiza logica descrisă de fiecare dată.
@@ -1003,7 +1002,6 @@ Sunt două variante care ar putea fi folosie:
         dacă rezultatul este echivalent cu structura de date originală.
         Însă, testarea de așa fel n-ar fi de neatins --- cu o anumită masură de lucru,
         poate fi realizat un sistem care permite testele declarative folosind așa abordare.
-        Pentru prototipul dat însă s-a decis că această abordare ar fi prea consumătoare de timp.
     \item
         Se poate găsi niște date de test, și a le folosi pentru a face testarea
         la întregul sistem, cu diferite intrări, fără a înțelege toate nuanțele ale datelor de intrare.
@@ -1014,7 +1012,7 @@ Sunt două variante care ar putea fi folosie:
 \end{enumerate}
 
 De fapt există și încă o abordare -- să nu facă testarea la modulul zlib direct.
-Pentru prototip, această abordare este cea mai aplicabilă pentru a putea sălva timpul.
+La început, această abordare este cea mai aplicabilă pentru a putea să se miște cât mai repede cu versiunea inițială.
 
 Testarea indirectă oricum va fi folosită la testarea intrărilor diferite ale formatului \ac{PNG},
 deoarece acesta numaidecât folosește Zlib pentru chunk-urile \texttt{IDAT} care trebuie să fie prezente
@@ -1026,6 +1024,8 @@ indică probabilitatea înaltă că fișierul a fost decodificat corect.
 Notez că probabilitatea este înaltă, dar nu categorică din cazul că aceasta este într-un fel o funcție hash
 care nu dau garanții exacte față de integritate, ci doar o certitudine înaltă.
 
+Mai târziu au fost găsite datele test pentru algoritmul DEFLATE,
+mecanismul dinamic, pentru depanare\cite{deflate_tests}.
 
 \section{Procesarea erorilor}
 
@@ -1232,7 +1232,7 @@ adică poziția a acestuia absolută din fișier,
 precum și posibilitatea de a trata fluxul de date ca unul linear nu sunt direct compatibile
 atunci când fluxul de date poate "sări", adică atunci când pozițiile absolute
 între diferitele segmente nu sunt consecutive.
-Deoarece unul singur nod poate să se afle la marginea a două segmente (potențial mai mult ca două),
+Deoarece unul singur nod poate să se afle la marginea a două segmente, iar potențial și mai mult ca două,
 ideea că locația fiecărui nod poate fi descrisă de locația lui absolută în fișier și
 lungimea lui deja nu se va aplica.
 
@@ -1243,7 +1243,7 @@ iar parserul \ac{PNG} se consideră incorect dacă nu realizează corect
 orice distribuție a fluxului Zlib între chunk-uri.
 Adică parserul \ac{PNG} nu poate presupune de exemplu că blocul Zlib va termina de fiecare dată
 împreună cu chunk-ul \texttt{IDAT} în care se află.
-De fapt, este posibilă situația că biții ultimului octet au rămas necitite până la capăt
+De fapt, este posibilă situația ca biții ultimului octet să rămână necitite până la capăt
 în primul chunk \texttt{IDAT}, continuându-se în următorul chunk.
 
 Deoarece arborele Huffman din specificația Zlib permit lungimea maximă de 16 biți pentru coduri,
@@ -1351,6 +1351,8 @@ Mulțumită \ac{WSL}, toata dezvoltarea a fost realizată practic pe Linux,
 ce a simplificat lucrul cu librării externe, și instalarea instrumentelor adăugătoare, nemenționate explicit în text.
 
 \section{Construirea arborelui sintactic}
+
+\subsection{Avantajele unui arbore sintactic}
 
 Folosirea unui arbore sintactic este o abordare bună pentru problemele 
 unde datele sunt structurate în mod ierarhic și se cere a fi analizate sau într-un fel accesate pe urmă.
@@ -1473,7 +1475,11 @@ folosit ca niște valori opace pentru a adresa la noduri de către \texttt{Level
 
 \section{Modulul de gestionare a arborelui sintactic}
 
-În continuare, pentru a simplifica explicațiile, modulul dat va fi adresat după numele \textbf{arbore}.
+\subsection{Introducere}
+
+În continuare, pentru a simplifica explicațiile,
+modulul de gestionare a arborelui sintactic va fi adresat după numele \textbf{arbore}.
+
 În esența, arborele permite crearea nodurilor și accesarea lor în viitor.
 
 \subsection{Structura nodurilor}
@@ -1664,7 +1670,7 @@ while (lungime <= sloturi.lungime)
 error("Cod nevalid");
 \end{minted}
 
-A se vede codul întreg pe GitHub, sau în anexa \ref{appendix:main__parser_zlib_helper}.
+A se vede codul întreg pe GitHub, sau în anexa \ref{appendix:huffman_tree}.
 
 Această idee era cea mai importantă de a-și da seama în procesul de realizare a algoritmului.
 Restul algoritmului nu merită atenție, deoarece implementarea nu a avut așa insight-uri.
@@ -1674,6 +1680,8 @@ dar este și acesta codificat folosind o altă codificare Huffman,
 ca la abordarea cu codurile fixe, deci este mai ușor de implementat.
 
 \section{Abstracțiile înăuntru modulului parserului}
+
+\subsection{Parser-ul este un modul}
 
 Parserul nu este un obiect în sensul lui din \ac{POO}, ci un modul.
 El conține structuri și funcții care lucrează cu aceste structuri ca parametri.
@@ -1826,7 +1834,7 @@ fn parseState1(context: *Context)
 }
 \end{minted}
 
-Un exemplu proeminent de această idee poate fi tablourile de culori:
+Un exemplu proeminent de această idee pot fi tablourile de culori:
 \begin{itemize}
     \item La cel mai înalt nivel se află nodul întregului tablou;
     \item La primul nivel imbricat se află nodul unei culori \texttt{\ac{RGB}};
@@ -1911,7 +1919,62 @@ Sunt foarte multe lucruri interesante care ar putea fi implementate pentru vizua
         Posibilitatea de a selecta fișierul care trebuie să fie încărcat.
 \end{itemize}
 
+Pe \refFigure{interface_sketch.png} puteți vedea o schiță a interfeței grafice,
+așa cum era imaginată la etapa incipientă.
+În sfârșit, nu au fost implementate săgețile.
+
+\imageWithCaption{interface_sketch.png}{Schița interfeței grafice}
+
 Pentru a limita complexitatea proiectului, s-a hotărât să fie implementate doar capacitățile de bază.
+A fost implementat un editor hexazecimal pentru vizualizare, posibilitatea de a selecta intervalul,
+reprezentarea informațiilor despre câmpul selectat din fișier, și drag-and-drop pentru fișiere.
+În plus, intervalul câmpului curent terminal din fișier este evidențiat în editorul grafic.
+
+\subsection{Rezultatele}
+
+Ar fi dorit ca interfața implementată să fie demonstrată imediat,
+înainte de explicații ce urmează ca acestea să aibă mai mult context.
+A se vedea \refFigure{ui_example_1.png} care este o captură de ecran luată în interfața grafică implementată.
+În partea dreaptă se observă informațiile despre chunk-ul curent,
+iar în partea stângă sunt prezentați octeții din fișier
+și este evidențiat intervalul pe octeți al elementului curent.
+
+\imageWithCaption{ui_example_1.png}{Captura de ecran a interfeței}
+
+Pe \refFigure{ui_example_2.png} se poate observa ca unul din octeți este albastru.
+Culoarea albastru indică care octet a fost apăsat.
+Interfața va vizualiza datele asociate cu acel octet chiar dacă cursorul iese de pe acesta.
+
+\imageWithCaption{ui_example_2.png}{Captura de ecran a interfeței}
+
+\subsection{Editorul hexazecimal}
+
+Deoarece la orice moment de timp nu vor fi afișați toți octeții din întregul fișier,
+ci doar un interval destul de mic, afișarea textului poate fi realizată folosind o abordare primitivă,
+fără a aceasta să afecteze performanța.
+Deci, în fiecare cadru, interfața este redesenată din nou folosind operațiile primitive
+de afișare a textului, de desenare a fundalului și de desenare unelor dreptunghiuri
+pentru a realiza așa elemente ale interfeței ca boxe și separarea elementelor cu linii,
+precum și evidențierea elementelor selectate.
+
+Fără a cunoaște detaliile implementării librării Raylib nu poate fi constatat cum exact se face afișarea textului,
+dar poate fi conjecturat că la prima etapă pozițiile și ordinea afișării de fiecare element sunt culese,
+după ce sunt desenate într-o singură etapă, sau mai multe etape consecutive.
+Poate Raylib invoacă câte un \texttt{Draw Call} pentru fiecare bucată de text.
+În orice caz, independent de cât de optimizată este librăria,
+o interfață de așa mărime nu va necesita resurse semnificative de la sistem.
+
+Într-o implementare optimizată, textul ar putea fi scris într-un bufer,
+desenat într-un singur pas folosind un shader specializat,
+după ce redesenat la necesitate, fiind copiat pe o textură.
+
+A fost special selectat un font \texttt{monospace} ca fiecare caracter să ocupe o mărime de spațiu fixă,
+pentru a le putea aranja mai ușor într-un grid.
+Pentru a afișa textul octeților pe ecran, se ia secvența intervalului curent (din modulul \texttt{pipelines}),
+se iterează prin toți octeți folosind iteratorul de segmente,
+după ce fiecare octet se convertează în două cifre hexazecimale și este transmis la librăria Raylib,
+folosind funcția \texttt{DrawTextEx} care permite transmiterea font-ului.
+A se vedea anexa\ref{appendix:draw_hex_grid}.
 
 \chapterConclusionSection{implementation_chapter_title}
 
@@ -1952,19 +2015,21 @@ Rezultatele obținute au fost raportate la \textbf{\conferencesList}.
 \inputminted{zig}{../src/TaggedArrayList.zig}
 
 \section{Iteratorul segmentelor unei secvențe}\label{appendix:sequence_iterator}
-\inputminted[firstline=705, lastline=763]{zig}{../src/parser/pipelines.zig}
+\inputMintedSegment{../src/parser/pipelines.zig}{SegmentIterator}
 
 \section{Calculul CRC în parser}\label{appendix:crc_sequence_defer_example}
-% \inputminted[firstline=705, lastline=763]{zig}{../src/parser/pipelines.zig}
+\inputMintedSegment{../src/parser/png/parser.zig}{CRCCalculation}
+\inputMintedSegment{../src/parser/png/parser.zig}{CRCCheck}
 
 \section{Funcția actualizării valorii CRC}\label{appendix:crc}
-\inputminted[firstline=154, lastline=197]{zig}{../src/parser/png/common.zig}
+\inputMintedSegment{../src/parser/png/common.zig}{CRC}
 
-% \section{main.zig}\label{appendix:main__main}
-% \inputminted{zig}{../src/main.zig}
+\section{Afișarea editorului hex}\label{appendix:draw_hex_grid}
+\inputMintedSegment{../src/main.zig}{HexGrid}
 
-% \section{module.zig}\label{appendix:main__parser_module}
-% \inputminted{zig}{../src/parser/module.zig}
+\section{Codul cheie arborelui Huffman}\label{appendix:huffman_tree}
+\inputMintedSegment{../src/parser/zlib/huffmanTree.zig}{HuffmanDecode}
+\inputMintedSegment{../src/parser/zlib/huffmanTree.zig}{CreateTree}
 
 % \section{pipelines.zig}\label{appendix:main__parser_pipelines}
 % \inputminted{zig}{../src/parser/pipelines.zig}

@@ -169,12 +169,23 @@
 
 \graphicspath{{./images/}}
 
+\newlength{\imgwidth}%
+
 % Center and name image figures
 \newcommand{\imageWithCaption}[2]{%
   \begin{figure}[H]
-      \includegraphics[width={\textwidth},height={\textheight},keepaspectratio]{#1}
+      \centering
+      \settowidth{\imgwidth}{\includegraphics{#1}}%
+      \setlength{\imgwidth}{\minof{\imgwidth}{\textwidth}}%
+      \includegraphics[width=\imgwidth,keepaspectratio]{#1}
       \caption{#2}\label{fig:#1}
       \centering
   \end{figure}}
 
 \newcommand\refFigure[1]{Fig. \ref{fig:#1}}
+
+\usepackage{bashful}
+
+\newcommand\inputMintedSegment[2]{%
+    \input{|python3 findSegment.py #1 #2}%
+}

@@ -728,6 +728,7 @@ pub const Sequence = struct
     }
 };
 
+// Segment SegmentIterator begin
 pub const SegmentIterator = struct 
 {
     sequence: *const Sequence,
@@ -787,6 +788,7 @@ pub const SegmentIterator = struct
         return self.currentPosition;
     }
 };
+// Segment SegmentIterator end
 
 pub const ReaderResult = struct 
 {

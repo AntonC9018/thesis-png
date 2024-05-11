@@ -107,6 +107,7 @@ pub const Tree = struct
         return self.getNextBitCount(0).?;
     }
 
+    // Segment HuffmanDecode begin
     pub fn tryDecode(self: *const Tree, code: u16, bitCount: u5)
         !union(enum)
         {
@@ -118,8 +119,6 @@ pub const Tree = struct
 
         const prefix = self.prefixes[bitIndex];
         const lookup = self.decodedCharactersLookup[bitIndex];
-
-        // std.debug.print("Code: {}, Prefix: {}, bitCount: {}, Lookup len: {}.\n", .{ code, prefix, bitCount, lookup.len });
 
         if (code >= prefix and code < prefix + lookup.len)
         {
@@ -141,6 +140,7 @@ pub const Tree = struct
             };
         }
     }
+    // Segment HuffmanDecode end
 };
 
 pub fn createTree(
@@ -225,6 +225,7 @@ fn generateTreeCreationContext(bitLensBySymbol: []const u5)
     return r;
 }
 
+// Segment CreateTree begin
 fn createTreeFromContext(
     t: *const TreeCreationContext,
     allocator: std.mem.Allocator) !Tree
@@ -257,6 +258,7 @@ fn createTreeFromContext(
 
     return codes;
 }
+// Segment CreateTree end
 
 test "huffman tree correct"
 {
