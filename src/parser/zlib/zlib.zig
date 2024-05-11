@@ -317,9 +317,13 @@ test
     _ = helper;
 }
 
-test
+test "Romeo zlib"
 {
     try doTest("test_data/romeo.txt", "test_data/romeo.txt.zlib");
+}
+
+test "Binary zlib"
+{
     try doTest("test_data/DCI-P3-D65.icc", "test_data/DCI-P3-D65.icc.zlib");
 }
 

@@ -1,4 +1,5 @@
 import sys
+
 filePath = sys.argv[1]
 segmentName = sys.argv[2]
 segmentBeginString = "// Segment " + segmentName + " begin"
@@ -16,7 +17,11 @@ with open(filePath, "r") as fp:
             segmentEnd = index
         index += 1
 
-if segmentBegin == -1 or segmentEnd == -1:
-    exit(-1)
+try:
+    if segmentBegin == -1 or segmentEnd == -1:
+        print(f"Segment {segmentName} not found in file {filePath}")
+        exit(-1)
 
-print(f"\\inputminted[firstline={segmentBegin + 2},lastline={segmentEnd}]{{zig}}{{{filePath}}}")
+    print(f"\\inputminted[firstline={segmentBegin + 2},lastline={segmentEnd}]{{zig}}{{{filePath}}}", flush=True)
+except (BrokenPipeError):
+    sys.stderr.close()

@@ -426,6 +426,8 @@ pub fn decompressSymbol(
         },
         .LenExtraBits =>
         {
+            std.debug.print("Extra len of size {} accessed\n", .{ state.lenCode.extraBitCount() });
+
             const len = switch (state.lenCode.extraBitCount())
             {
                 0 => 0,

@@ -205,6 +205,7 @@ fn rectContainsPoint(rect: raylib.Rectangle, point: raylib.Vector2) bool
            point.y >= rect.y and point.y <= rect.y + rect.height;
 }
 
+// Segment TreeSearch begin 
 fn updateNodePathForPosition(
     tree: *const ast.AST,
     bytePosition: usize,
@@ -252,6 +253,7 @@ fn updateNodePathForPosition(
         }
     }
 }
+// Segment TreeSearch end 
 
 const TextSizes = struct
 {
@@ -422,8 +424,8 @@ fn drawHexBytes(
                 const firstHalf: u4 = @intCast(b & 0x0F);
                 const secondHalf: u4 = @intCast((b >> 4) & 0x0F);
 
-                result[0] = toHexChar(firstHalf);
-                result[1] = toHexChar(secondHalf);
+                result[0] = toHexChar(secondHalf);
+                result[1] = toHexChar(firstHalf);
 
                 break :hexString result;
             };
@@ -502,6 +504,7 @@ pub fn main() !void
         
         raylib.ClearBackground(raylib.BLACK);
 
+        // Segment DragAndDrop begin
         if (raylib.IsFileDropped()) file:
         {
             const filePaths = raylib.LoadDroppedFiles();
@@ -510,12 +513,17 @@ pub fn main() !void
             const firstFile = filePaths.paths[0];
             const firstFileSlice = std.mem.sliceTo(firstFile, 0);
 
-            const newTreeContext = parseIntoTree(allocator, firstFileSlice) catch break :file;
+            const newTreeContext = parseIntoTree(allocator, firstFileSlice) catch
+            {
+                // Might want to do better error cathing here.
+                break :file;
+            };
 
             treeContext.deinit(allocator);
             treeContext = newTreeContext;
             ui.treeReset();
         }
+        // Segment DragAndDrop end
 
         {
             const newIndex = newIndex:
@@ -948,9 +956,12 @@ pub fn main() !void
                         {
                             try writer.print("{s}", .{ t.getString() });
                         },
-                        .ColorType =>
+                        .ColorType => |ct|
                         {
-                            try writer.print("Color type", .{});
+                            try writer.print("Palette? {}\n", .{ ct.palleteUsed() });
+                            try writer.print("Color? {}\n", .{ ct.colorUsed() });
+                            try writer.print("Alpha? {}\n", .{ ct.alphaChannelUsed() });
+                            try writer.print("Value: {}\n", .{ ct.flags });
                         },
 
                         inline

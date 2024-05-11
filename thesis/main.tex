@@ -51,7 +51,7 @@ Teza constă din: Introducere, \total{num_chapters} capitole, Concluzii generale
 Textul de bază cuprinde \usefulPageCount{} de pagini și \anexeCount{} de anexe.
 
 \textbf{Cuvinte-cheie:}
-\textit{\ac{PNG}, \ac{Zlib}, \ac{DEFLATE}, format de fișier, arbore sintactic, aplicație pentru vizualizare.}
+\textit{\ac{PNG}, Zlib, DEFLATE, format de fișier, arbore sintactic, aplicație pentru vizualizare.}
 
 \textbf{Actualitatea.}
 
@@ -92,7 +92,7 @@ General conclusions and recommendations, Bibliography of \bibliographyEntryCount
 Base text takes up \usefulPageCount{} pages and has \anexeCount appendicies.
 
 \textbf{Keywords:}
-\textit{\ac{PNG}, \ac{Zlib}, \ac{DEFLATE}, file format, syntax tree, visualization application.}
+\textit{\ac{PNG}, Zlib, DEFLATE, file format, syntax tree, visualization application.}
 
 \textbf{Relevance.}
 
@@ -146,7 +146,7 @@ metodele de asigurare a integrității, precum și despre algoritmii de comprima
 \textbf{Scopul și obiectivele.}
 
 Lucrarea de față are scopul educațional -- să facă cunoștința cu structura formatului \ac{PNG} și a
-formatului integrat de comprimare \ac{Zlib}.
+formatului integrat de comprimare Zlib.
 Pentru aceasta s-a decis să creeze o interfață grafică care
 să permită explorarea vizuală a formatului \ac{PNG},
 creând un parser și oarecare alte instrumente necesare în proces.
@@ -1976,7 +1976,72 @@ după ce fiecare octet se convertează în două cifre hexazecimale și este tra
 folosind funcția \texttt{DrawTextEx} care permite transmiterea font-ului.
 A se vedea anexa\ref{appendix:draw_hex_grid}.
 
+\subsection{Afișarea informațiilor din fișier}
+
+Cum s-a menționat anterior, fișierul \ac{PNG} poate fi impărțit într-un arbore,
+unde fiecare nod corespunde la un anumit element din fișier,
+iar nodurile terminale fac corespondență directă cu unul sau mai mulți octeți din fișier.
+
+Se mai poate face și corespondența inversă -- dintr-un octet să caute nodul care face corespondența la acesta,
+în proces găsind și nodurile care se află asupra acestui nod în ierarhie.
+
+Algoritmul care a fost folosit pentru a realiza această căutare este foarte simplu.
+La prima etapă se găsește primul nod-rădăcină intervalul căruia include poziția de octet căutată.
+După ce acesta a fost găsit, căutarea se continuă înăuntru nodurilor fii ale acestui nod în mod recursiv.
+
+Merită de menționat faptul că, cu toate că mai mult ca un nod nu poate ocupa aceași poziție în fișier,
+ele pot să se regăsească la același octet.
+Aceasta este datorită faptului că nodurile din Zlib includ poziția pe bit pe lângă poziției pe octet.
+Din această cauză, dacă căutarea se face după poziția pe octet,
+poate produce mai mult ca un singur nod la același nivel.
+În realizarea în față căutarea se face în lățime, și în rezultat sunt înscrise toate nodurile.
+În realitate, potrivirea poziției pe octet la mai multe noduri are loc doar la ultimul nivel din ierarhie,
+deci așa cod nu produce rezultate încurcate (nu amestecă ierarhiile de sub mai multe noduri).
+
+A se vedea anexa \ref{appendix:node_path_search_impl} care arată codul căutării.
+
+Având drumul acesta de noduri, ușor se obține tipul fiecărui
+nod din acestă listă și datele asociate cu acesta.
+Informațiile de fapt afișate la ecran corespund direct la tipuri și date.
+Afișarea se face folosind tot același font și funcția \texttt{DrawTextEx}.
+
+Există doar un caz special pentru datele de culori care desenează un pătrat de culoare asociată.
+Însă acest cod tot este foarte simplu și nu merită explicații adânce.
+
+\subsection{Drag-and-drop}
+
+Funcția de drag-and-drop presupune că utilizatorul poate trage fișiere
+de pe manager-ul fișierelor (Explorer) înspre aplicația pentru a-i transmite fișierul.
+De fapt nu este transmis conținutul fișierului, ci drumul fișierului.
+La nivel de sistem, aceasta este implementat folosind un eveniment care poate fi procesat în aplicație.
+
+Raylib definește niște funcții pentru procesarea acestui eveniment,
+permitând accesul la drumurile la fișiere transmise ca o listă.
+Acestea sunt \texttt{IsFileDropped}, \texttt{LoadDroppedFiles} și \texttt{UnloadDroppedFiles}.
+A se vedea anexa\ref{appendix:drag_and_drop}.
+
+
 \chapterConclusionSection{implementation_chapter_title}
+
+În acest capitol au fost discutate dificultățile principale legate la realizarea sistemului,
+cum acestea s-au manifestat și cum au fost depășite.
+S-a mai discutat despre detalii de implementare concrete la mai multe module de sistem.
+
+Au fost descrise principiile de funcționare a modulului \texttt{pipelines},
+inclusiv operațiile de bază și transparența structurii acestora.
+
+S-a discutat despre modulelor de parser și de arbore
+și despre problemele legate cu structura inițială a acestui modul.
+A fost menționată și structura finală a acestora care
+a făcut posibilă depășirea neajunsurilor structurii inițiale.
+
+Au fost introduși arbori Huffman cu o descriere a folosirii acestora în formatul Zlib,
+și au fost menționate cele mai interesante idei în legătură cu imlementarea acestora.
+În special s-a evidențiat ideea repartizări consecutive a codurilor și cum această proprietate poate fi
+exploatată pentru a simplifica realizarea arborelui.
+
+S-a discutat integrarea librării grafice Raylib și cum a fost proiectată și creată interfața grafică,
+cu exemple concrete a elementelor din interfață.
 
 
 \unnumberedChapter{Concluziile Finale și Recomandările}
@@ -2031,8 +2096,11 @@ Rezultatele obținute au fost raportate la \textbf{\conferencesList}.
 \inputMintedSegment{../src/parser/zlib/huffmanTree.zig}{HuffmanDecode}
 \inputMintedSegment{../src/parser/zlib/huffmanTree.zig}{CreateTree}
 
-% \section{pipelines.zig}\label{appendix:main__parser_pipelines}
-% \inputminted{zig}{../src/parser/pipelines.zig}
+\section{Căutarea drumului de noduri în arbore}\label{appendix:node_path_search_impl}
+\inputMintedSegment{../src/main.zig}{TreeSearch}
+
+\section{Drag-and-drop}\label{appendix:drag_and_drop}
+\inputMintedSegment{../src/main.zig}{DragAndDrop}
 
 % \section{common.zig}\label{appendix:main__parser_png_common}
 % \inputminted{zig}{../src/parser/png/common.zig}

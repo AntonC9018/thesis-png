@@ -51,6 +51,17 @@ fn adjustStart(code: u16) u8
 
 fn getLengthBitCount(code: u8) u6
 {
+    // const back = @as(u9, code) + lengthCodeStart;
+    // switch (back)
+    // {
+    //     257 ... 264, 285 => return 0,
+    //     265 ... 268 => return 1,
+    //     269 ... 272 => return 2,
+    //     273 ... 276 => return 3,
+    //     277 ... 280 => return 4,
+    //     281 ... 284 => return 5,
+    //     else => unreachable,
+    // }
     return switch (code)
     {
         adjustStart(257) ... adjustStart(264), adjustStart(285) => 0,
