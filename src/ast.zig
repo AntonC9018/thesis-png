@@ -234,16 +234,9 @@ pub const AST = struct
 
     pub fn deinit(self: *AST, parserAllocator: std.mem.Allocator) void
     {
-        for (self.nodeDatas.items) |*data|
+        for (self.nodeDatas.items(.OwnedString)) |*s|
         {
-            switch (data)
-            {
-                .OwnedString => |s|
-                {
-                    s.deinit(parserAllocator);
-                },
-                else => {},
-            }
+            s.deinit(parserAllocator);
         }
     }
 };

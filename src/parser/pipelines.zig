@@ -331,6 +331,14 @@ pub const BufferManager = struct
         });
         return wholeSequence.slice(sequenceRange);
     }
+
+    pub fn deinit(self: BufferManager, allocator: std.mem.Allocator) void
+    {
+        for (self.segments.items) |s|
+        {
+            allocator.free(s.data.items.ptr[0 .. s.data.capacity]);
+        }
+    }
 };
 
 pub const ByteRange = struct

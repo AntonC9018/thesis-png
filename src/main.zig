@@ -8,15 +8,21 @@ const ast = @import("ast.zig");
 const pipelines = parser.pipelines;
 const ByteRange = pipelines.ByteRange;
 
-const AppContext = struct
+const TreeContext = struct
 {
     bufferManager: pipelines.BufferManager,
     tree: ast.AST,
+
+    pub fn deinit(self: *TreeContext, allocator: std.mem.Allocator) void
+    {
+        self.bufferManager.deinit(allocator);
+        self.tree.deinit(allocator);
+    }
 };
 
-fn parseIntoTree(allocator: std.mem.Allocator) !AppContext
+fn parseIntoTree(allocator: std.mem.Allocator, filePath: []const u8) !TreeContext
 {
-    var testContext = try debug.openTestReader(allocator);
+    var testContext = try debug.openTestReader(allocator, filePath);
     defer testContext.deinit();
 
     const reader = &testContext.reader;
@@ -353,25 +359,70 @@ fn drawTextMultiline(p: DrawMultilineTextArgs) !void
     }
 }
 
-pub fn main() !void
+const UiState = struct
 {
-    const allocator = std.heap.page_allocator;
-    var appContext = try parseIntoTree(allocator);
-
-    var rangeSize = RangeSize
-    {
+    rangeSize: RangeSize = .{
         .rows = 10,
         .cols = 10,
-    };
-    var rangeIndex: usize = 0;
-    var clickedPosition: ?raylib.Vector2i = null;
-    var displayingPosition: ?raylib.Vector2i = null;
+    },
+    rangeIndex: usize = 0,
+    clickedPosition: ?raylib.Vector2i = null,
+    displayingPosition: ?raylib.Vector2i = null,
+    currentNodePath: std.ArrayList(ast.NodeIndex),
+
+    fn deinit(self: *UiState) void
+    {
+        self.currentNodePath.deinit();
+    }
+
+    fn treeReset(self: *UiState) void
+    {
+        self.rangeIndex = 0;
+        self.rangeReset();
+    }
+
+    fn rangeReset(self: *UiState) void
+    {
+        self.clickedPosition = null;
+        self.displayingPosition = null;
+        self.currentNodePath.clearRetainingCapacity();
+    }
+};
+
+
+pub fn main() !void
+{
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    const allocator = gpa.allocator();
 
     var tempBuffer = std.ArrayList(u8).init(allocator);
-    defer tempBuffer.deinit();
+    errdefer tempBuffer.deinit();
 
-    var currentNodePath = std.ArrayList(ast.NodeIndex).init(allocator);
-    defer currentNodePath.deinit();
+    try tempBuffer.ensureTotalCapacity(std.fs.MAX_PATH_BYTES);
+
+    var treeContext = treeContext:
+    {
+        const cwd = std.fs.cwd();
+
+        defer tempBuffer.clearRetainingCapacity();
+
+        const relativePath = "test_data/test.png";
+        tempBuffer.items = try cwd.realpath(relativePath, tempBuffer.items.ptr[0 .. tempBuffer.capacity]);
+
+        const t = try parseIntoTree(allocator, tempBuffer.items);
+        break :treeContext t;
+    };
+
+    var ui = ui:
+    {
+        var currentNodePath = std.ArrayList(ast.NodeIndex).init(allocator);
+        errdefer currentNodePath.deinit();
+        break :ui UiState 
+        {
+            .currentNodePath = currentNodePath,
+        };
+    };
+    defer ui.deinit();
 
     raylib.SetConfigFlags(.{ .FLAG_WINDOW_RESIZABLE = true });
     raylib.InitWindow(1200, 1200, "hello world!");
@@ -389,30 +440,43 @@ pub fn main() !void
         
         raylib.ClearBackground(raylib.BLACK);
 
+        if (raylib.IsFileDropped()) file:
+        {
+            const filePaths = raylib.LoadDroppedFiles();
+            defer raylib.UnloadDroppedFiles(filePaths);
+
+            const firstFile = filePaths.paths[0];
+            const firstFileSlice = std.mem.sliceTo(firstFile, 0);
+
+            const newTreeContext = parseIntoTree(allocator, firstFileSlice) catch break :file;
+
+            treeContext.deinit(allocator);
+            treeContext = newTreeContext;
+            ui.treeReset();
+        }
+
         {
             const newIndex = newIndex:
             {
                 if (raylib.IsKeyPressed(.KEY_EQUAL))
                 {
-                    break :newIndex @min(rangeIndex + 1, rangeSize.getRangeCount(appContext.bufferManager.totalBytes));
+                    break :newIndex @min(ui.rangeIndex + 1, ui.rangeSize.getRangeCount(treeContext.bufferManager.totalBytes));
                 }
                 if (raylib.IsKeyPressed(.KEY_MINUS))
                 {
-                    break :newIndex rangeIndex -| 1;
+                    break :newIndex ui.rangeIndex -| 1;
                 }
-                break :newIndex rangeIndex;
+                break :newIndex ui.rangeIndex;
             };
-            if (newIndex != rangeIndex)
+            if (newIndex != ui.rangeIndex)
             {
-                rangeIndex = newIndex;
-                clickedPosition = null;
-                displayingPosition = null;
-                currentNodePath.clearRetainingCapacity();
+                ui.rangeIndex = newIndex;
+                ui.rangeReset();
             }
         }
 
-        const range = rangeSize.computeRange(rangeIndex);
-        const sequence = appContext.bufferManager.getSegmentForRange(range);
+        const range = ui.rangeSize.computeRange(ui.rangeIndex);
+        const sequence = treeContext.bufferManager.getSegmentForRange(range);
 
         const textSizes = textSizes:
         {
@@ -441,8 +505,8 @@ pub fn main() !void
         {
             const rangeSizeAsVec = (raylib.Vector2i
                 {
-                    .x = @intCast(rangeSize.cols),
-                    .y = @intCast(rangeSize.rows),
+                    .x = @intCast(ui.rangeSize.cols),
+                    .y = @intCast(ui.rangeSize.rows),
                 }).float();
             break :allTextRect rectFromTopLeftAndSize(
                 raylib.Vector2.zero(),
@@ -455,8 +519,8 @@ pub fn main() !void
             {
                 const writer = tempBuffer.writer();
                 try writer.print("{d}/{d}", .{
-                    rangeIndex + 1,
-                    rangeSize.getRangeCount(appContext.bufferManager.totalBytes) + 1,
+                    ui.rangeIndex + 1,
+                    ui.rangeSize.getRangeCount(treeContext.bufferManager.totalBytes) + 1,
                 });
                 try writer.writeByte(0);
             }
@@ -493,7 +557,7 @@ pub fn main() !void
                 .y = @intFromFloat(@floor(relativePos.y / textSizes.bytePadded.y)),
             };
 
-            const byteOffset = rangeSize.byteOffsetFromCoord(gridCoord);
+            const byteOffset = ui.rangeSize.byteOffsetFromCoord(gridCoord);
 
             if (byteOffset >= sequence.len())
             {
@@ -502,31 +566,31 @@ pub fn main() !void
 
             if (raylib.IsMouseButtonReleased(.MOUSE_BUTTON_LEFT))
             {
-                clickedPosition = gridCoord;
+                ui.clickedPosition = gridCoord;
             }
             break :squareSelection gridCoord;
-        } orelse clickedPosition;
+        } orelse ui.clickedPosition;
 
-        if (!std.meta.eql(displayingPosition, newDisplayPosition))
+        if (!std.meta.eql(ui.displayingPosition, newDisplayPosition))
         {
-            displayingPosition = newDisplayPosition;
-            if (displayingPosition) |p|
+            ui.displayingPosition = newDisplayPosition;
+            if (ui.displayingPosition) |p|
             {
-                const byteOffset = rangeSize.byteOffsetFromCoord(p);
-                const bytePosition = rangeSize.byteCount() * rangeIndex + byteOffset;
-                try updateNodePathForPosition(&appContext.tree, bytePosition, &currentNodePath);
+                const byteOffset = ui.rangeSize.byteOffsetFromCoord(p);
+                const bytePosition = ui.rangeSize.byteCount() * ui.rangeIndex + byteOffset;
+                try updateNodePathForPosition(&treeContext.tree, bytePosition, &ui.currentNodePath);
             }
             else
             {
-                currentNodePath.clearRetainingCapacity();
+                ui.currentNodePath.clearRetainingCapacity();
             }
         }
 
-        if (currentNodePath.items.len > 0) highlightOfRange:
+        if (ui.currentNodePath.items.len > 0) highlightOfRange:
         {
-            const n = currentNodePath.items;
+            const n = ui.currentNodePath.items;
             const lastNodeIndex = n[n.len - 1];
-            const lastNode = &appContext.tree.syntaxNodes.items[lastNodeIndex];
+            const lastNode = &treeContext.tree.syntaxNodes.items[lastNodeIndex];
 
             const startByteOffset = start:
             {
@@ -555,10 +619,10 @@ pub fn main() !void
             }
             const endByteOffsetInclusive = endByteOffset - 1;
 
-            const startRow = startByteOffset / rangeSize.cols;
-            const endRow = endByteOffsetInclusive / rangeSize.cols;
-            const startCol = startByteOffset % rangeSize.cols;
-            const endCol = endByteOffsetInclusive % rangeSize.cols;
+            const startRow = startByteOffset / ui.rangeSize.cols;
+            const endRow = endByteOffsetInclusive / ui.rangeSize.cols;
+            const startCol = startByteOffset % ui.rangeSize.cols;
+            const endCol = endByteOffsetInclusive % ui.rangeSize.cols;
 
             const highlightColor = .{ .r = 130, .g = 70, .b = 0, .a = 255 };
 
@@ -581,7 +645,7 @@ pub fn main() !void
                     };
                     const end = raylib.Vector2i
                     {
-                        .x = @intCast(rangeSize.cols - 1),
+                        .x = @intCast(ui.rangeSize.cols - 1),
                         .y = @intCast(startRow),
                     };
                     drawBox(textSizes, start, end);
@@ -631,12 +695,12 @@ pub fn main() !void
             }
         }
 
-        if (displayingPosition) |gridCoord|
+        if (ui.displayingPosition) |gridCoord|
         {
             const paddedRect = textSizes.getByteBox(gridCoord);
             raylib.DrawRectangleRec(paddedRect, raylib.GRAY);
         }
-        if (clickedPosition) |clickedPosition_|
+        if (ui.clickedPosition) |clickedPosition_|
         {
             const paddedRect = textSizes.getByteBox(clickedPosition_);
             raylib.DrawRectangleRec(paddedRect, raylib.BLUE);
@@ -657,7 +721,7 @@ pub fn main() !void
 
                 for (bytes) |b|
                 {
-                    std.debug.assert(gridCoord.x < rangeSize.cols and gridCoord.y < rangeSize.rows);
+                    std.debug.assert(gridCoord.x < ui.rangeSize.cols and gridCoord.y < ui.rangeSize.rows);
 
                     const cellPos = gridCoord.float();
                     const pos = componentwiseMult(cellPos, textSizes.bytePadded);
@@ -684,7 +748,7 @@ pub fn main() !void
                         raylib.WHITE);
 
                     gridCoord.x += 1;
-                    if (gridCoord.x == rangeSize.cols)
+                    if (gridCoord.x == ui.rangeSize.cols)
                     {
                         gridCoord.x = 0;
                         gridCoord.y += 1;
@@ -718,13 +782,13 @@ pub fn main() !void
 
             var currentPos = nodeInfoBox.topLeft();
 
-            for (0 .., currentNodePath.items) |nodeIndexIndex, nodeIndex|
+            for (0 .., ui.currentNodePath.items) |nodeIndexIndex, nodeIndex|
             {
-                const node = &appContext.tree.syntaxNodes.items[nodeIndex];
+                const node = &treeContext.tree.syntaxNodes.items[nodeIndex];
                 const data: ?ast.NodeData = if (ast.isDataIdInvalid(node.data))
                         null
                     else
-                        appContext.tree.nodeDatas.get(node.data);
+                        treeContext.tree.nodeDatas.get(node.data);
 
                 const writer = tempBuffer.writer();
 
@@ -950,8 +1014,8 @@ pub fn main() !void
                             {
                                 std.debug.assert(nodeIndexIndex != 0);
                                 std.debug.assert(node.nodeType == .RGBComponent);
-                                const parentNodeIndex = currentNodePath.items[nodeIndexIndex - 1];
-                                const parentNode = &appContext.tree.syntaxNodes.items[parentNodeIndex];
+                                const parentNodeIndex = ui.currentNodePath.items[nodeIndexIndex - 1];
+                                const parentNode = &treeContext.tree.syntaxNodes.items[parentNodeIndex];
                                 const indexOfSelfInParent = i:
                                 {
                                     for (parentNode.syntaxChildren.array.items) |childIndex|

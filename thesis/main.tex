@@ -1882,10 +1882,36 @@ făcând declarațiile mai idiomatice, sau schimând unele tipuri de parametri,
 de exemplu folosirea slice-urilor în loc de doi parametri separați de pointer și lungime,
 Aceste funcții tot de obicei se consideră ca binding-uri.
 
-Există așa se de binding-uri și pentru Raylib\cite{raylib_zig}.
-Acesta se integrează cu proiectul folosind sistemul \texttt{zig build}
+Există așa binding-uri și pentru Raylib\cite{raylib_zig}.
+Acestea se integrează cu proiectul folosind sistemul \texttt{zig build}
 după ce devine posibilă importarea funcțiilor din librărie în cod.
 
+\subsection{Imaginea modulului grafic}
+
+Sunt foarte multe lucruri interesante care ar putea fi implementate pentru vizualizare, printre care:
+\begin{itemize}
+    \item
+        Un editor hexazecimal care afișează octeții cruzi din fișierul \ac{PNG}. 
+    \item
+        Posibilitatea de a transforma editorul hexazecimal într-un editor binar.
+        Acesta ar putea fi util pentru a putea vedea mai bine limitele câmpurilor din
+        subformatul Zlib care pot apărea la poziții neîntregi de octeți.
+    \item
+        Posibilitatea de a face modificări la fișier inițial folosind editorul,
+        și ca arborele de fișier să fie actualizat în urma schimbărilor.
+        Implementarea aceastei capacități ar fi mai ușoară de făcut dacă s-ar fi realizată
+        o abstrație pentru mașina de stări, explicată în unul din paragrafe.
+    \item
+        Selectarea intervalului curent vizualizat.
+    \item
+        Afișarea imaginii încărcate.
+    \item
+        Afișarea nodurilor intermediare și informațiilor despre ele în adâncime.
+    \item
+        Posibilitatea de a selecta fișierul care trebuie să fie încărcat.
+\end{itemize}
+
+Pentru a limita complexitatea proiectului, s-a hotărât să fie implementate doar capacitățile de bază.
 
 \chapterConclusionSection{implementation_chapter_title}
 

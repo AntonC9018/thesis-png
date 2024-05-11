@@ -4,8 +4,8 @@ const Error = std.mem.Allocator.Error;
 
 pub fn TaggedArrayListUnmanaged(TaggedUnion: type) type
 {
-    const Tag = std.meta.Tag(TaggedUnion);
-    const Index = std.meta.Int(.unsigned, @bitSizeOf(usize) - @bitSizeOf(Tag));
+    const Tag_ = std.meta.Tag(TaggedUnion);
+    const Index = std.meta.Int(.unsigned, @bitSizeOf(usize) - @bitSizeOf(Tag_));
     const Arrays = Arrays:
     {
         const unionFields = std.meta.fields(TaggedUnion);
@@ -38,8 +38,10 @@ pub fn TaggedArrayListUnmanaged(TaggedUnion: type) type
     };
     return struct
     {
+
         arrays: Arrays = .{},
 
+        pub const Tag = std.meta.Tag(TaggedUnion);
         pub const Id = packed struct
         {
             tag: Tag,
@@ -56,6 +58,11 @@ pub fn TaggedArrayListUnmanaged(TaggedUnion: type) type
         fn ArrayTypeByTag(comptime tag: Tag) type
         {
             return std.meta.fields(Arrays)[@intFromEnum(tag)].type;
+        }
+
+        fn ItemTypeByTag(comptime tag: Tag) type
+        {
+            return std.meta.fields(TaggedUnion)[@intFromEnum(tag)].type;
         }
 
         fn getArray(self: *Self, comptime tag: Tag) *ArrayTypeByTag(tag)
@@ -106,6 +113,12 @@ pub fn TaggedArrayListUnmanaged(TaggedUnion: type) type
                 }
             }
         }
+
+        pub fn items(self: *Self, comptime tag: Tag) []ItemTypeByTag(tag)
+        {
+            const array = getArray(self, tag);
+            return array.items;
+        }
     };
 }
 
@@ -119,6 +132,11 @@ pub fn TaggedArrayList(TaggedUnion: type) type
 
         pub const Id = Managed.Id;
         const Self = @This();
+
+        pub fn items(self: *Self, comptime tag: Managed.Tag) []Managed.ItemTypeByTag(tag)
+        {
+            return self.managed.items(tag);
+        }
 
         pub fn append(self: *Self, item: TaggedUnion) Error!Id
         {
