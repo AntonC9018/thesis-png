@@ -203,9 +203,9 @@ Al doilea capitol, \nameref{architecture_chapter_title}, concretizează cerințe
 Al treilea capitol, \nameref{implementation_chapter_title}, urmează implementarea.
 
 
-\chapter{Introducere în formatul de fișier \ac{PNG}}\label{intro_chapter_title}
+\chapter{Introducere în formatul de fișier \acs{PNG}}\label{intro_chapter_title}
 
-\section{Descriere la nivel înalt a formatului de fișier \ac{PNG}}
+\section{Descriere la nivel înalt a formatului de fișier \acs{PNG}}
 
 \subsection{Scopul formatului}
 
@@ -379,7 +379,7 @@ iar la cele auxiliare este minusculă.
       Acest chunk marchează sfârșitul fișierului \ac{PNG} și nu conține date.
 \end{itemize}
 
-\subsection{Structura chunk-ului}
+\subsection{Structura unui chunk}
 
 Chunk-ul este alcătuit din 4 câmpuri:
 \begin{itemize}
@@ -452,7 +452,7 @@ ceea ce se folosește pentru prezentarea imaginii dar nu este util pentru vizual
 
 \section{Limbajul de programare Zig}
 
-\subsection{}
+\subsection{Descriere generală}
 
 Limbajul de programare Zig este un limbaj de programare de nivel scăzut, aproape de C.
 Zig se conține într-un spațiu special, în acel sens că scopul lui este de
@@ -460,29 +460,43 @@ a îmbunătăți securitatea programelor eliminând neajunsurile limbajului C
 și adăugând diverse tipuri de verificări stricte la compilare,
 dar fără a deveni un limbaj de nivel înalt.
 
-De exemplu, Zig provizionează programatorul la nivel de limbaj cu așa funcționalități ca 
-uniuni etichetate, uniuni neetichetate verificate în modul de compilare debug,
+Zig provizionează programatorul la nivel de limbaj cu așa funcționalități ca 
+uniuni etichetate, uniuni neetichetate verificate în modul de compilare pentru depanare,
 slice-uri, tablouri de mărime fixă ca valori (la fel ca \texttt{std::array} din C++),
 nulabilitatea foarte strictă, inclusiv la pointeri, modalități convenabile de procesare a erorilor,
 tipuri întregi de orice mărime fixă și foarte multe alte.
-
 Însă, în același timp, nu se provizionează o abstracție pentru interfețe sau clase virtuale,
 moștenirea tipurilor, capacitățile programării funcționale ca expresii lambda,
 capturarea stivei implicită.
-Nu există constructori și destructori la structuri, deci nu există conceptul de \ac{RAII}.
-\ac{RAII} sau în alte cuvinte conceptul de proprietare este modul principal
-prin care limbajele ca C++ și Rust se străduiesc să rezolve problema siguranței memoriei.
-Zig rezolvă această problemă folosind verificări meticuloase la compilare și în timpul rulării,
-dacă este compilat în mod debug.
 
-Încă o idee cheie în Zig este ca toate alocările a memoriei să fie vizibile la utilizator.
-Pentru a aloca memoria, utilizatorul trebuie să transmite funcției care solicită alocarea memoriei
+Zig încă este nestabil și este tânăr, fiind în procesul de continuă dezvolare și optimizare.
+Însă, aceasta nu-l impiedică să fie un limbaj de programare bun.
+
+\subsection{Siguranța memoriei}
+
+Deoarece nu există constructori și destructori la structuri,
+nici nu există conceptul de \ac{RAII}.
+\ac{RAII} sau, în alte cuvinte, conceptul de proprietar, este modul principal
+prin care limbajele ca C++ și Rust se străduiesc să rezolve problema siguranței memoriei.
+Zig rezolvă această problemă și multe alte folosind verificări meticuloase
+la compilare și în timpul rulării, dacă este compilat în mod de depanare.
+
+Însă, Zig apriori nu garantează suguranța memoriei.
+El dă libertatea programatorului să alege cum și când să șteargă memoria alocată,
+pentru a rămâne un limbaj de programare de sistem.
+Cu toate acestea, Zig introduce mai multe utilități și capacități care pot ajuta cu aceasta.
+
+O idee cheie în Zig este ca toate alocările memoriei să fie vizibile la utilizator.
+Pentru a aloca memoria, utilizatorul trebuie să-i transmite funcției care solicită alocarea memoriei
 un obiect de alocator în mod explicit (ca parametru).
 Acest obiect poate fi înlocuit cu o implementare personalizată
 pentru a monitoriza alocările, de exemplu, în mod trivial.
 Pur și simplu se transmite un obiect de alocator diferit.
 
-Zig este mult mai strict, și de aceea mai sigur în ceea ce ține de numere întregi.
+
+\subsection{Siguranță derivată din explicitate}
+
+Zig este mult mai strict, și de aceea mai sigur în ceea ce ține, de exemplu, de numere întregi.
 Dacă, de exemplu, codul C este compilat cu comanda de compilare implicită,
 adică fără flaguri \texttt{-Wconversion -Werror}, situațiile unde se pierd informații,
 ca conversiunea de la tipuri întregi cu semn la tipuri fără semn, sau conversiuni întregilor
@@ -490,24 +504,36 @@ de la 64 de biți la 32 de biți, sunt acceptate de către compilator fără nic
 iar cazurile unde așa conversiuni de fapt se întâmplă în timpul rulării
 sunt specificate ca ``undefined behavior'' în C!
 Deci ele nici nu sunt detectate în timpul rulării și produc rezultate necunoscute.
+
 În Zig, compilatorul înserează verificări în timpul rulării pentru așa cazuri.
 Dacă oarecare pierdere de informație neașteptată are loc,
 programul va da eroarea (ar ``panica'') cu stack trace-ul execuției.
 În plus, fiecare loc unde pierderea de informație este posibilă trebuie numaidecât
-să fie notată explicit în cod, altfel compilatorul nu îl acceptă.
+să fie notată explicit în cod, altfel compilatorul nu-l va accepta.
 
-Este clar de ce C nu poate implementa așa ceva --
+Un crash este mai bun decât scrierea sau citirea în sau din memorie invalidă,
+iar accesarea memoriei invalide este mai bună decât niște rezultate neașteptate
+în urma corupției memoriei.
+Zig se străduiește să detecteze erorile la acea primă etapă.
+
+\subsection{Perfecționarea continuă}
+
+Este clar de ce C nu poate implementa așa verificări de control --
 C are o specificație fixă cărei acesta trebuie să conforme.
-C are probleme care nu pot fi rezolvate din cauza că C nu se mai poate schimba semnificativ.
+C are probleme care nu pot fi rezolvate din cauza că C nu se mai poate schimba semnificativ,
+iar adăugarea de așa verificări în tipul rulării numaidecât implică
+o schimbare semnificativă a limbajului.
 
-Abordarea limbajului Zig este că el își permite schimbarea,
-în orice mod, deoarece nu are versiunea 1.0.
+Abordarea limbajului Zig este că își permite schimbarea,
+în orice mod, deoarece nu are versiunea 1.0, deci oficial se declară pe sine ca nestabil.
 Deci dacă o persoană decide să programeze în Zig,
 trebuie să fie gata să accepte schimbări dramatice ale limbajului.
 Aceasta se face pentru a putea repara problemele fundamentale
 ale limbajului dacă așa probleme sunt observate în viitor.
 
 Zig are mai multe capacități minunate, însă nu va ajunge spațiu pentru a le enumera.
+
+\subsection{Concluzii despre Zig}
 
 Luând în considerare toate aceastea, s-a decis că limbajul Zig ar fi ideal pentru astfel de aplicație.
 Partea majoră a aplicației lucrează la nivel foarte scăzut,
@@ -522,8 +548,277 @@ au ajutat considerabil în dezvoltare.
 
 \chapter{Arhitectura Aplicației}\label{architecture_chapter_title}
 
-\chapterConclusionSection{architecture_chapter_title}
 
+
+\section{Planificarea implementării}
+
+\subsection{Dezvoltarea în \ac{WSL}}
+
+Dezvoltarea pe Linux eclipsează dezvoltarea pe Windows -- aceasta este un fapt incontestabil.
+\begin{itemize}
+    \item 
+        Windows nu are un manager de pachete integrat în sistem.
+        Cu toate că pe versiuni noi există aplicația WinGet, 
+        aceasta nu este atât de stabilă și dezvoltată ca apt-get de pe Ubuntu.
+        Există și Chocolatey, însă acesta nu permite instalarea pachetelor de ultimă versiune,
+        dacă această versiune nu este în lista lor a ``pachetelor de încredere'',
+        și nu include toate capacitățile în versiunea gratuită.
+        (Aceste afirmații sunt fără referințe bibliografice deoarece 
+        au fost aflate în trecut și sursele care le confirmă au fost pierdute.)
+
+    \item
+        Este practic imposibil să facă un build la orice aplicație în mod fiabil.
+        Windows este foarte sensibil la configurări globale ale sistemului,
+        mereu lipsește careva pachete instalate, sau tocmai nu suportă unele pachete, etc.
+        Compilarea aplicațiilor pe Windows mereu implică ``probleme pe cap''.
+        Pe de altă parte, pe Linux aceasta este trivial.
+        După instalarea pachetelor necesare, build-urile lucrează ideal în aproape 100\% din cazuri.
+
+    \item
+        Unele aplicații nu sunt pe Windows.
+        Ca de exemplu \texttt{Valgrind} și \texttt{MSan}.
+
+    \item
+        Unele aplicații așteaptă sistemul de tip Unix.
+        De exemplu, abordarea răspândită pentru dezvoltarea plugin-urilor
+        pentru Neovim este să se presupună că sistemul este Unix,
+        deoarece dezvoltatorul oricum trebuie să folosescă Unix pentru a fi productiv.
+\end{itemize}
+
+Din fericire, Windows a introdus capacitatea minunată \ac{WSL}.
+Fără a intra în mecanisme funcționării acesteia, deoarece aceasta nu este în scopul lucrării,
+pe scurt \ac{WSL} poate fi explicat ca un sistem de Linux integrat în Windows, care poate citi fișierele din Windows.
+
+Destul de recent a fost introdusă și capacitatea de a rula aplicații grafice prin \ac{WSL}.
+Ferestrele create în așa mod pot fi manipulate ca orice altă fereastră pe Windows.
+
+Mulțumită \ac{WSL}, toata dezvoltarea a fost realizată practic pe Linux, 
+ce a simplificat lucrul cu librării externe, și instalarea instrumentelor adăugătoare, nemenționate explicit în text.
+
+\subsection{Ideea aplicației}
+
+Având la bază o abordare explorativă, s-a decis programarea aplicației
+pornindu-se de la o imagine vagă a rezultatului dorit,
+însă cu o direcție clară în ceea ce privește obiectivul general.
+
+Având în vedere faptul că scopul principal al aplicației
+este de a facilita explorarea structurii fișierelor \ac{PNG},
+s-ar dori ca funcționalitatea să fie direct
+influențată și determinată de această structură.
+Proiectarea interfeței grafice are ca scopul principal reflectarea
+caracteristicilor specifice ale fișierelor \ac{PNG}.
+
+Fișierele \ac{PNG} sunt compuse din secvențe denumite chunk-uri,
+fiecare având o funcție specifică.
+De exemplu, chunk-ul \texttt{IHDR} conține informații vitale despre imagine,
+precum lățimea, înălțimea, numărul de biți per pixel ș.a.
+Se intenționează ca interfața aplicației să pună
+în evidență aceste chunk-uri, oferind detalii despre ele utilizatorilor
+și, poate, permițând modificarea valorilor într-un mod
+care nu afectează integritatea fișierului.
+Informațiile ar fi prezentate per chunk, atunci când utilizatorul îl alege,
+iar fiecare chunk trebuie să fie evidențiat, pentru a-l putea alege și vizualiza.
+
+Pentru a sublinia aspectul de explorare a \textit{formatului} \ac{PNG},
+și nu doar manipularea imaginilor în acest format,
+se va include în aplicație un editor hexazecimal.
+Acesta va prezenta valorile fiecărui octet și
+va oferi reprezentări vizuale pentru a facilita distingerea diferitelor chunk-uri.
+
+La selectarea unui chunk, vor fi afișate informații detaliate despre acesta,
+incluzând numele, descrierea și lungimea.
+Este crucial ca fiecare chunk să fie prezentat cu o structură specifică,
+pentru a oferi o înțelegere completă a compoziției și funcționalității fișierelor \ac{PNG}.
+
+\subsection{Imaginea inițială a implementării}
+
+În dezvoltarea software, este adesea practic să se abordeze problemele pe măsură ce apar.
+Însă procesul de gândire și modul în care se ajunge la soluții
+pot adăuga valoare dacă sunt împărtășite.
+Deși nu există garanția că ideile înregistrate vor duce
+la o soluție optimă sau chiar una funcțională,
+și anumite probleme de implementare sunt ignorate la această etapă inițială,
+această abordare reflectă natura evolutivă a dezvoltării software.
+
+Excesul de planificare și gândire înainte de începerea scrierii codului
+poate adesea conduce la un design incorect sau inferior.
+Acest lucru se datorează faptului că în timpul programării pot apărea probleme neanticipate,
+din cauza lipsei unei viziuni complete asupra întregului sistem.
+Din acest motiv, planificarea detaliată a întregului sistem înainte de începerea dezvoltării
+nu este întotdeauna cea mai înțeleaptă abordare.
+Cu toate acestea, planificarea la nivel înalt a structurii aplicației,
+ținând cont de cerințe și pe baza experienței,
+este utilă pentru a descompune problema în subprobleme gestionabile
+și pentru a începe implementarea unei soluții.
+
+Pentru a reflecta această viziune, s-a stabilit ca aplicația
+să fie împărțită în mai multe module esențiale:
+\begin{itemize}
+  \item 
+  \textbf{Modulul de acces la fișiere după poziții absolute},
+  care va gestiona cache-ul segmentelor vizualizate în prezent,
+  ștergerea segmentelor nedorite din memorie și citirea datelor din fișier la necesitate.
+  Acest modul este o abstracție cheie pentru a simplifica interacțiunea cu fișierele \ac{PNG}.
+
+  \item
+  \textbf{Arborele sintactic al fișierului \ac{PNG}},
+  care ar trebui să păstreze în memorie doar informațiile despre
+  chunk-urile vizualizate la un moment dat.
+  Acesta ar permite accesul la informații structurate despre fișier
+  și ar fi interfațat cu modulul de interacțiune cu utilizatorul
+  pentru a indica ce segmente din fișier sunt vizualizate.
+
+  \item
+  \textbf{Parser-ul}, responsabil pentru transformarea datelor
+  din fișier într-un arbore sintactic la cerere.
+  Acest modul poate consta dintr-un set de funcții specifice pentru această transformare.
+
+  \item
+  \textbf{Modulul de interfață cu utilizatorul},
+  care va folosi arborele sintactic al fișierului pentru
+  a prezenta utilizatorului informații într-o formă atractivă și interactivă.
+  Modulul va avea control asupra segmentelor din fișier care sunt vizualizate,
+  permitând utilizatorului să actualizeze aceste segmente
+  în funcție de chunk-urile afișate în interfață.
+\end{itemize}
+
+Așa cum s-a discutat, acestă imagine inițială este un punct de plecare,
+iar implicațiile utilizării acestuia au fost analizate pe parcursul dezvoltării.
+
+\subsection{Avantajele unui arbore sintactic}
+
+Folosirea unui arbore sintactic este o abordare bună pentru problemele 
+unde datele sunt structurate în mod ierarhic și se cere a fi analizate sau într-un fel accesate pe urmă.
+Proprietatea cheie a acestei abordări este faptul că arborele poate fi \textit{abstract},
+ceea ce înseamnă că acesta este o reprezentare la un nivel mai înalt a informațiilor despre datele
+din care a fost construit.
+Din această proprietate origină avantajul principal al acestei abordări --
+construirea arborelui analizând datele neprocesate și folosirea arborelui
+pentru analiză pot fi implementate separat, comunicând prin acest arbore.
+Aceasta simplifică realizarea sistemului, impărțindu-l la două module majore cu responsabilitățile respective,
+care pot fi implementate în izolare, conform interfeței arborelui.
+
+Folosirea unui arbore este cea mai evidentă abordare pentru sistemul în cauză.
+Această abordare divizează sistemul la bucata care construiește arborele
+(partea de citire a fișierului, parser-ul, și codul care crează și gestionează alocarea nodurilor),
+și bucata care analizează arborele derivat (interfața grafică în cazul dat).
+Aceste bucăți pot fi realizate separat, ceea ce simplifică procesul de dezvoltare.
+
+\subsection{Imaginea modulului grafic}
+
+Sunt foarte multe lucruri interesante care ar putea fi implementate pentru vizualizare, printre care:
+\begin{itemize}
+    \item
+        Un editor hexazecimal care afișează octeții cruzi din fișierul \ac{PNG}. 
+    \item
+        Posibilitatea de a transforma editorul hexazecimal într-un editor binar.
+        Acesta ar putea fi util pentru a putea vedea mai bine limitele câmpurilor din
+        subformatul Zlib care pot apărea la poziții neîntregi de octeți.
+    \item
+        Posibilitatea de a face modificări la fișier inițial folosind editorul,
+        și ca arborele de fișier să fie actualizat în urma schimbărilor.
+        Implementarea aceastei capacități ar fi mai ușoară de făcut dacă s-ar fi realizată
+        o abstrație pentru mașina de stări, explicată în unul din paragrafe.
+    \item
+        Selectarea intervalului curent vizualizat.
+    \item
+        Afișarea imaginii încărcate.
+    \item
+        Afișarea nodurilor intermediare și informațiilor despre ele în adâncime.
+    \item
+        Posibilitatea de a selecta fișierul care trebuie să fie încărcat.
+\end{itemize}
+
+Pe \refFigure{interface_sketch.png} puteți vedea o schiță a interfeței grafice,
+așa cum era imaginată la etapa incipientă.
+În sfârșit, nu au fost implementate săgețile.
+
+\imageWithCaption{interface_sketch.png}{Schița interfeței grafice}
+
+Pentru a limita complexitatea proiectului, s-a hotărât să fie implementate doar capacitățile de bază.
+A fost implementat un editor hexazecimal pentru vizualizare, posibilitatea de a selecta intervalul,
+reprezentarea informațiilor despre câmpul selectat din fișier, și drag-and-drop pentru fișiere.
+În plus, intervalul câmpului curent terminal din fișier este evidențiat în editorul grafic.
+
+
+
+\section{Zlib și DEFLATE}
+
+\subsection{Zlib în \ac{PNG}}
+
+Formatul \ac{PNG} folosește comprimarea datelor prin algoritmul Zlib.
+Comprimarea se folosește pentru chunk-urile \texttt{zTXt} (text comprimat),
+\texttt{iCCP} (profil \ac{ICC}), \texttt{IDAT} (datele pixelilor), precum și altele.
+Pentru a înțelege problema mai bine, ar fi benefic să se înțeleagă cum funcționează algoritmul Zlib.
+În plus, deoarece algorimul este parte din standardul \ac{PNG},
+și structura acestuia poate fi decodificată și analizată,
+ar fi benefic să se realizeze un fel de parser special pentru Zlib pentru a putea vizualiza nodurile Zlib
+în mod bogat în interfață.
+Din această cauză, s-a decis să se realizeze implementarea unui decoder Zlib de la zero.
+
+Structura parserului menționată până acum poate fi aplicată și pentru formatul Zlib.
+Singura diferență este că formatul Zlib este bazat pe biți, dar nu pe octeți.
+Însă deoarece poziția pe biți absolut nu ține de gestionarea buferilor,
+componenta \texttt{pipelines} care realizează fluxul de date nu va trebui să fie modificată.
+Starea parserului Zlib poate să țină cont de poziția pe biți ca o variabilă privată, deoarece
+acest concept nu se revarsă la procesarea \ac{PNG}.
+Însă, poziția pe biți ar trebuie să fie utilă pentru vizualizare a formatului.
+
+În structura finală a aplicației, poziția pe biți a componentelor din fluxul de date a fost sălvată la crearea nodurilor.
+
+Mai complicat conceptual este sistemul de decomprimare,
+deoarece acesta trebuie să păstreze octeții decodificate pentru a putea referi la acestea
+în procesul de decomprimare, până la 32 KB de date.
+
+A fost realizată o abordare simplă --- se păstrează toți octeții într-un bufer dinamic.
+S-ar putea aplica o abordare mai complexă, însă acest element al programului
+nu este atât de important sau interesant din punct de vedere a formatului pentru a merita optimizarea.
+
+\subsection{Testarea implementării}
+
+Problema legată de testare este faptul că, deoarece programul este orientat
+la decomprimare și nici nu realizează un compresor,
+este dificit să se genereze niște date pentru teste.
+
+Sunt două variante care ar putea fi folosie:
+\begin{enumerate}
+    \item
+        Se poate folosi un compresor existent, adică o altă librarie, pentru a genera datele.
+        Minusul acestei abordări este faptul că codul de generare a datelor atunci va exista
+        ca un modul independent și nu poate fi ușor folosită abordarea "kitchen sink", adică
+        compresia dintr-o structură de date, și urmând-o decompresia, după ce să se verifice
+        dacă rezultatul este echivalent cu structura de date originală.
+        Însă, testarea de așa fel n-ar fi de neatins --- cu o anumită masură de lucru,
+        poate fi realizat un sistem care permite testele declarative folosind așa abordare.
+    \item
+        Se poate găsi niște date de test, și a le folosi pentru a face testarea
+        la întregul sistem, cu diferite intrări, fără a înțelege toate nuanțele ale datelor de intrare.
+        Adică, dacă se găsește o eroare pentru un samplu corect -- testul se eșuează,
+        și invers, pentru un samplu incorect decompresia trebuie să se eșueze.
+        Una din referințe \cite{gzip_impl} folosește așa abordare pentru teste negative,
+        însă are datele pentru formatul gzip, dar nu zlib, din care cauză acestea nu au putut fi folosite.
+\end{enumerate}
+
+De fapt există și încă o abordare -- să nu facă testarea la modulul zlib direct.
+La început, această abordare este cea mai aplicabilă pentru a putea să se miște cât mai repede cu versiunea inițială.
+
+Testarea indirectă oricum va fi folosită la testarea intrărilor diferite ale formatului \ac{PNG},
+deoarece acesta numaidecât folosește Zlib pentru chunk-urile \texttt{IDAT} care trebuie să fie prezente
+în orice exemplu de fișier \ac{PNG}.
+
+În plus, decodificarea deja este verificată conform câmpului de suma de control Adler32,
+care în cazul dacă corespunde valorii acestei sume de control calculate pe baza biților decodificați,
+indică probabilitatea înaltă că fișierul a fost decodificat corect. 
+Notez că probabilitatea este înaltă, dar nu categorică din cazul că aceasta este într-un fel o funcție hash
+care nu dau garanții exacte față de integritate, ci doar o certitudine înaltă.
+
+Mai târziu au fost găsite datele test pentru algoritmul DEFLATE,
+mecanismul dinamic, pentru depanare\cite{deflate_tests}.
+
+\section{Planificarea interfeței grafice}
+
+
+\chapterConclusionSection{architecture_chapter_title}
 
 \chapter{Implementarea Sistemului}\label{implementation_chapter_title}
 
@@ -534,6 +829,9 @@ a vizualiza formatul \ac{PNG} printr-o aplicație \ac{GUI}.
 Decoderul va fi implementat în limbajul de programare Zig\cite{zig}
 după specificația \ac{PNG}, versiunea 1.2\cite{png_spec}.
 Interfața grafică va fi implementată folosind Raylib\cite{raylib}, tot în Zig.
+
+Vor fi explicate cât modulele principale ce țin direct de formatul PNG,
+cât și modulele de bază care au facilitat dezvoltarea întregului sistem.
 
 \section{Modulul \texttt{pipelines}}
 
@@ -765,269 +1063,10 @@ fn process(sequence: *Sequence)
 }
 \end{minted}
 
-\section{Ideea aplicației la nivel înalt}
 
-Având la bază o abordare explorativă, s-a decis programarea aplicației
-pornindu-se de la o imagine vagă a rezultatului dorit,
-însă cu o direcție clară în ceea ce privește obiectivul general.
+\section{Observații generale}
 
-Având în vedere faptul că scopul principal al aplicației
-este de a facilita explorarea structurii fișierelor \ac{PNG},
-s-ar dori ca funcționalitatea să fie direct
-influențată și determinată de această structură.
-Proiectarea interfeței grafice are ca scopul principal reflectarea
-caracteristicilor specifice ale fișierelor \ac{PNG}.
-
-Fișierele \ac{PNG} sunt compuse din secvențe denumite chunk-uri,
-fiecare având o funcție specifică.
-De exemplu, chunk-ul \texttt{IHDR} conține informații vitale despre imagine,
-precum lățimea, înălțimea, numărul de biți per pixel ș.a.
-Se intenționează ca interfața aplicației să pună
-în evidență aceste chunk-uri, oferind detalii despre ele utilizatorilor
-și, poate, permițând modificarea valorilor într-un mod
-care nu afectează integritatea fișierului.
-Informațiile ar fi prezentate per chunk, atunci când utilizatorul îl alege,
-iar fiecare chunk trebuie să fie evidențiat, pentru a-l putea alege și vizualiza.
-
-Pentru a sublinia aspectul de explorare a \textit{formatului} \ac{PNG},
-și nu doar manipularea imaginilor în acest format,
-se va include în aplicație un editor hexazecimal.
-Acesta va prezenta valorile fiecărui octet și
-va oferi reprezentări vizuale pentru a facilita distingerea diferitelor chunk-uri.
-
-La selectarea unui chunk, vor fi afișate informații detaliate despre acesta,
-incluzând numele, descrierea și lungimea.
-Este crucial ca fiecare chunk să fie prezentat cu o structură specifică,
-pentru a oferi o înțelegere completă a compoziției și funcționalității fișierelor \ac{PNG}.
-
-
-\section{Imaginea inițială a implementării la nivel înalt}
-
-În dezvoltarea software, este adesea practic să se abordeze problemele pe măsură ce apar.
-Însă procesul de gândire și modul în care se ajunge la soluții
-pot adăuga valoare dacă sunt împărtășite.
-Deși nu există garanția că ideile înregistrate vor duce
-la o soluție optimă sau chiar una funcțională,
-și anumite probleme de implementare sunt ignorate la această etapă inițială,
-această abordare reflectă natura evolutivă a dezvoltării software.
-
-Excesul de planificare și gândire înainte de începerea scrierii codului
-poate adesea conduce la un design incorect sau inferior.
-Acest lucru se datorează faptului că în timpul programării pot apărea probleme neanticipate,
-din cauza lipsei unei viziuni complete asupra întregului sistem.
-Din acest motiv, planificarea detaliată a întregului sistem înainte de începerea dezvoltării
-nu este întotdeauna cea mai înțeleaptă abordare.
-Cu toate acestea, planificarea la nivel înalt a structurii aplicației,
-ținând cont de cerințe și pe baza experienței,
-este utilă pentru a descompune problema în subprobleme gestionabile
-și pentru a începe implementarea unei soluții.
-
-Pentru a reflecta această viziune, s-a stabilit ca aplicația
-să fie împărțită în mai multe module esențiale:
-\begin{itemize}
-  \item 
-  \textbf{Modulul de acces la fișiere după poziții absolute},
-  care va gestiona cache-ul segmentelor vizualizate în prezent,
-  ștergerea segmentelor nedorite din memorie și citirea datelor din fișier la necesitate.
-  Acest modul este o abstracție cheie pentru a simplifica interacțiunea cu fișierele \ac{PNG}.
-
-  \item
-  \textbf{Arborele sintactic al fișierului \ac{PNG}},
-  care ar trebui să păstreze în memorie doar informațiile despre
-  chunk-urile vizualizate la un moment dat.
-  Acesta ar permite accesul la informații structurate despre fișier
-  și ar fi interfațat cu modulul de interacțiune cu utilizatorul
-  pentru a indica ce segmente din fișier sunt vizualizate.
-
-  \item
-  \textbf{Parser-ul}, responsabil pentru transformarea datelor
-  din fișier într-un arbore sintactic la cerere.
-  Acest modul poate consta dintr-un set de funcții specifice pentru această transformare.
-
-  \item
-  \textbf{Modulul de interfață cu utilizatorul},
-  care va folosi arborele sintactic al fișierului pentru
-  a prezenta utilizatorului informații într-o formă atractivă și interactivă.
-  Modulul va avea control asupra segmentelor din fișier care sunt vizualizate,
-  permitând utilizatorului să actualizeze aceste segmente
-  în funcție de chunk-urile afișate în interfață.
-\end{itemize}
-
-Așa cum s-a discutat, acest design inițial este un punct de plecare,
-iar implicațiile utilizării acestuia urmează să fie analizate pe parcursul dezvoltării.
-
-
-\section{Oportunitatea de abstracție a parser-ului}
-
-Pe parcursul dezvoltării a parser-ului, indeosebi a funcțiilor de parsare a datelor din chunk-uri,
-s-a observat o oportunitate de abstractizare a acestui cod.
-Deoarece structura parser-ului este proiectată ca o mașină de stări,
-are sens să fie realizată o abstracție pentru a putea construi mașina acesta de stări mai ușor
-fără a repeta logica.
-
-Inițial, parser-ul se află într-o stare destinată validării a semnăturii fișierului \ac{PNG}.
-Semnătura este o secvență specială de caractere care 
-trebuie necesar să apare la începutul oricărui fișier \ac{PNG}.
-După citire a semnăturii, parser-ul trece la starea de citire a chunk-ului.
-Parsesul trebuie să mai noteze dacă a început să citească următorul chunk.
-Acesta este important pentru a indica faptul că dacă fluxul de intrare
-se termină după ce s-a început citirea, atunci fișierul nu este complet și 
-o eroare trebuie să fie semnalizată.
-
-În timpul citirii a chunk-ului, parserul poate să se afle 
-într-o stare specifică destinată fiecărui câmp al chunk-ului:
-lungimea, tipul, datele, și suma de control.
-Aceste stări sunt urmate unul de altul, adică valorile numerice
-ale acestora pot fi derivate din valoarea trecută, de exemplu 
-$ S_{date} = S_{lungime} + 1. $
-Aceasta poate fi implementată în mod cel mai simplu can un \texttt{enum}
-în orice limbaj de programare care le suportă, inclusiv Zig.
-
-Un lucru asemănător se întâmplă la parsarea datelor unui chunk care are un format fix.
-De exemplu, chunk-ul \texttt{IHDR} are un set de câmpuri fix, care sunt amplasate unul după altul.
-
-În acestă logică însă se adaugă și ideea de validare mai meticuloasă a valorilor,
-de exemplu, dimensiunile nu pot fi zero, iar \texttt{BitDepth} poate lua numai un set specific de valori
-și acesta depinde de valoarea lui \texttt{ColorType}.
-
-Încă un element este faptul că valorile ale lor, de exemplu, lungimea, tipul chunk-ului,
-lățimea și înălțimea, precum și alte valorile parsate se dorește a fi păstrate undeva,
-ca câmpuri ale unei structuri ce descrie nodul respectiv.
-În structura finală a aplicației, aceste valori au fost amplasate în noduri ale unui arbore sintactic.
-
-Deci, logica de parsare a unui câmp de obicei are următoarea formă:
-\begin{enumerate}
-\item
-    Se citește numărul necesar de octeți din fluxul de intrare
-        și se convertează aceștia în tipul de date dorit (de exemplu, un \texttt{int}).
-\item
-    Se realizează validarea acestei valori.
-    De exemplu, nu se admit valorile dimensiunilor egale cu zero.
-    În unele cazuri eroarea nu este groaznică, poate fi înresitrată, iar parsarea poate fi continuată.
-\item
-    Salvarea valorii într-un câmp pe o structură (sau într-un nod, în structura finală a aplicației).
-\item
-    Trecerea la următoarea stare.
-\end{enumerate}
-
-În plus, pentru debugging ar fi utilă o funcție care afișează drumul de stări curent,
-adică, de exemplu, dacă parserul se află în starea parsării a unui chunk \texttt{IHDR}, 
-și se află la etapa parsării câmpului \texttt{ColorType},
-care este indicat printr-o altă variabilă de stare,
-s-ar dori să se afișeze \texttt{Chunk(IHDR) ColorType}, sau ceva asemănător.
-
-Ideea este ca acest proces s-ar putea fi abstractizat în loc de a fi duplicat:
-\begin{enumerate}
-\item
-    În loc de mai multe variabile care să indice starea, aceasta poate fi păstrată ca
-    o listă de numeri întregi, indicând un fel de drum pentru următoarea acțiune a parser-ului.
-    Clar că drumul acesta ar fi deja generic și și-ar pierde informațiile despre tipul
-    \texttt{enum}-ului care indică starea, ceea ce ar fi dezavantajos pentru debugging.
-\item
-    Logica de afișare a stării poate fi implementată destul de ușor, dacă există o listă de
-    șiruri de caractere pentru fiecare index din drumul stării,
-    și pentru fiecare valoare posibilă a stării la acel index,
-    însă s-ar trebui atunci și să se modifice starea
-    de pe poziție 0 de la \texttt{Chunk} la \texttt{IHDR}.
-\item
-    Ceea ce trebuie de făcut la diferite stări,
-    și câtă memorie va fi necesară pentru a păstra nodul poate fi configurat separat,
-    într-un mod mai declarativ.
-\item
-    Stările care se așteapă că vor seta anumite câmpuri
-    pot indica ofsetul câmpului pentru ca sistemul să scrie valoarea acolo automat.
-    Aceasta poate fi simplificat prin folosirea tehnicilor de metaprogramare oferite de Zig.
-\item
-    Fiecare stare ar trebui să declare o funcție de inițializare a nodului,
-    o funcție de parsare și o funcție de validare a valorii.
-    Aici s-ar putea oferi niște funcții de configurare pentru a partaja logica.
-\end{enumerate}
-
-Însă, realizarea acestui gând în starea inițială a dezvoltării n-ar fi înțeleaptă,
-deoarece această oportunitate s-a observat la momentul
-realizării a primului tip de chunk, \texttt{IHDR},
-deci este posibil că nu s-ar generaliza bine pentru toate tipurile de chunk-uri.
-Încă, s-a menționat deja anterior că această abordare reduce capacitatea de debugging.
-
-În structura finală a aplicației s-a observat că chunk-urile au o structură destul de diferită unul de altul.
-Cu toate că abordarea aceasta s-ar putea fi aplicată la unele chunk-uri,
-integrarea acestui subsistem cu logica obișnuită procedurală a celorlalte chunk-uri
-ar fi complicată și ar reduce semnificativ meritul acestei abordări. 
-
-\section{Zlib și DEFLATE}
-
-\subsection{Zlib în \ac{PNG}}
-
-Formatul \ac{PNG} folosește comprimarea datelor prin algoritmul Zlib.
-Comprimarea se folosește pentru chunk-urile \texttt{zTXt} (text comprimat),
-\texttt{iCCP} (profil \ac{ICC}), \texttt{IDAT} (datele pixelilor), precum și altele.
-Pentru a înțelege problema mai bine, ar fi benefic să se înțeleagă cum funcționează algoritmul Zlib.
-În plus, deoarece algorimul este parte din standardul \ac{PNG},
-și structura acestuia poate fi decodificată și analizată,
-ar fi benefic să se realizeze un fel de parser special pentru Zlib pentru a putea vizualiza nodurile Zlib
-în mod bogat în interfață.
-Din această cauză, s-a decis să se realizeze implementarea unui decoder Zlib de la zero.
-
-Structura parserului menționată până acum poate fi aplicată și pentru formatul Zlib.
-Singura diferență este că formatul Zlib este bazat pe biți, dar nu pe octeți.
-Însă deoarece poziția pe biți absolut nu ține de gestionarea buferilor,
-componenta \texttt{pipelines} care realizează fluxul de date nu va trebui să fie modificată.
-Starea parserului Zlib poate să țină cont de poziția pe biți ca o variabilă privată, deoarece
-acest concept nu se revarsă la procesarea \ac{PNG}.
-Însă, poziția pe biți ar trebuie să fie utilă pentru vizualizare a formatului.
-
-În structura finală a aplicației, poziția pe biți a componentelor din fluxul de date a fost sălvată la crearea nodurilor.
-
-Mai complicat conceptual este sistemul de decomprimare,
-deoarece acesta trebuie să păstreze octeții decodificate pentru a putea referi la acestea
-în procesul de decomprimare, până la 32 KB de date.
-
-A fost realizată o abordare simplă --- se păstrează toți octeții într-un bufer dinamic.
-S-ar putea aplica o abordare mai complexă, însă acest element al programului
-nu este atât de important sau interesant din punct de vedere a formatului pentru a merita optimizarea.
-
-\subsection{Testarea implementării}
-
-Problema legată de testare este faptul că, deoarece programul este orientat
-la decomprimare și nici nu realizează un compresor,
-este dificit să se genereze niște date pentru teste.
-
-Sunt două variante care ar putea fi folosie:
-\begin{enumerate}
-    \item
-        Se poate folosi un compresor existent, adică o altă librarie, pentru a genera datele.
-        Minusul acestei abordări este faptul că codul de generare a datelor atunci va exista
-        ca un modul independent și nu poate fi ușor folosită abordarea "kitchen sink", adică
-        compresia dintr-o structură de date, și urmând-o decompresia, după ce să se verifice
-        dacă rezultatul este echivalent cu structura de date originală.
-        Însă, testarea de așa fel n-ar fi de neatins --- cu o anumită masură de lucru,
-        poate fi realizat un sistem care permite testele declarative folosind așa abordare.
-    \item
-        Se poate găsi niște date de test, și a le folosi pentru a face testarea
-        la întregul sistem, cu diferite intrări, fără a înțelege toate nuanțele ale datelor de intrare.
-        Adică, dacă se găsește o eroare pentru un samplu corect -- testul se eșuează,
-        și invers, pentru un samplu incorect decompresia trebuie să se eșueze.
-        Una din referințe \cite{gzip_impl} folosește așa abordare pentru teste negative,
-        însă are datele pentru formatul gzip, dar nu zlib, din care cauză acestea nu au putut fi folosite.
-\end{enumerate}
-
-De fapt există și încă o abordare -- să nu facă testarea la modulul zlib direct.
-La început, această abordare este cea mai aplicabilă pentru a putea să se miște cât mai repede cu versiunea inițială.
-
-Testarea indirectă oricum va fi folosită la testarea intrărilor diferite ale formatului \ac{PNG},
-deoarece acesta numaidecât folosește Zlib pentru chunk-urile \texttt{IDAT} care trebuie să fie prezente
-în orice exemplu de fișier \ac{PNG}.
-
-În plus, decodificarea deja este verificată conform câmpului de suma de control Adler32,
-care în cazul dacă corespunde valorii acestei sume de control calculate pe baza biților decodificați,
-indică probabilitatea înaltă că fișierul a fost decodificat corect. 
-Notez că probabilitatea este înaltă, dar nu categorică din cazul că aceasta este într-un fel o funcție hash
-care nu dau garanții exacte față de integritate, ci doar o certitudine înaltă.
-
-Mai târziu au fost găsite datele test pentru algoritmul DEFLATE,
-mecanismul dinamic, pentru depanare\cite{deflate_tests}.
-
-\section{Procesarea erorilor}
+\subsection{Procesarea erorilor}
 
 La implementarea inițială a prototipului s-a observat că erorile pot fi semnalizate
 la momente diferite de detectare a lor și unele din ele pot avea niște date asociate
@@ -1223,6 +1262,111 @@ dar totodată afișând și interfața obișnuită.
 Uitându-se la interfață, utilizatorul poate deduce ce a căuzat eroarea,
 deoarece arborele s-ar termina pe acea poziție.
 
+\section{Oportunitate de abstracrizare a parser-ului}
+
+\subsection{Originea ideii}
+
+Pe parcursul dezvoltării a parser-ului, indeosebi a funcțiilor de parsare a datelor din chunk-uri,
+s-a observat o oportunitate de abstractizare a acestui cod.
+Deoarece structura parser-ului este proiectată ca o mașină de stări,
+are sens să fie realizată o abstracție pentru a putea construi mașina acesta de stări mai ușor
+fără a repeta logica.
+
+\subsection{Similaritatea proceselor din parser}
+
+Inițial, parser-ul se află într-o stare destinată validării a semnăturii fișierului \ac{PNG}.
+Semnătura este o secvență specială de caractere care 
+trebuie necesar să apare la începutul oricărui fișier \ac{PNG}.
+După citire a semnăturii, parser-ul trece la starea de citire a chunk-ului.
+Parsesul trebuie să mai noteze dacă a început să citească următorul chunk.
+Acesta este important pentru a indica faptul că dacă fluxul de intrare
+se termină după ce s-a început citirea, atunci fișierul nu este complet și 
+o eroare trebuie să fie semnalizată.
+
+În timpul citirii a chunk-ului, parserul poate să se afle 
+într-o stare specifică destinată fiecărui câmp al chunk-ului:
+lungimea, tipul, datele, și suma de control.
+Aceste stări sunt urmate unul de altul, adică valorile numerice
+ale acestora pot fi derivate din valoarea trecută, de exemplu 
+$ S_{date} = S_{lungime} + 1. $
+Aceasta poate fi implementată în mod cel mai simplu can un \texttt{enum}
+în orice limbaj de programare care le suportă, inclusiv Zig.
+
+Un lucru asemănător se întâmplă la parsarea datelor unui chunk care are un format fix.
+De exemplu, chunk-ul \texttt{IHDR} are un set de câmpuri fix, care sunt amplasate unul după altul.
+
+În acestă logică însă se adaugă și ideea de validare mai meticuloasă a valorilor,
+de exemplu, dimensiunile nu pot fi zero, iar \texttt{BitDepth} poate lua numai un set specific de valori
+și acesta depinde de valoarea lui \texttt{ColorType}.
+
+Încă un element este faptul că valorile ale lor, de exemplu, lungimea, tipul chunk-ului,
+lățimea și înălțimea, precum și alte valorile parsate se dorește a fi păstrate undeva,
+ca câmpuri ale unei structuri ce descrie nodul respectiv.
+În structura finală a aplicației, aceste valori au fost amplasate în noduri ale unui arbore sintactic.
+
+Deci, logica de parsare a unui câmp de obicei are următoarea formă:
+\begin{enumerate}
+\item
+    Se citește numărul necesar de octeți din fluxul de intrare
+    și se convertează aceștia în tipul de date dorit (de exemplu, un \texttt{int}).
+\item
+    Se realizează validarea acestei valori.
+    De exemplu, nu se admit valorile dimensiunilor egale cu zero.
+    În unele cazuri eroarea nu este groaznică, poate fi înresitrată, iar parsarea poate fi continuată.
+\item
+    Salvarea valorii într-un câmp pe o structură (sau într-un nod, în structura finală a aplicației).
+\item
+    Trecerea la următoarea stare.
+\end{enumerate}
+
+În plus, pentru depanare ar fi utilă o funcție care afișează drumul de stări curent,
+adică, de exemplu, dacă parserul se află în starea parsării a unui chunk \texttt{IHDR}, 
+și se află la etapa parsării câmpului \texttt{ColorType},
+care este indicat printr-o altă variabilă de stare,
+s-ar dori să se afișeze \texttt{Chunk(IHDR) ColorType}, sau ceva asemănător.
+
+\subsection{Sumarizarea abstracției}
+
+Ideea este ca acest proces s-ar putea fi abstractizat în loc de a fi duplicat:
+\begin{enumerate}
+\item
+    În loc de mai multe variabile care să indice starea, aceasta poate fi păstrată ca
+    o listă de numeri întregi, indicând un fel de drum pentru următoarea acțiune a parser-ului.
+    Clar că drumul acesta ar fi deja generic și și-ar pierde informațiile despre tipul
+    \texttt{enum}-ului care indică starea, ceea ce ar fi dezavantajos pentru depanare.
+\item
+    Logica de afișare a stării poate fi implementată destul de ușor, dacă există o listă de
+    șiruri de caractere pentru fiecare index din drumul stării,
+    și pentru fiecare valoare posibilă a stării la acel index,
+    însă s-ar trebui atunci și să se modifice starea
+    de pe poziție 0 de la \texttt{Chunk} la \texttt{IHDR}.
+\item
+    Ceea ce trebuie de făcut la diferite stări,
+    și câtă memorie va fi necesară pentru a păstra nodul poate fi configurat separat,
+    într-un mod mai declarativ.
+\item
+    Stările care se așteapă că vor seta anumite câmpuri
+    pot indica ofsetul câmpului pentru ca sistemul să scrie valoarea acolo automat.
+    Aceasta poate fi simplificat prin folosirea tehnicilor de metaprogramare oferite de Zig.
+\item
+    Fiecare stare ar trebui să declare o funcție de inițializare a nodului,
+    o funcție de parsare și o funcție de validare a valorii.
+    Aici s-ar putea oferi niște funcții de configurare pentru a partaja logica.
+\end{enumerate}
+
+Însă, realizarea acestui gând în starea inițială a dezvoltării n-ar fi înțeleaptă,
+deoarece această oportunitate s-a observat la momentul
+realizării a primului tip de chunk, \texttt{IHDR},
+deci este posibil că nu s-ar generaliza bine pentru toate tipurile de chunk-uri.
+Încă, s-a menționat deja anterior că această abordare reduce capacitatea de depanare.
+
+\subsection{Concluzii}
+
+În structura finală a aplicației s-a observat că chunk-urile au o structură destul de diferită unul de altul.
+Cu toate că abordarea aceasta s-ar putea fi aplicată la unele chunk-uri,
+integrarea acestui subsistem cu logica obișnuită procedurală a celorlalte chunk-uri
+ar fi complicată și ar reduce semnificativ meritul acestei abordări. 
+
 \section{Complicațiile asociate cu citirea chunk-ului \texttt{IDAT}}
 
 \subsection{Descrierea problemei de ``sărituri''}
@@ -1306,70 +1450,7 @@ nu doar pentru nodurile din acest chunk.
 Datorită acestui fapt implementarea funcționalităților legate cu această proprietate
 nu trebuie să țină cont de tipul de nod.
 
-
-\section{Dezvoltarea în \ac{WSL}}
-
-Dezvoltarea pe Linux eclipsează dezvoltarea pe Windows -- aceasta este un fapt incontestabil.
-\begin{itemize}
-    \item 
-        Windows nu are un manager de pachete integrat în sistem.
-        Cu toate că pe versiuni noi există aplicația WinGet, 
-        aceasta nu este atât de stabilă și dezvoltată ca apt-get de pe Ubuntu.
-        Există și Chocolatey, însă acesta nu permite instalarea pachetelor de ultimă versiune,
-        dacă această versiune nu este în lista lor a ``pachetelor de încredere'',
-        și nu include toate capacitățile în versiunea gratuită.
-        (Aceste afirmații sunt fără referințe bibliografice deoarece 
-        au fost aflate în trecut și sursele care le confirmă au fost pierdute.)
-
-    \item
-        Este practic imposibil să facă un build la orice aplicație în mod fiabil.
-        Windows este foarte sensibil la configurări globale ale sistemului,
-        mereu lipsește careva pachete instalate, sau tocmai nu suportă unele pachete, etc.
-        Compilarea aplicațiilor pe Windows mereu implică ``probleme pe cap''.
-        Pe de altă parte, pe Linux aceasta este trivial.
-        După instalarea pachetelor necesare, build-urile lucrează ideal în aproape 100\% din cazuri.
-
-    \item
-        Unele aplicații nu sunt pe Windows.
-        Ca de exemplu \texttt{Valgrind} și \texttt{MSan}.
-
-    \item
-        Unele aplicații așteaptă sistemul de tip Unix.
-        De exemplu, abordarea răspândită pentru dezvoltarea plugin-urilor
-        pentru Neovim este să se presupună că sistemul este Unix,
-        deoarece dezvoltatorul oricum trebuie să folosescă Unix pentru a fi productiv.
-\end{itemize}
-
-Din fericire, Windows a introdus capacitatea minunată \ac{WSL}.
-Fără a intra în mecanisme funcționării acesteia, deoarece aceasta nu este în scopul lucrării,
-pe scurt \ac{WSL} poate fi explicat ca un sistem de Linux integrat în Windows, care poate citi fișierele din Windows.
-
-Destul de recent a fost introdusă și capacitatea de a rula aplicații grafice prin \ac{WSL}.
-Ferestrele create în așa mod pot fi manipulate ca orice altă fereastră pe Windows.
-
-Mulțumită \ac{WSL}, toata dezvoltarea a fost realizată practic pe Linux, 
-ce a simplificat lucrul cu librării externe, și instalarea instrumentelor adăugătoare, nemenționate explicit în text.
-
-\section{Construirea arborelui sintactic}
-
-\subsection{Avantajele unui arbore sintactic}
-
-Folosirea unui arbore sintactic este o abordare bună pentru problemele 
-unde datele sunt structurate în mod ierarhic și se cere a fi analizate sau într-un fel accesate pe urmă.
-Proprietatea cheie a acestei abordări este faptul că arborele poate fi \textit{abstract},
-ceea ce înseamnă că acesta este o reprezentare la un nivel mai înalt a informațiilor despre datele
-din care a fost construit.
-Din această proprietate origină avantajul principal al acestei abordări --
-construirea arborelui analizând datele neprocesate și folosirea arborelui
-pentru analiză pot fi implementate separat, comunicând prin acest arbore.
-Aceasta simplifică realizarea sistemului, impărțindu-l la două module majore cu responsabilitățile respective,
-care pot fi implementate în izolare, conform interfeței arborelui.
-
-Folosirea unui arbore este cea mai evidentă abordare pentru sistemul în cauză.
-Această abordare divizează sistemul la bucata care construiește arborele
-(partea de citire a fișierului, parser-ul, și codul care crează și gestionează alocarea nodurilor),
-și bucata care analizează arborele derivat (interfața grafică în cazul dat).
-Aceste bucăți pot fi realizate separat, ceea ce simplifică procesul de dezvoltare.
+\section{Arbore sintactic de fișier}
 
 \subsection{Problemele abordării inițiale}
 
@@ -1403,8 +1484,8 @@ Această abordare are mai multe probleme:
 \end{enumerate}
 
 Următoarea problemă este problema detectării tipului curent de nod.
-Deoarece arhitectura sistemului s-a conceput în așa fel ca parserul să nu cunoască despre tipuri de noduri,
-nu putem transmite aceste informații direct din parser la codul care folosește parserul pentru
+Deoarece arhitectura sistemului a fost concepută în așa fel ca parserul să nu cunoască despre tipuri de noduri,
+nu aceste informații nu pot fi transmise direct din parser la codul care folosește parserul pentru
 a construi arborele sintactic.
 Deci, aceste informații trebuie să fie derivate în mod dinamic pe partea
 care intepretează informația primită de la parser.
@@ -1679,6 +1760,7 @@ dar este și acesta codificat folosind o altă codificare Huffman,
 însă acelea sunt codificate tot folosind un set de coduri prestabilit
 ca la abordarea cu codurile fixe, deci este mai ușor de implementat.
 
+
 \section{Abstracțiile înăuntru modulului parserului}
 
 \subsection{Parser-ul este un modul}
@@ -1726,6 +1808,7 @@ deoarece DEFLATE folosește un flux de biți, dar nu de octeți,
 
 Deci, fiecare tip de context are un set de proprietăți (funcții) standarte
 care permit acces la unele resurse în mod uniform.
+
 
 \subsection{Modul de accesare a datelor din secvență}
 
@@ -1894,42 +1977,6 @@ Există așa binding-uri și pentru Raylib\cite{raylib_zig}.
 Acestea se integrează cu proiectul folosind sistemul \texttt{zig build}
 după ce devine posibilă importarea funcțiilor din librărie în cod.
 
-\subsection{Imaginea modulului grafic}
-
-Sunt foarte multe lucruri interesante care ar putea fi implementate pentru vizualizare, printre care:
-\begin{itemize}
-    \item
-        Un editor hexazecimal care afișează octeții cruzi din fișierul \ac{PNG}. 
-    \item
-        Posibilitatea de a transforma editorul hexazecimal într-un editor binar.
-        Acesta ar putea fi util pentru a putea vedea mai bine limitele câmpurilor din
-        subformatul Zlib care pot apărea la poziții neîntregi de octeți.
-    \item
-        Posibilitatea de a face modificări la fișier inițial folosind editorul,
-        și ca arborele de fișier să fie actualizat în urma schimbărilor.
-        Implementarea aceastei capacități ar fi mai ușoară de făcut dacă s-ar fi realizată
-        o abstrație pentru mașina de stări, explicată în unul din paragrafe.
-    \item
-        Selectarea intervalului curent vizualizat.
-    \item
-        Afișarea imaginii încărcate.
-    \item
-        Afișarea nodurilor intermediare și informațiilor despre ele în adâncime.
-    \item
-        Posibilitatea de a selecta fișierul care trebuie să fie încărcat.
-\end{itemize}
-
-Pe \refFigure{interface_sketch.png} puteți vedea o schiță a interfeței grafice,
-așa cum era imaginată la etapa incipientă.
-În sfârșit, nu au fost implementate săgețile.
-
-\imageWithCaption{interface_sketch.png}{Schița interfeței grafice}
-
-Pentru a limita complexitatea proiectului, s-a hotărât să fie implementate doar capacitățile de bază.
-A fost implementat un editor hexazecimal pentru vizualizare, posibilitatea de a selecta intervalul,
-reprezentarea informațiilor despre câmpul selectat din fișier, și drag-and-drop pentru fișiere.
-În plus, intervalul câmpului curent terminal din fișier este evidențiat în editorul grafic.
-
 \subsection{Rezultatele}
 
 Ar fi dorit ca interfața implementată să fie demonstrată imediat,
@@ -2019,7 +2066,6 @@ Raylib definește niște funcții pentru procesarea acestui eveniment,
 permitând accesul la drumurile la fișiere transmise ca o listă.
 Acestea sunt \texttt{IsFileDropped}, \texttt{LoadDroppedFiles} și \texttt{UnloadDroppedFiles}.
 A se vedea anexa\ref{appendix:drag_and_drop}.
-
 
 \chapterConclusionSection{implementation_chapter_title}
 
