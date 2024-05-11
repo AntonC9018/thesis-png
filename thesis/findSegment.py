@@ -20,8 +20,10 @@ with open(filePath, "r") as fp:
 try:
     if segmentBegin == -1 or segmentEnd == -1:
         print(f"Segment {segmentName} not found in file {filePath}")
-        exit(-1)
+        exit(-1) # not actually sure this affects the error.
 
     print(f"\\inputminted[firstline={segmentBegin + 2},lastline={segmentEnd}]{{zig}}{{{filePath}}}", flush=True)
+
+# This error floods the output if you don't close the stderr at the end.
 except (BrokenPipeError):
     sys.stderr.close()

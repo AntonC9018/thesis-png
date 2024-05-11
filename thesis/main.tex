@@ -5,14 +5,16 @@
 \newcommand{\authorName}{CURMANSCHII Anton}
 \newcommand{\thesisTitle}{Explorarea formatului PNG}
 \newcommand{\thesisTitleEng}{Exploration of the PNG file format}
-\newcommand{\uniGroupName}{IA1901}
+\newcommand{\uniGroupName}{MIA2201}
 \newcommand{\thesisType}{master}
 \newcommand{\programulDeStudii}{master}
 \newcommand{\identificatorulCursului}{0613.5 Informatică aplicată}
 
-% Hardcoded for now
-\newcommand{\anexeCount}{20}
-\newcommand{\conferencesList}{Conferința Studențească, Editia XXVIII-a, 2024}
+\renewcommand{\year}{2024}
+\newcommand{\location}{Chișinău}
+\newcommand{\conferencesList}{Conferința Studențească, Editia XXVIII-a, \year}
+\newcommand{\conducatorNume}{Pereteatcu}
+\newcommand{\conducatorPrenume}{Sergiu}
 
 \begin{document}
 
@@ -48,7 +50,7 @@
 
 \textbf{Structura tezei.}
 Teza constă din: Introducere, \total{num_chapters} capitole, Concluzii generale și recomandări, Bibliografie \bibliographyEntryCount{} titluri.
-Textul de bază cuprinde \usefulPageCount{} de pagini și \anexeCount{} de anexe.
+Textul de bază cuprinde \usefulPageCount{} de pagini și \anexeCount{} anexe.
 
 \textbf{Cuvinte-cheie:}
 \textit{\ac{PNG}, Zlib, DEFLATE, format de fișier, arbore sintactic, aplicație pentru vizualizare.}
@@ -418,8 +420,8 @@ care permite o încărcare progresivă a imaginii.
 care împarte imaginea în mai multe trepte de încărcare,
 îmbunătățind experiența vizuală în timpul încărcării continue a imaginii.
 
-Ideea este că imaginea se subdivizează la mai multe pătrate de dimensiuni $8 \times 8$,
-iar întreaga imagine este transmisă în 7 pași, conform figurii \ref{fig:pixel_order_table} unde
+Ideea este că imaginea se subdivizează în mai multe pătrate de dimensiuni $8 \times 8$,
+iar întreaga imagine este transmisă în 7 pași, conform \refFigure{pixel_order_table}, unde
 fiecare celulă indică pasul la care este transmis acel pixel.
 
 \begin{figure}[!ht]
@@ -434,7 +436,7 @@ fiecare celulă indică pasul la care este transmis acel pixel.
     5 & 6 & 5 & 6 & 5 & 6 & 5 & 6 \\
     7 & 7 & 7 & 7 & 7 & 7 & 7 & 7 \\
 \end{tabular}
-\caption{Tabelul ordonării pixelilor.}
+\caption{Tabelul ordonării pixelilor}
 \label{fig:pixel_order_table}
 \end{figure}
 
@@ -593,20 +595,20 @@ au ajutat considerabil în dezvoltare.
 
 \chapterConclusionSection{intro_chapter_title}
 
-În acest capitol au fost introduse formatul \ac{PNG} și
-formatul de comprimare Zlib care este folosit în formatului \ac{PNG}.
+În acest capitol au fost descrise formatul \ac{PNG} și
+formatul de comprimare Zlib care este folosit în formatul \ac{PNG}.
 A fost descrisă structura formatului \ac{PNG}: ce sunt chunk-urile,
-de ce sunt folosite, ce tipuri există, câmpurile principale, etc.
+de ce acestea sunt folosite, ce tipuri există, câmpurile principale, etc.
 
 S-au mai discutat princiile de înterlănțare și comprimare.
 Cu părere de rău, acestea nu se vor include în interfață, însă sunt niște părți importante ale formatului.
 
-Fiind echipat cu aceste cunoștințe,
-devine posibilă abordarea proiectării
+Echiparea cu aceste cunoștințe,
+dau posibilitatea de abordare a proiectării
 și programării aplicației orientate spre lucrul cu aceste formaturi.
 
 
-\chapter{Planificarea Aplicației}\label{architecture_chapter_title}
+\chapter{Proiectarea aplicației de vizualizare a formatului \acs{PNG}}\label{architecture_chapter_title}
 
 \section{Planificarea implementării}
 
@@ -787,7 +789,7 @@ Sunt foarte multe lucruri interesante care ar putea fi implementate pentru vizua
         Posibilitatea de a selecta fișierul care trebuie să fie încărcat.
 \end{itemize}
 
-Pe \refFigure{interface_sketch.png} puteți vedea o schiță a interfeței grafice,
+În \refFigure{interface_sketch.png} este prezentată o schiță a interfeței grafice,
 așa cum era imaginată la etapa incipientă.
 În sfârșit, nu au fost implementate săgețile.
 
@@ -862,8 +864,9 @@ deoarece acesta numaidecât folosește Zlib pentru chunk-urile \texttt{IDAT} car
 În plus, decodificarea deja este verificată conform câmpului de suma de control Adler32,
 care în cazul dacă corespunde valorii acestei sume de control calculate pe baza biților decodificați,
 indică probabilitatea înaltă că fișierul a fost decodificat corect. 
-Notez că probabilitatea este înaltă, dar nu categorică din cazul că aceasta este într-un fel o funcție hash
-care nu dau garanții exacte față de integritate, ci doar o certitudine înaltă.
+De notat că probabilitatea este înaltă, dar nu categorică din cazul
+că aceasta este într-un fel o funcție hash care nu dau garanții
+exacte față de integritate, ci doar o certitudine înaltă.
 
 Mai târziu au fost găsite datele test pentru algoritmul DEFLATE,
 mecanismul dinamic, pentru depanare\cite{deflate_tests}.
@@ -871,6 +874,13 @@ mecanismul dinamic, pentru depanare\cite{deflate_tests}.
 
 \chapterConclusionSection{architecture_chapter_title}
 
+În acest capitol a fost stabilită fundația teoretică a sistemului care urmează a fi implementat.
+A fost decisă structura aplicației la nivel înalt, a fost discutată funcționalitatea modulelor interne.
+Fondarea acestei temelii face posibilă abordarea programării a sistemului,
+însă structura proiectată rămâne relaxată, deoarece mai multe detalii
+vor fi completate în urma procesului eventual de dezvoltare.
+Mai multe module interne pot fi adăugate,
+iar modulele de bază pot fi turnate în ceva mai diferit sau mai specializat.
 
 \chapter{Implementarea Sistemului}\label{implementation_chapter_title}
 
@@ -1026,10 +1036,10 @@ Deci pentru a trece prin toți octeții unei secvențe, trebuie să:
         indicat în poziția de sfârșit.
 \end{itemize}
 
-Ideea este ilustrată pe \refFigure{sequence_example.png}.
+Ideea este ilustrată în \refFigure{sequence_example.png}.
 Zona hășurată reprezintă octeții care corespund secvenței
 
-\imageWithCaption{sequence_example.png}{Ilustrarea principiului de funcționare a unei secvențe.}
+\imageWithCaption{sequence_example.png}{Ilustrarea principiului de funcționare a unei secvențe}
 
 Această idee este realizată conform unei interfețe de iterator care permite codului de procesare
 să treacă print-o secvență de tablouri de octeți, fără a realiza logica descrisă de fiecare dată.
@@ -1066,7 +1076,7 @@ fn process(sequence: *Sequence)
 \end{minted}
 
 Această idee este de fapt folosită pentru a implementa câmpul \ac{CRC} din \ac{PNG} și Adler32 din Zlib.
-A se vedea anexa \ref{appendix:crc_sequence_defer_example}.
+A se vedea anexa \ref{appendix:crc_sequence_defer_example} unde este realizat acest cod.
 
 \subsection{Suprascrierea temporară a segmentelor}
 
@@ -2018,7 +2028,7 @@ iar în partea stângă sunt prezentați octeții din fișier
 
 \imageWithCaption{ui_example_1.png}{Captura de ecran a interfeței}
 
-Pe \refFigure{ui_example_2.png} se poate observa ca unul din octeți este albastru.
+În \refFigure{ui_example_2.png} se poate observa ca unul din octeți este albastru.
 Culoarea albastru indică care octet a fost apăsat.
 Interfața va vizualiza datele asociate cu acel octet chiar dacă cursorul iese de pe acesta.
 
@@ -2075,7 +2085,7 @@ poate produce mai mult ca un singur nod la același nivel.
 În realitate, potrivirea poziției pe octet la mai multe noduri are loc doar la ultimul nivel din ierarhie,
 deci așa cod nu produce rezultate încurcate (nu amestecă ierarhiile de sub mai multe noduri).
 
-A se vedea anexa \ref{appendix:node_path_search_impl} care arată codul căutării.
+A se vedea anexa \ref{appendix:node_path_search_impl} unde este prezintat codul căutării.
 
 Având drumul acesta de noduri, ușor se obține tipul fiecărui
 nod din acestă listă și datele asociate cu acesta.
@@ -2106,25 +2116,25 @@ S-a mai discutat detaliile de implementare concrete la mai multe module de siste
 Au fost descrise principiile de funcționare a modulului \texttt{pipelines},
 inclusiv operațiile de bază și transparența structurii acestora.
 
-S-a discutat despre modulelor de parser și de arbore
-și despre problemele legate cu structura inițială a acestui modul.
+S-a discutat despre modulele de parser și de arbore
+și despre problemele legate cu structura inițială a acestora.
 A fost menționată și structura finală a acestora care
 a făcut posibilă depășirea neajunsurilor structurii inițiale.
 
-Au fost introduși arbori Huffman cu o descriere a folosirii acestora în formatul Zlib,
-și au fost menționate cele mai interesante idei în legătură cu imlementarea acestora.
+Au fost explicați arbori Huffman cu o descriere a folosirii acestora în formatul Zlib,
+și au fost menționate cele mai interesante idei în legătură cu imlementarea acestora
+în contextul mecanismului dinamic din DEFLATE.
 În special s-a evidențiat ideea repartizări consecutive a codurilor și cum această proprietate poate fi
 exploatată pentru a simplifica realizarea arborelui.
 
 S-a discutat integrarea librării grafice Raylib și cum a fost proiectată și creată interfața grafică,
-cu exemple concrete a elementelor din interfață.
+cu exemple concrete ale elementelor din interfață.
 
 
 \unnumberedChapter{Concluziile Finale și Recomandările}
 
-După implementarea unei aplicații de așa scop scăzut și tehnic,
 
-Rezultatele obținute au fost raportate la \textbf{\conferencesList}.
+Rezultatele obținute au fost raportate la \textbf{\conferencesList}\cite{self}.
 
 \newpage
 \markpage{usefulStuffEnd}
@@ -2138,46 +2148,32 @@ Rezultatele obținute au fost raportate la \textbf{\conferencesList}.
 % Appendices
 \appendix
 
-\renewcommand{\thesection}{\arabic{section}}
-\titleformat{\section}[block]{\normalfont\normalsize\bfseries\filcenter}{Anexa \thesection~}{0pt}{}
-
-% Every section on new page
-% \newcommand{\sectionbreak}{\clearpage}
-
-% Since we've got just a single chapter in the appedices,
-% but which is also the name of the Appendix chapter, it should be omitted.
-% Makes little sense, but ok I guess.
-\setcounter{chapter}{1}
-
 \unnumberedChapter{Anexe}
 
-% \section{ast.zig}\label{appendix:main__ast}
-% \inputminted{zig}{../src/ast.zig}
+\section{Funcția actualizării valorii CRC}\label{appendix:crc} %407
+\inputMintedSegment{../src/parser/png/common.zig}{CRC}
 
-\section{TaggedArrayList.zig}\label{appendix:main__TaggedArrayList}
-\inputminted{zig}{../src/TaggedArrayList.zig}
-
-\section{Iteratorul segmentelor unei secvențe}\label{appendix:sequence_iterator}
+\section{Iteratorul segmentelor unei secvențe}\label{appendix:sequence_iterator} %1044
 \inputMintedSegment{../src/parser/pipelines.zig}{SegmentIterator}
 
-\section{Calculul CRC în parser}\label{appendix:crc_sequence_defer_example}
+\section{Calculul CRC în parser}\label{appendix:crc_sequence_defer_example} %1077
 \inputMintedSegment{../src/parser/png/parser.zig}{CRCCalculation}
 \inputMintedSegment{../src/parser/png/parser.zig}{CRCCheck}
 
-\section{Funcția actualizării valorii CRC}\label{appendix:crc}
-\inputMintedSegment{../src/parser/png/common.zig}{CRC}
+\section{TaggedArrayList.zig}\label{appendix:main__TaggedArrayList} %1678
+\inputminted{zig}{../src/TaggedArrayList.zig}
 
-\section{Afișarea editorului hex}\label{appendix:draw_hex_grid}
-\inputMintedSegment{../src/main.zig}{HexGrid}
-
-\section{Codul cheie arborelui Huffman}\label{appendix:huffman_tree}
+\section{Codul cheie arborelui Huffman}\label{appendix:huffman_tree}%1792
 \inputMintedSegment{../src/parser/zlib/huffmanTree.zig}{HuffmanDecode}
 \inputMintedSegment{../src/parser/zlib/huffmanTree.zig}{CreateTree}
 
-\section{Căutarea drumului de noduri în arbore}\label{appendix:node_path_search_impl}
+\section{Afișarea editorului hex}\label{appendix:draw_hex_grid}%2062
+\inputMintedSegment{../src/main.zig}{HexGrid}
+
+\section{Căutarea drumului de noduri în arbore}\label{appendix:node_path_search_impl}%2086
 \inputMintedSegment{../src/main.zig}{TreeSearch}
 
-\section{Drag-and-drop}\label{appendix:drag_and_drop}
+\section{Drag-and-drop}\label{appendix:drag_and_drop}%2106
 \inputMintedSegment{../src/main.zig}{DragAndDrop}
 
 % \section{common.zig}\label{appendix:main__parser_png_common}
@@ -2230,7 +2226,6 @@ Rezultatele obținute au fost raportate la \textbf{\conferencesList}.
 
 % \section{pngDebug.zig}\label{appendix:main__pngDebug}
 % \inputminted{zig}{../src/pngDebug.zig}
-
 
 \end{document}
 % vim: fdm=syntax

@@ -65,7 +65,14 @@
   % Prevent it from spilling over margins for especially long lines
   ,breakanywhere=true
   % Make it use the same margins as regular text.
-  ,xleftmargin=\leftmargin
+  % Add to it the width of the line numbers + the distance to them
+  % So that the line numbers start at text offset.
+  % See https://pygments.org/docs/formatters/ for default sizes,
+  % because minted doesn't allow overridding these and doesn't mention them in the docs.
+  % Properties line_number_pad=6px, lineno_fontsize=12pt, lineno_padding=2 ??
+  % How the hell do you relate these??
+  % Honestly, screw that, just hard code it.
+  ,xleftmargin=\the\numexpr\leftmargin+2em\relax
   ,xrightmargin=\rightmargin
 }
 
@@ -164,28 +171,61 @@
 % Their numbering has to use the chapter number.
 \renewcommand{\thefigure}{\arabic{chapter}.\arabic{figure}}
 
+% Use . instead of : in figures
+\usepackage{caption}
+\captionsetup[figure]{labelsep=period}
+\captionsetup[table]{labelsep=period}
+
 % Inserting pictures
 \usepackage{graphicx}
 
 \graphicspath{{./images/}}
 
-\newlength{\imgwidth}%
 
 % Center and name image figures
+\newlength{\imgwidth}
 \newcommand{\imageWithCaption}[2]{%
   \begin{figure}[H]
       \centering
+      % This limits the max width, while not letting smaller images
+      % scale past their width.
       \settowidth{\imgwidth}{\includegraphics{#1}}%
       \setlength{\imgwidth}{\minof{\imgwidth}{\textwidth}}%
       \includegraphics[width=\imgwidth,keepaspectratio]{#1}
       \caption{#2}\label{fig:#1}
-      \centering
   \end{figure}}
 
-\newcommand\refFigure[1]{Fig. \ref{fig:#1}}
 
-\usepackage{bashful}
+\newcommand\refFigure[1]{fig. \ref{fig:#1}}
 
+% See the python script.
+% It inserts the minted listing text.
+% I couldn't find how to extract the output of a script,
+% so just doing this nonsense instead, where it types its
+% output already formatted for minted use.
+% Good thing I don't use more settings for that command, am I right or am I right?
 \newcommand\inputMintedSegment[2]{%
     \input{|python3 findSegment.py #1 #2}%
 }
+
+% Redefine \appendix to do some more stuff.
+\newtotcounter{num_appendices}
+\def\oldappendix{} \let\oldappendix=\appendix{}
+\def\appendix{%
+    \oldappendix%
+    \renewcommand{\thesection}{\arabic{section}.}%
+    \titleformat{\section}[block]{\normalfont\normalsize\bfseries\filcenter}{Anexa \thesection~}{0pt}{}%
+    %
+    % Every section on new page
+    % \newcommand{\sectionbreak}{\clearpage}
+    %
+    % Since we've got just a single chapter in the appedices,
+    % but which is also the name of the Appendix chapter, it should be omitted.
+    % Makes little sense, but ok I guess.
+    \setcounter{chapter}{1}%
+    %
+    \def\oldsection{} \let\oldsection=\section{}%
+    \def\section{\stepcounter{num_appendices}\oldsection}%
+}
+
+\newcommand{\anexeCount}{\total{num_appendices}}
