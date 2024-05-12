@@ -16,6 +16,7 @@
 \newcommand{\conducatorNume}{Pereteatcu}
 \newcommand{\conducatorPrenume}{Sergiu}
 \newcommand{\github}{\url{https://github.com/AntonC9018/thesis-png}}
+\newcommand{\chapterCount}{3}
 
 \begin{document}
 
@@ -25,7 +26,7 @@
 \tableofcontents
 
 \clearpage
-\unnumberedChapter{Lista Abrevierelor}
+\unnumberedChapter{Lista Abrevierilor}
 \begin{acronym}[JPEG]
     \acro{GUI}{Graphical User Interface}
     \acro{PNG}{Portable Network Graphics}
@@ -41,8 +42,6 @@
     \acro{RGB}{Red Green Blue}
     \acro{2D}{2-dimensional}
     \acro{3D}{3-dimensional}
-    \acro{RLE}{Run Length Encoding}
-    \acro{BMP}{Bitmap}
 \end{acronym}
 
 
@@ -52,7 +51,7 @@
 \textbf{la teza de \thesisType{} ``\thesisTitle'', a studentului \authorName{}, grupa \uniGroupName{}, programul de studii \programulDeStudii.}
 
 \textbf{Structura tezei.}
-Teza constă din: Introducere, \total{num_chapters} capitole, Concluzii generale și recomandări, Bibliografie \bibliographyEntryCount{} titluri.
+Teza constă din: Introducere, \chapterCount{} capitole, Concluzii generale și recomandări, Bibliografie \bibliographyEntryCount{} titluri.
 Textul de bază cuprinde \usefulPageCount{} de pagini și \anexeCount{} anexe.
 
 \textbf{Cuvinte-cheie:}
@@ -60,7 +59,7 @@ Textul de bază cuprinde \usefulPageCount{} de pagini și \anexeCount{} anexe.
 
 \textbf{Actualitatea.}
 
-\acs{PNG} este un format de imagini folosit pe scară largă pe Internet,
+\acs{PNG} este un format de imagini folosit pe scară largă în Internet,
 în dezoltarea aplicațiilor grafice, precum și în alte diverse domenii.
 Înțelegerea structurii formatului poate fi utilă pentru a-l putea extinde, 
 a-l utiliza într-un mod mai eficient și acesta poate servi drept referință pentru 
@@ -68,8 +67,8 @@ crearea unor formaturi noi.
 
 \textbf{Scopul și obiectivele cercetării}.
 
-Lucrarea de față are scopul educațional -- să facă cunoștința cu structura formatului \acs{PNG}.
-Obiectivele tezei constă în explorarea formatului creând o aplicație grafică de vizualizare a formatului.
+Lucrarea dată are un scop educațional -- informarea despre structura formatului \acs{PNG}.
+Obiectivele tezei constau în explorarea formatului, creând o aplicație grafică de vizualizare a formatului.
 
 Scopul tezei explicit \textit{nu constă} în afișarea imaginii pe ecran,
 nici nu în generarea unei imagini în formatul PNG,
@@ -91,12 +90,12 @@ Rezultatele obținute au fost raportate la \textbf{\conferencesList}\cite{self}.
 \clearpage
 \unnumberedChapter{Annotation}
 
-\textbf{of the thesis \thesisType ``\thesisTitleEng'' of the student \authorName{}, group \uniGroupName, study program \programulDeStudii.}
+\textbf{of the \thesisType{} thesis  ``\thesisTitleEng'' of the student \authorName{}, group \uniGroupName{}, \programulDeStudii{} study program.}
 
 \textbf{The structure of the thesis}
-The thesis is made up of: Introduction, \total{num_chapters} chapters,
+The thesis is made up of: Introduction, \chapterCount{} chapters,
 General conclusions and recommendations, Bibliography of \bibliographyEntryCount{} titles.
-Base text takes up \usefulPageCount{} pages and has \anexeCount appendicies.
+Base text takes up \usefulPageCount{} pages and has \anexeCount{} appendicies.
 
 \textbf{Keywords:}
 \textit{\acs{PNG}, Zlib, DEFLATE, file format, syntax tree, visualization application.}
@@ -112,7 +111,7 @@ The format's structure can also serve as a reference for designing new file form
 \textbf{Purpose and objectives of this research}
 
 The scientific work has an educational purpose
--- it aims introduce the structure of the \acs{PNG} file format.
+-- it aims to inform on the structure of the \acs{PNG} file format.
 The main objective of the thesis is the exploration of the file format
 through building of a graphical application designed for its visualization.
 
@@ -146,7 +145,7 @@ The obtained results were reported on \textbf{\conferencesList}\cite{self}.
 
 Formatul \ac{PNG} este utilizat pe scară largă în numeroase domenii, incluzând majoritatea aplicațiilor
 web, aplicații grafice care salvează sau încarcă imagini din fișiere, precum și în dezvoltarea de jocuri.
-\ac{PNG} este un format adaptiv și extensibil, având o structură băzată pe chunk-uri, versionate separat unul
+\ac{PNG} este un format adaptiv și extensibil, având o structură bazată pe chunk-uri, versionate separat unul
 de altul. Formatul include, de asemenea, mecanisme pentru asigurarea integrității datelor, precum
 octeții elementului \ac{CRC}.
 
@@ -171,7 +170,7 @@ a fost studiată din specificațiile acestora \cite{png_spec} \cite{zlib_spec} \
 Programul a fost implementat în limbajul de programare Zig \cite{zig} care a fost studiat din documentație.
 Pentru implementarea formatului DEFLATE ca referință a fost într-o măsură scăzută folosit codul librăriei uzlib \cite{gzip_impl}.
 Pentru a depana implementarea DEFLATE s-a mai folosit exemplul aplicării algoritmului DEFLATE și datele test de Google \cite{deflate_tests}.
-A fost folosită librăria Raylib \cite{raylib} drept librăria grafică.
+A fost folosită librăria Raylib \cite{raylib} drept librărie grafică.
 
 Deoarece a fost luată abordarea explorativă la dezvoltarea aplicației,
 aproape n-au fost folosite referințe externe,
@@ -185,9 +184,9 @@ pentru verificarea corectitudinii întregului program,
 
 Cu toate că există mai multe librării \ac{PNG},
 scopul aplicației dezvoltate în contextul acestei teze diferă de scopul librăriilor \ac{PNG} obișnuite.
-Scopul tezei nu este reprezentarea unei imagini pe ecran ca la alte librării,
+Scopul tezei nu constă nici în reprezentarea unei imagini pe ecran ca la alte librării,
+nici în afișarea unei imagini pe ecran,
 ci în explorarea formatului de fișier și construirea arborelui sintactic.
-Teza explicit nu are scopul de a afișa imaginea pe ecran.
 
 \textbf{Valoarea aplicativă.}
 
@@ -231,7 +230,7 @@ Acest capitol include și programarea interfeței grafice.
 
 \chapter{Introducerea fundalului informativ}\label{intro_chapter_title}
 
-\section{Descriere la nivel înalt a formatului de fișier \acs{PNG}}
+\section{Descriere generală a formatului de fișier \acs{PNG}}
 
 \subsection{Introducere}
 
@@ -351,7 +350,7 @@ PNG este conceput să fie:
 \end{itemize}
 
 Datorită capacităților enumerate mai sus, formatul \ac{PNG} este folosit
-pe larg pentru imagini pe Internet, însă este o alegere bună și în artă digitală,
+pe larg pentru imagini în Internet, însă este o alegere bună și în artă digitală,
 și în dezvoltarea jocurilor.
 
 
@@ -2153,7 +2152,7 @@ S-a discutat integrarea librării grafice Raylib și cum a fost proiectată și 
 cu exemple concrete ale elementelor din interfață.
 
 
-\unnumberedChapter{Concluziile Finale și Recomandările}
+\unnumberedChapter{Concluzii Finale și Recomandările}
 
 În această lucrare a fost discutată importanța cunoașterii formatului \ac{PNG}.
 În urma studierii formatului a devenit clar că \ac{PNG} nu este pur și simplu un format de imagine,
@@ -2165,13 +2164,12 @@ Formatul de comprimare Zlib folosit în \ac{PNG},
 cu toate că nu este însuși folosit pe scară largă în aplicații,
 folisește subformatul DEFLATE care este o parte esențială a mai multor alți algoritmi.
 DEFLATE folosește arbori Huffman care pot fi utile pentru mai multe aplicații din diferite domenii
-care necesită un fel de codificare.
-Ideea de \ac{RLE} folosită în DEFLATE tot este folosită pe scară largă în, de exemplu, formatul \ac{BMP}.
+unde e necesar un fel de codificare.
 
 A fost discutat procesul de dezvoltare unei aplicații ce ține de folosire a unui arbore sintactic
 pentru a putea vizualiza grafic niște date despre \ac{PNG}.
 Folosirea unui arbore a fost argumentată, iar implementarea imbunătățită în mod gradual și discutată pe larg.
-Au fost disctutate modulele intermediare \texttt{pipelines} și modulul parserului care
+Au fost discutate modulele intermediare \texttt{pipelines} și modulul parserului care
 se folosesc pentru a realiza derivarea arborelui sintactic.
 
 Toate codurile sursă, inclusiv codurile de program și textul lucrării

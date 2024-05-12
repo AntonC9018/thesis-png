@@ -112,10 +112,6 @@
 \def\oldbibitem{} \let\oldbibitem=\bibitem{}
 \def\bibitem{\stepcounter{citnum}\oldbibitem}
 
-\newtotcounter{num_chapters}
-\def\oldchapter{} \let\oldchapter=\chapter{}
-\def\chapter{\stepcounter{num_chapters}\oldchapter}
-
 % Thank you to @paante on LaTeX Discord.
 % Makes it possible to mark pages and then do math on them.
 % usage: \markpage{key}
@@ -159,7 +155,7 @@
   % this evaluates a math expression, which is `end - begin`
   \the\numexpr\getpagemark{usefulStuffEnd}-\getpagemark{usefulStuffBegin}\relax}
 
-\newcommand\chapterConclusionSection[1]{\section{Concluziile la capitol \arabic{chapter}}}
+\newcommand\chapterConclusionSection[1]{\section{Concluzii la capitol \arabic{chapter}}}
 \newcommand{\bibliographyEntryCount}{\total{citnum}}
 
 % Some math stuff? I don't even know.
