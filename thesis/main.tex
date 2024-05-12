@@ -15,6 +15,7 @@
 \newcommand{\conferencesList}{Conferința Studențească, Editia XXVIII-a, \year}
 \newcommand{\conducatorNume}{Pereteatcu}
 \newcommand{\conducatorPrenume}{Sergiu}
+\newcommand{\github}{\url{https://github.com/AntonC9018/thesis-png}}
 
 \begin{document}
 
@@ -25,7 +26,7 @@
 
 \clearpage
 \unnumberedChapter{Lista Abrevierelor}
-\begin{acronym}[RAII]
+\begin{acronym}[JPEG]
     \acro{GUI}{Graphical User Interface}
     \acro{PNG}{Portable Network Graphics}
     \acro{I/O}{Input/Output}
@@ -40,13 +41,15 @@
     \acro{RGB}{Red Green Blue}
     \acro{2D}{2-dimensional}
     \acro{3D}{3-dimensional}
+    \acro{RLE}{Run Length Encoding}
+    \acro{BMP}{Bitmap}
 \end{acronym}
 
 
 \clearpage
 \unnumberedChapter{Adnotare}
 
-\textbf{la teza de \thesisType ``\thesisTitle'', a studentului \authorName{}, grupa \uniGroupName{}, programul de studii \programulDeStudii.}
+\textbf{la teza de \thesisType{} ``\thesisTitle'', a studentului \authorName{}, grupa \uniGroupName{}, programul de studii \programulDeStudii.}
 
 \textbf{Structura tezei.}
 Teza constă din: Introducere, \total{num_chapters} capitole, Concluzii generale și recomandări, Bibliografie \bibliographyEntryCount{} titluri.
@@ -81,9 +84,9 @@ focusând anume la structura formatului.
 
 \textbf{Valoarea aplicativă.} Ca rezultat a fost implementată o aplicație care poate fi folosită pentru vizualizare a formatului \acs{PNG}.
 
-Toate codurile sursă a proiectului pot fi accesate pe GitHub după următorul link: \url{https://github.com/AntonC9018/thesis-png}.
+Toate codurile sursă a proiectului pot fi accesate pe GitHub după următorul link: \github.
 
-Rezultatele obținute au fost raportate la \textbf{\conferencesList}.
+Rezultatele obținute au fost raportate la \textbf{\conferencesList}\cite{self}.
 
 \clearpage
 \unnumberedChapter{Annotation}
@@ -129,7 +132,7 @@ As a result of the work, a graphical application has been implemented,
 which can be used to visualize the \acs{PNG} file format.
 
 The entire source code can be obtained by accessing the GitHub repository
-by the following URL: \url{https://github.com/AntonC9018/thesis-png}. 
+by the following URL: \github. 
 
 The obtained results were reported on \textbf{\conferencesList}\cite{self}.
 
@@ -2152,6 +2155,27 @@ cu exemple concrete ale elementelor din interfață.
 
 \unnumberedChapter{Concluziile Finale și Recomandările}
 
+În această lucrare a fost discutată importanța cunoașterii formatului \ac{PNG}.
+În urma studierii formatului a devenit clar că \ac{PNG} nu este pur și simplu un format de imagine,
+dar este proiectat în așa fel ca să permite extinderea, folosirea liberă și
+capacitățile neaccesibile în trecut în alte formate.
+\ac{PNG} este așa cum este dintr-un motiv.
+
+Formatul de comprimare Zlib folosit în \ac{PNG},
+cu toate că nu este însuși folosit pe scară largă în aplicații,
+folisește subformatul DEFLATE care este o parte esențială a mai multor alți algoritmi.
+DEFLATE folosește arbori Huffman care pot fi utile pentru mai multe aplicații din diferite domenii
+care necesită un fel de codificare.
+Ideea de \ac{RLE} folosită în DEFLATE tot este folosită pe scară largă în, de exemplu, formatul \ac{BMP}.
+
+A fost discutat procesul de dezvoltare unei aplicații ce ține de folosire a unui arbore sintactic
+pentru a putea vizualiza grafic niște date despre \ac{PNG}.
+Folosirea unui arbore a fost argumentată, iar implementarea imbunătățită în mod gradual și discutată pe larg.
+Au fost disctutate modulele intermediare \texttt{pipelines} și modulul parserului care
+se folosesc pentru a realiza derivarea arborelui sintactic.
+
+Toate codurile sursă, inclusiv codurile de program și textul lucrării
+în forma înainte de randare pot fi accesate pe GitHub după următorul link: \github.
 
 Rezultatele obținute au fost raportate la \textbf{\conferencesList}\cite{self}.
 
@@ -2160,7 +2184,7 @@ Rezultatele obținute au fost raportate la \textbf{\conferencesList}\cite{self}.
 
 
 % Bibliography
-\bibliographystyle{plain}
+\bibliographystyle{ieeetr}
 \bibliography{bibliography}
 \addcontentsline{toc}{chapter}{\bibname}
 
