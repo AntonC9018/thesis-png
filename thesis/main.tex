@@ -575,9 +575,9 @@ programul va da eroarea (ar ``panica'') cu stack trace-ul execuției.
 să fie notată explicit în cod, altfel compilatorul nu-l va accepta.
 
 Un crash este mai bun decât scrierea sau citirea în sau din memorie invalidă,
-iar accesarea memoriei invalide este mai bună decât niște rezultate neașteptate
-în urma corupției memoriei.
-Zig se străduiește să detecteze erorile la acea primă etapă.
+ori și mai rău, niște rezultate neașteptate în urma corupției memoriei.
+Zig se străduiește să detecteze erorile la etapa înainte
+de scriere în memorie invalidă, detectând eroarea care urmează să provoace aceasta.
 
 \subsection{Perfecționarea continuă}
 
@@ -587,7 +587,7 @@ C are probleme care nu pot fi rezolvate din cauza că C nu se mai poate schimba 
 iar adăugarea de așa verificări în tipul rulării numaidecât implică
 o schimbare semnificativă a limbajului.
 
-Abordarea limbajului Zig este că își permite schimbarea,
+Abordarea limbajului Zig este că acesta își permite schimbarea,
 în orice mod, deoarece nu are versiunea 1.0, deci oficial se declară pe sine ca nestabil.
 Deci dacă o persoană decide să programeze în Zig,
 trebuie să fie gata să accepte schimbări dramatice ale limbajului.
@@ -598,9 +598,9 @@ Zig are mai multe capacități minunate, însă nu va ajunge spațiu pentru a le
 
 \subsection{Concluzii despre Zig}
 
-Luând în considerare toate aceastea, s-a decis că limbajul Zig ar fi ideal pentru astfel de aplicație.
-Partea majoră a aplicației lucrează la nivel foarte scăzut,
-citind octeții sau chiar biții din fluxul de date.
+Luând în considerare toate aceastea, s-a decis că limbajul Zig ar fi bun pentru astfel de aplicație.
+Partea majoră a aplicației funcționează la nivel foarte scăzut,
+citind octeți sau chiar biți din fluxul de date.
 Capacitățile de erori ca valori validate în timpul compilării,
 enumerații pentru stări și pentru tipurile chunk-urilor,
 chiar unele capacități de metaprogramare puternice dar intuitive ale limbajului,
@@ -611,15 +611,14 @@ au ajutat considerabil în dezvoltare.
 
 În acest capitol au fost descrise formatul \ac{PNG} și
 formatul de comprimare Zlib care este folosit în formatul \ac{PNG}.
-A fost descrisă structura formatului \ac{PNG}: ce sunt chunk-urile,
-de ce acestea sunt folosite, ce tipuri există, câmpurile principale, etc.
+A fost descrisă structura formatului \ac{PNG}: ce sunt chunk-uri,
+de ce acestea se folosesc, ce tipuri există, câmpurile principale, etc.
 
 S-au mai discutat princiile de înterlănțare și comprimare.
-Cu părere de rău, acestea nu se vor include în interfață, însă sunt niște părți importante ale formatului.
+Cu părere de rău, acestea nu se vor include în interfață, însă sunt niște concepte importante ale formatului.
 
-Echiparea cu aceste cunoștințe,
-dau posibilitatea de abordare a proiectării
-și programării aplicației orientate spre lucrul cu aceste formaturi.
+Echiparea cu aceste cunoștințe dă posibilitatea de a aborda proiectarea
+și programarea aplicației orientate spre lucrul cu aceste formaturi.
 
 
 \chapter{Proiectarea aplicației de vizualizare a formatului \acs{PNG}}\label{architecture_chapter_title}
@@ -699,11 +698,6 @@ se va include în aplicație un editor hexazecimal.
 Acesta va prezenta valorile fiecărui octet și
 va oferi reprezentări vizuale pentru a facilita distingerea diferitelor chunk-uri.
 
-La selectarea unui chunk, vor fi afișate informații detaliate despre acesta,
-incluzând numele, descrierea și lungimea.
-Este crucial ca fiecare chunk să fie prezentat cu o structură specifică,
-pentru a oferi o înțelegere completă a compoziției și funcționalității fișierelor \ac{PNG}.
-
 \subsection{Imaginea inițială a implementării}
 
 În dezvoltarea software, este adesea practic să se abordeze problemele pe măsură ce apar.
@@ -752,7 +746,7 @@ să fie împărțită în mai multe module esențiale:
   care va folosi arborele sintactic al fișierului pentru
   a prezenta utilizatorului informații într-o formă atractivă și interactivă.
   Modulul va avea control asupra segmentelor din fișier care sunt vizualizate,
-  permitând utilizatorului să actualizeze aceste segmente
+  permițând utilizatorului să actualizeze aceste segmente
   în funcție de chunk-urile afișate în interfață.
 \end{itemize}
 
@@ -818,12 +812,12 @@ reprezentarea informațiilor despre câmpul selectat din fișier, și drag-and-d
 
 \subsection{Zlib în \ac{PNG}}
 
-Pentru a înțelege problema mai bine, ar fi benefic să se înțeleagă cum funcționează algoritmul Zlib.
-În plus, deoarece algorimul este parte din standardul \ac{PNG},
+Pentru a înțelege problema mai bine, ar fi benefic să înțeleagă cum funcționează algoritmul Zlib.
+În plus, deoarece algorimul face parte din standardul \ac{PNG},
 și structura acestuia poate fi decodificată și analizată,
-ar fi benefic să se realizeze un fel de parser special pentru Zlib pentru a putea vizualiza nodurile Zlib
+ar fi benefic să realizeze un fel de parser special pentru Zlib pentru a putea vizualiza nodurile Zlib
 în mod bogat în interfață.
-Din această cauză, s-a decis să se realizeze implementarea unui decoder Zlib de la zero.
+Din această cauză, s-a decis să realizeze implementarea unui decodor Zlib de la zero.
 
 Structura parserului menționată până acum poate fi aplicată și pentru formatul Zlib.
 Singura diferență este că formatul Zlib este bazat pe biți, dar nu pe octeți.
@@ -831,7 +825,7 @@ Singura diferență este că formatul Zlib este bazat pe biți, dar nu pe octeț
 componenta \texttt{pipelines} care realizează fluxul de date nu va trebui să fie modificată.
 Starea parserului Zlib poate să țină cont de poziția pe biți ca o variabilă privată, deoarece
 acest concept nu se revarsă la procesarea \ac{PNG}.
-Însă, poziția pe biți ar trebuie să fie utilă pentru vizualizare a formatului.
+Însă, poziția pe biți ar trebui să fie utilă pentru a vizualiza formatul.
 
 În structura finală a aplicației, poziția pe biți a componentelor din fluxul de date a fost sălvată la crearea nodurilor.
 
@@ -847,13 +841,13 @@ nu este atât de important sau interesant din punct de vedere a formatului pentr
 
 Problema legată de testare este faptul că, deoarece programul este orientat
 la decomprimare și nici nu realizează un compresor,
-este dificit să se genereze niște date pentru teste.
+este dificit să genereze niște date pentru teste.
 
-Sunt două variante care ar putea fi folosie:
+Sunt două variante care ar putea fi folosite:
 \begin{enumerate}
     \item
         Se poate folosi un compresor existent, adică o altă librarie, pentru a genera datele.
-        Minusul acestei abordări este faptul că codul de generare a datelor atunci va exista
+        Dezavantajul acestei abordări este faptul că codul de generare a datelor atunci va exista
         ca un modul independent și nu poate fi ușor folosită abordarea "kitchen sink", adică
         compresia dintr-o structură de date, și urmând-o decompresia, după ce să se verifice
         dacă rezultatul este echivalent cu structura de date originală.
@@ -862,8 +856,8 @@ Sunt două variante care ar putea fi folosie:
     \item
         Se poate găsi niște date de test, și a le folosi pentru a face testarea
         la întregul sistem, cu diferite intrări, fără a înțelege toate nuanțele ale datelor de intrare.
-        Adică, dacă se găsește o eroare pentru un samplu corect -- testul se eșuează,
-        și invers, pentru un samplu incorect decompresia trebuie să se eșueze.
+        Adică, dacă se găsește o eroare pentru un samplu corect -- testul eșuează,
+        și invers, pentru un samplu incorect decompresia trebuie să eșueze.
         Una din referințe \cite{gzip_impl} folosește așa abordare pentru teste negative,
         însă are datele pentru formatul gzip, dar nu zlib, din care cauză acestea nu au putut fi folosite.
 \end{enumerate}
@@ -878,8 +872,8 @@ deoarece acesta numaidecât folosește Zlib pentru chunk-urile \texttt{IDAT} car
 În plus, decodificarea deja este verificată conform câmpului de suma de control Adler32,
 care în cazul dacă corespunde valorii acestei sume de control calculate pe baza biților decodificați,
 indică probabilitatea înaltă că fișierul a fost decodificat corect. 
-De notat că probabilitatea este înaltă, dar nu categorică din cazul
-că aceasta este într-un fel o funcție hash care nu dau garanții
+De notat că probabilitatea este înaltă, dar nu categorică din cauza
+că aceasta este într-un fel o funcție hash care nu dă garanții
 exacte față de integritate, ci doar o certitudine înaltă.
 
 Mai târziu au fost găsite datele test pentru algoritmul DEFLATE,
@@ -902,7 +896,7 @@ iar modulele de bază pot fi turnate în ceva mai diferit sau mai specializat.
 
 În continuare, se va prezenta implementarea unui decodor \ac{PNG} care va fi folosit pentru
 a vizualiza formatul \ac{PNG} printr-o aplicație \ac{GUI}.
-Decoderul va fi implementat în limbajul de programare Zig\cite{zig}
+Decodorul va fi implementat în limbajul de programare Zig\cite{zig}
 după specificația \ac{PNG}, versiunea 1.2\cite{png_spec}.
 Interfața grafică va fi implementată folosind Raylib\cite{raylib}, tot în Zig.
 
@@ -919,7 +913,7 @@ Experiența anterioară cu biblioteca \texttt{System.IO.Pipelines}\cite{system_i
 din C\# a relevat mai multe avantaje în utilizarea unei astfel de abordări:
 \begin{itemize}
   \item
-  Implementarea corectă core să țină cont de toate cazurile-limită
+  Implementarea corectă care să țină cont de toate cazurile-limită
   este facilitată de gestionarea complexității de către
   bibliotecă, cum ar fi alocarea și ștergerea buferelor,
   sau înfășurarea datelor pe mai multe segmente consecutive.
@@ -943,8 +937,7 @@ din C\# a relevat mai multe avantaje în utilizarea unei astfel de abordări:
 \end{itemize}
 
 Un prototip al unei biblioteci similare în Zig a fost dezvoltat,
-omitând însă separarea modulelor de citire și scriere pentru a reduce complexitatea.
-Această parte poate fi adăugată ulterior, nefiind esențială pentru un \ac{MVP}.
+omitând însă separarea modulelor de citire și de scriere pentru a reduce complexitatea.
 
 \subsection{Principiile de funcționare}
 
@@ -972,7 +965,8 @@ Librăria folosește următoarele idei de bază:
         Aceasta poate fi ștearsă din memorie, sau păstrată pe viitor, în dependența de implementare.
 \end{itemize}
 
-Codul va arăta aproximativ în următorul fel:
+Codul care folosește librăria pentru a realiza procesarea datelor
+va arăta aproximativ în următorul fel:
 
 \begin{minted}{zig}
 var reader = .{};
@@ -986,7 +980,7 @@ while (true)
     {
         processSequence(&processingState, sequence) catch |err|
         {
-            // A fost sugerată continuarea,
+            // A fost solicitată continuarea,
             // secvența era consumată până la sfârșit.
             if (err == error.NotEnoughBytes)
             {
@@ -1043,7 +1037,7 @@ Deci pentru a trece prin toți octeții unei secvențe, trebuie să:
         Treacă întregimea primului segment, începând la ofset-ul păstrat în poziția de început;
     \item
         Treacă restul segmentelor pline.
-        Adică se urmăresc pointerii segmentelor, până când se ajunge la ultimul segment,
+        Adică se urmăresc pointerii segmentelor, până când ajunge la ultimul segment,
         pointerul la care este păstrat în poziția de sfârșit.
     \item
         Ultimul segment este citit nu în întregime, dar până la ofset-ul,
@@ -1148,10 +1142,10 @@ La implementarea inițială a prototipului s-a observat că erorile pot fi semna
 la momente diferite de detectare a lor și unele din ele pot avea niște date asociate
 care trebuie să fie accesibile de utilizator, de dorit într-un mod consistent.
 
-De exemplu, când se citește un număr întreg de 4 octeți din fluxul de intrare,
+De exemplu, când se citește un număr întreg pe 4 octeți din fluxul de intrare,
 avem 3 posibilități diferite de implementare a acestei idei.
 Acestea implică transferul diferit al contextului de eroare și
-urmează în poziții diferite înregistrate ale secvenței curente de intrare.
+rezultă în poziții diferite înregistrate ale secvenței curente de intrare.
 
 \begin{minted}{zig}
 pub fn impl(context: *Context) !void {
@@ -1197,7 +1191,7 @@ pub fn callSite() {
 }
 \end{minted}
 
-O altă variantă ar fi putea următoarea, unde octeții citiți
+O altă variantă ar putea fi următoarea, unde octeții citiți
 se consumă numai dacă nu s-a observat o eroare.
 
 \begin{minted}{zig}
@@ -1366,7 +1360,7 @@ Aceste stări sunt urmate unul de altul, adică valorile numerice
 ale acestora pot fi derivate din valoarea trecută, de exemplu 
 $ S_{date} = S_{lungime} + 1. $
 Aceasta poate fi implementată în mod cel mai simplu can un \texttt{enum}
-în orice limbaj de programare care le suportă, inclusiv Zig.
+în orice limbaj de programare care le sprijină, inclusiv Zig.
 
 Un lucru asemănător se întâmplă la parsarea datelor unui chunk care are un format fix.
 De exemplu, chunk-ul \texttt{IHDR} are un set de câmpuri fix, care sunt amplasate unul după altul.
@@ -1375,7 +1369,7 @@ De exemplu, chunk-ul \texttt{IHDR} are un set de câmpuri fix, care sunt amplasa
 de exemplu, dimensiunile nu pot fi zero, iar \texttt{BitDepth} poate lua numai un set specific de valori
 și acesta depinde de valoarea lui \texttt{ColorType}.
 
-Încă un element este faptul că valorile ale lor, de exemplu, lungimea, tipul chunk-ului,
+Încă un element este faptul că valorile lor, de exemplu, lungimea, tipul chunk-ului,
 lățimea și înălțimea, precum și alte valorile parsate se dorește a fi păstrate undeva,
 ca câmpuri ale unei structuri ce descrie nodul respectiv.
 În structura finală a aplicației, aceste valori au fost amplasate în noduri ale unui arbore sintactic.
@@ -1447,10 +1441,10 @@ ar fi complicată și ar reduce semnificativ meritul acestei abordări.
 
 \subsection{Descrierea problemei de ``sărituri''}
 
-Posibilitatea de a putea păstra informațiile despre originea fiecărui "nod",
+Posibilitatea de a putea păstra informațiile despre originea fiecărui ``nod'',
 adică poziția a acestuia absolută din fișier,
 precum și posibilitatea de a trata fluxul de date ca unul linear nu sunt direct compatibile
-atunci când fluxul de date poate "sări", adică atunci când pozițiile absolute
+atunci când fluxul de date poate ``sări'', adică atunci când pozițiile absolute
 între diferitele segmente nu sunt consecutive.
 Deoarece unul singur nod poate să se afle la marginea a două segmente, iar potențial și mai mult ca două,
 ideea că locația fiecărui nod poate fi descrisă de locația lui absolută în fișier și
@@ -1469,22 +1463,24 @@ De fapt, este posibilă situația ca biții ultimului octet să rămână neciti
 Deoarece arborele Huffman din specificația Zlib permit lungimea maximă de 16 biți pentru coduri,
 iar programul trebuie să considere aceste coduri ca noduri separate,
 și acestea pot să se afle la ofset-uri de biți nealiniate cu granițele octeților,
-în cel mai rău caz se poate întâmpla ca unul singur nod să se afle în 3 chunk-uri în același timp.
+în cel mai rău caz se poate întâmpla ca un singur nod să se afle în 3 chunk-uri în același timp.
 De exemplu, primul bit poate să se afle la sfârșitul primului chunk,
-următoarele 8 biți pot să se afle în întregul următorul chunk, dacă acesta are lungimea 1, ce este posibil,
+următorii 8 biți pot să se afle în întregul următorul chunk, dacă acesta are lungimea 1, ce este posibil,
 și atunci se va termina la începutul celui de-al treilea chunk.
+
+Încă merită de notat că specificația \ac{PNG} permite ca chunk-ul \texttt{IDAT} să fie gol.
 
 \subsection{Soluționarea problemei}
 
-Pentru a păstra capacitatea de a putea procesa datele folosind secvențele,
+Pentru a păstra capacitatea de a putea procesa datele folosind secvențe,
 de părca acestea erau consecutive, ar trebui să includă acele părți trecute necitite până la capăt
 la începutul secvenței, când se realizează procesarea fluxului Zlib.
 
 Prima problema era că secvența trebuia să includă doar segmentele din manager de bufer principal,
 folosind de către cititor.
-De fapt, segmentele erau păstrate ca index-urile în tabloul de segmente, cu un ofset de bază.
+De fapt, segmentele erau păstrate ca index-uri în tabloul de segmente, cu un ofset de bază.
 Ca să devină posibil de inclus niște segmente dinafara buferilor principali la începutul secvenței,
-modul acesta de adresare a fost schimbat la o listă înlănțuită alcătuit din pointeri.
+modul acesta de adresare a fost schimbat la o listă înlănțuită alcătuită din pointeri.
 Astfel, este posibil să seteze segmentul adăugator ca primul segment din secvență, urmându-l cu
 primul segment din secvența inițială, pentru a crea secvența nouă.
 
@@ -1497,22 +1493,25 @@ s-a hotărât să-i miște buferul de început, aplicând ofsetul.
 Această soluție nu se simte curată.
 Sunt alte abordări puțin mai complicate, dar care potențial vor face implementarea arborelui mai ușoară.
 Deoarece acele segmente de început la moment sunt temporare,
-nodurile din arbore nu pot să se refere la acestea, iar pozițiile din acestea pot să nu existe în buferi la momentul curent.
+nodurile din arbore nu pot să refere la acestea, iar pozițiile din acestea pot să nu existe în buferi la momentul curent.
+Din această cauză, când se face procesare a secvenței, implementarea trebuie să fie atentă
+să nu le permite să ajungă la noduri.
+Aceasta a fost realizat prin înscrierea pozițiilor în noduri înainte de modificare a secvenței.
 
-Poate o abordare mai bună ar fi ca acele segmente veche să se păstreze în lista buferilor,
-pentru a putea să se adreseze la acestea în secvențe,
+Poate o abordare mai bună ar fi ca acele segmente veche să fie păstrate în lista buferilor,
+pentru a putea adresa la acestea din secvențe,
 și ca segmentele din secvențe să-și poată specifica ofseturi,
 cu însele date păstrate separat, doar în buferi principali.
-Atunci ar trebui să se adauge și un fel de "comsumed position hint" la cititorul,
-ca el să păstreze segmentele care încă nu s-au citit până la capăt.
+Atunci ar trebui să adauge și un fel de ``comsumed position hint'' la cititor,
+ca el să păstreze segmentele care încă n-au fost procesate până la capăt.
 
 De fapt, așa idee se folosește și în biblioteca \texttt{System.IO.Pipelines} din C\#,
 însă la implementarea inițială nu era clar de ce ar fi necesară această abordare.
-După ce s-a întâlnit problema care se rezolvă folosind această idee, s-a clarificat și sensul ei.
+După ce s-a întâlnit problema care se rezolvă folosind această idee, s-a clarificat și scopul ei.
 
 Problema aceasta s-a rezolvat prin introducerea distincției între nodurile sintactice,
 care reprezintă bucățile concrete din fișier, și ale datelor fiecărui nod.
-Datele nu au o locație și pot fi partajate prin mai multe noduri.
+Datele nu au o locație și pot fi partajate de mai multe noduri.
 
 În plus, a fost realizată o legătură între nodurile care sunt într-un fel o singură parte a aceluiași obiect,
 printr-o listă semantică dublu înlănțuită, creată între noduri.
@@ -1523,297 +1522,8 @@ Aceasta poate fi util pentru a arăta utilizatorului de exemplu poziția nodului
 
 Interesant este și faptul că această structură poate fi expresată în mod general,
 nu doar pentru nodurile din acest chunk.
-Datorită acestui fapt implementarea funcționalităților legate cu această proprietate
-nu trebuie să țină cont de tipul de nod.
-
-\section{Arbore sintactic de fișier}
-
-\subsection{Problemele abordării inițiale}
-
-În implementarea inițială a sistemului, arhitectura a fost concepută în așa fel ca
-logica de creare a arborelui să fie cu totul independentă de logica citirii datelor din fluxul de date.
-S-a conceput ca transmiterea informațiilor despre nodul curent să fie la nivelul stării generale a citirii.
-Deci, citirea următorului element din flux de date ar presupune scrierea informațiilor interpretate
-într-un câmp prestabilit, în obiectul care reprezintă datele elementul
-din fișier care se citește la momentul dat (fie chunk-ul curent), păstrat în starea generală de citire.
-După aceasta, codul care construiește arborele sintactic ar detecta care tip de nod a fost citit la cea mai recentă etapă 
-(este o altă problemă, descrisă separat mai târziu),
-și, în dependența de stare în care se afla parserul înainte de cea mai recentă operație de citire,
-ar trebui să acceseze exact același câmp în care au fost copiate datele.
-
-Această abordare are mai multe probleme:
-\begin{enumerate}
-    \item
-        Câmpul în care au fost scrise informațiile trebuie să fie sincronizat
-        între codul de scriere și codul de citire.
-    \item
-        Determinarea din care anume câmp trebuie să fie citite datele
-        depinde de starea parserului înainte de ultima operație,
-        dar nu doar de tipul nodului produs.
-        De exemplu, nodurile generate din elementele formatului Zlib pot apărea
-        la mai multe chunk-uri \ac{PNG}, dar ar avea același tip de nod.
-    \item
-        Parserul poate produce doar un singur tip de nod la fiecare operație, deci trebuie
-        să fie oprit după fiecare operație de scriere a datelor într-un câmp.
-        Mai mult ca aceasta, parserul nu poate să treacă la următoarea stare imediat,
-        deoarece aceasta ar putea elimina unele informații necesare pentru a crea următorul nod.
-\end{enumerate}
-
-Următoarea problemă este problema detectării tipului curent de nod.
-Deoarece arhitectura sistemului a fost concepută în așa fel ca parserul să nu cunoască despre tipuri de noduri,
-nu aceste informații nu pot fi transmise direct din parser la codul care folosește parserul pentru
-a construi arborele sintactic.
-Deci, aceste informații trebuie să fie derivate în mod dinamic pe partea
-care intepretează informația primită de la parser.
-Pentru acest lucru, trebuie să fie posibil de detectat pentru ce stare au fost citite informații
-la ultima invocare, sau cel puțin să fie creat nodul înainte de a realiza invocarea.
-După invocare, trebuie să se stabilească care noduri pot fi umplute cu informații,
-și dacă trebuie să se creeze noduri noi.
-Sistemul de gestionare a acestei informații devine destul de complicat,
-și necesită ca codul care construiește arborele să cunoască despre semnificațiile stărilor parserului,
-deci are loc și duplicarea structurii stărilor.
-
-Următoarea problemă constă în ceea că faptul de creare
-și completarea nodurilor la diferite niveluri trebuie să fie înregistrata la nivel de parser.
-Într-un fel, la sfârșit parser-ul trebuie să îndeplinească operațiunile
-de bază necesare pentru a crea arborele, fără a folosi abstracția arborelui.
-
-Aceste probleme nu semnifică că abordarea nu poate fi folosită în practică,
-dar provoacă o imperativă de a căuta o soluție alternativă.
-Prima idee destul de evidentă este de schimbat puțin arhitectura,
-permițând parserului să cunoască unele concepte care țin de noduri sintactice,
-dar totuși să lase responsabilitatea de a aranja nodurile în memorie unui modul extern.
-
-Deci, ideea este ca parserul să genereze un flux de noduri,
-care să conțină informațiile interpretate,
-pe lângă intervalului citit din fișier pentru a genera aceste informații,
-și a adâncimii, pentru a putea determina la care nod părinte acesta trebuie să fie atașat.
-
-\subsection{Proiectarea abordării noi}
-
-În urmă analizei situației a devenit mai clară structura favorabilă de sistem:
-\begin{itemize}
-    \item 
-        Structura interfeței grafice rămâne neschimbată, 
-        deoarece aceasta nu este implicată în crearea arborelui.
-
-    \item
-        Modulul de gestionare a arborelui va fi separat de logica creării al arborelui.
-        De fapt, așa era și înainte, însă acum această parte de logică va fi mișcată mai aproape de parser.
-        
-    \item
-        Parserul acum va cunoaște despre existența nodurilor, însă nu va interacționa cu ele direct.
-        Adăugarea logicii de gestionare a stivei de noduri și crearea nodurilor în parser s-a părut încurcătoare,
-        din aceasta cauză s-a hotărât să fie creat încă un modul pentru această funcționalitatea.
-        Parserul va folosi acest modul, în loc de a interacționa cu stiva și cu nodurile direct.
-
-    \item
-        Acest modul va avea responsabilitatea de a crea nodurile atunci când crește adâncimea stivei în parser,
-        semnalizat de parser, și va comunica cu modulul de gestionare a nodurilor din arbore.
-        Interfața acestui modul reprezintă operațiunile cu nodul de pe un nivel concret de pe stivă, 
-        așadar a fost numită \texttt{LevelContext}.
-
-    \item
-        Interfața care permite interacționarea între \texttt{LevelContext}
-        și modulul care gestionează arborele a primit numele \texttt{NodeOperations}.
-        Acesta definește funcțiile de bază de creare și finalizare a nodurilor.
-\end{itemize}
-
-\texttt{NodeOperations} nu trebuie să fie numaidecât abstractizat în această cauză,
-adică nu numaidecât trebuie să fie folosit polimorfismul dinamic.
-Modulul \texttt{LevelContext} ar putea să se interfațeze direct cu modulul de gestionare a arborelui,
-folosind direct abstracțiile lui de noduri, identificare a nodurilor,
-modul de implementare a structurii părinte-fiu, etc.
-
-În loc de aceasta, s-a hotărât să introducă încă un nivel de abstracție pentru a evidenția această separare.
-A fost definit un set de abstracții pentru identificatori de nod,
-folosit ca niște valori opace pentru a adresa la noduri de către \texttt{LevelContext}.
-În mod similar, a fost creat un tabel virtual și o implementare a acestuia pe partea modulului de gestionare a arborelui.
-
-\section{Modulul de gestionare a arborelui sintactic}
-
-\subsection{Introducere}
-
-În continuare, pentru a simplifica explicațiile,
-modulul de gestionare a arborelui sintactic va fi adresat după numele \textbf{arbore}.
-
-În esența, arborele permite crearea nodurilor și accesarea lor în viitor.
-
-\subsection{Structura nodurilor}
-
-Fiecare nod se află pe o poziție concretă din fișier și poate avea noduri fii.
-
-Fiecare nod are un tip asociat care indică cărei componente din fișier acesta corespunde.
-De exemplu, un nod poate avea tipul \texttt{Datele din chunk = Antet},
-indicând că nodul corespunde la elementul din fișier cu chunk-ul de antet,
-și deoarece conține niște noduri fii, acesta nu este nodul terminal.
-Dintre nodurile fii ale acestui nod se va afla nodul cu tipul \texttt{Antet = Lățimea}
-care va fi asociat datele \texttt{Number = 32}.
-
-S-a hotărât că în loc de pointeri la noduri va fi folosit un index în tablou cu nodurile.
-În cazul dat, aceasta doar face faptul că nodurile sunt păstrate într-un singur tablou mai evident,
-și permite schimbarea mărimii acestui tablou.
-În plus, aceasta permite ca nodurile să fie adresate într-un mod stabil de către \texttt{LevelContext},
-în sensul că acesta poate păstra indicii ca identificatorii fără a-și face griji că nodurile pot fi mișcate în memorie.
-Există și alte avantaje ale acestei abordări care cu toate că nu necesar se aplică pentru aplicație în cauză,
-fac folosirea indicilor în loc de pointeri ca soluția implicită în mai multe cazuri.
-
-La dezvoltarea sistemului s-a considerat dacă păstrarea nodurilor după niveluri ar fi preferată
-peste păstrarea lor liniar într-un singur bloc de memorie.
-Ideea este că această proprietate ar putea fi folosită pentru a accelera procesul de căutare
-a drumului de noduri după poziția din fișier.
-Separarea nodurilor într-un alt mod mai conștient ar putea simplifica
-și operațiile de ștergere a nodurilor trecute.
-Dacă nodurile ar fi păstrate după mai multe tablouri,
-aceasta poate fi indicat printr-un segment de biți dintr-un identificator compus.
-Însă faptul este că operațiile de căutare sunt foarte rapide,
-chiar dacă sunt realizate folosind căutarea cea mai simplă liniară după fii,
-iar ștergerea nodurilor care au trecut peste zona de vizibilitate
-n-a fost implementată deoarece n-a fost considerată importantă pentru funcționarea aplicației.
-
-\subsection{Datele nodurilor}
-
-În mod asemănător, datele din noduri sunt păstrate după un index într-un tablou separat.
-Deoarece datele sunt reprezentate printr-o uniune etichetată (tagged union),
-ar fi prea risipitor ca acestea să fie păstrate într-un singur tablou.
-
-Problema este că fiecare instanță de o uniune etichetată are
-mărimea etichetei plus mărimea celui mai mare tip,
-chiar dacă tipul valorii păstrate în această valoare ocupă mai puțin spațiu.
-De exemplu, dacă este păstrat o valoare pe un octet,
-iar uniunea etichetată admite ca cel mai mare tip un \texttt{RGB16} pe 48 de biți,
-spațiul ocupat va fi mărimea etichetei (de exemplu, 8 biți) adăugată la mărimea acestui tip,
-deci 56 de biți (ignorând padding-ul).
-Prin urmare, este risipit foarte mult spațiu, dacă valorile sunt păstrate într-un singur tablou.
-
-O abordare mai eficientă este de a păstra fiecare tip de valoare într-un tablou,
-indicând în identificatorul cărui tablou corespunde datele după acel identificator.
-Atunci valorile de fiecare mărime posibilă pot fi păstrate într-un tablou propriu,
-ocupând doar acel număr de biți per fiecare valoare, 
-iar valoarea etichetată s-ar putea fi recreată la solicitare.
-Această abordare și a fost realizată în aplicație\ref{appendix:main__TaggedArrayList}
-
-S-ar mai putea folosi abordarea de a elimina eticheta din date,
-deducând tipul corect al etichetei din tipul nodului,
-însă s-a dorit ca aceste concepte totuși să fie mai independente pentru
-a simplifica adresarea la date și pentru a avea flexibilitatea de
-a putea păstra mai multe tipuri de date pentru același tip de nod.
-
-Unica constrângere care va fi adăugată dacă este folosită această abordare este că
-tipul inițial atribuit unui nod cu date nu poate fi schimbat pe urmă.
-Aceasta implică și faptul că dacă se dorește ca datele să fie păstrate în aceeași ordine ca și
-nodurile cu care acestea sunt asociate, ele trebuie să fie create împreună cu crearea nodului în cauză.
-Însă deoarece nodurile nu vor fi șterse în această aplicație,
-iar tipul de noduri nu trebuie să fie schimbat, aceasta nu este groaznic.
-
-
-\section{Implementarea Zlib}
-
-\subsection{Subformatul \texttt{DEFLATE}}
-
-Partea esențială a formatului Zlib este subformatul integrat \texttt{DEFLATE}.
-DEFLATE definește 3 mecanisme de comprimare: datele \textit{fără comprimare},
-și comprimarea folosind arbori Huffman, metoda \textit{fixă} și metoda \textit{dinamică}.
-
-Metoda fixă se implementează mai ușor, deoarece nu necesită constuirea unei structuri de date.
-Specificația dă niște tabele, folosind care este interpretat fluxul de biți.
-
-Metoda dinamică este mai complicată și necesită citirea arborelui Huffman
-folosit pentru a decomprima fluxului de biți în continuare.
-Este dificil de implementat codul corect pentru această metodă tocmai deoarece descrierea
-la nivel înalt al algoritmului nu corespunde direct la implementare.
-În special, proprietatea codurilor Huffman că oarecare cod nu poate apărea
-la începutul unui alt cod poate fi pe deplin apreciată numai atunci
-când persoana singură realizează o implementare.
-
-Fluxul de biți este procesat într-o secvență de simboluri,
-care reprezintă ori literale, adică singuri octeți decomprimați,
-ori referințe de o anumită lungime înapoi la octeții din bufer decomprimat,
-după anumită distanță de la poziția curentă.
-Aceste simboluri nu apar direct în fluxul de intrare,
-dar sunt codificate folosind un arbore Huffman.
-
-\subsection{Arbori Huffman pe scurt}
-
-Merită a fi menționată ideea arborilor Huffman fără a explica întregul algoritm adânc.
-
-Fiecărui simbol este atribuit un cod de o lungime în funcția frecvenței de apariție a acestui simbol
-în secvența de ieșire.
-Adică simbolurile care apar mai des sunt atribuite coduri mai mici,
-iar simboluri care sunt mai rare primesc și coduri pe mai mulți biți.
-Deoarece codurile apar unul după altul în fluxul de date codificate,
-fără nici un separator, secvența de început al unui cod trebuie să ajungă pentru a determina lungimea codului,
-deoarece aceasta este necesară pentru a putea citi numărul corect de biți și a realiza transformarea din cod în simbol.
-
-În caz general, această problemă este rezolvată construind un arbore Huffman general,
-însă codurile din algoritm DEFLATE sunt distribuite într-un mod special,
-astfel încât ele sunt atribuite la simboluri în mod consecutiv și consistent.
-Aceasta permite să simplifice codul care realizează decodificarea.
-
-În abordarea generală, se realizează o traversare a arborelui Huffman,
-care ia drumul stâng dacă în secvența apare un zerou, și drept, dacă apare o unitate.
-Algoritmul se termină atunci când ajunge la un nod terminal,
-semnificând că codul s-a potrivit simbolului din acest nod.
-Însă acea proprietate de consecutivitate,
-de fapt limitând structura arborilor admisibile,
-schimbă semnificativ acest proces.
-
-\subsection{Specificul implementării arborelui Huffman în metoda dinamică}
-
-Folosind proprietatea alocării consecutive a codurilor,
-implementarea arborilor dinamice Huffman în DEFLATE se simplifică în următorul mod:
-\begin{itemize}
-    \item 
-        Se stabilește un set de sloturi reprezentând lungimi diferite de secvențe.
-        Fiecare slot reprezintă faptul că simbolurile din acest slot
-        sunt codificate cu numărul de biți egal cu poziția secvențială a slotului, de la unu.
-    \item
-        Fiecare slot ține simbolurile care corespund codurilor, în mod consecutiv.
-        Deci, fiecare din ele ține un tablou de simboluri.
-    \item
-        Fiecare slot salvează și numărul de coduri cumulativ înaintea tuturor codurilor din sloturi precedente.
-        Deci, notând numărul acesta ca \( S_i \), iar numărul de noduri în fiecare slot ca \( N_i \),
-        se obține următoarea formulă recurentă:
-
-        \begin{gather*}
-            S_0 = 0 \\
-            S_i = S_{i - 1} + N_{i - 1}.
-        \end{gather*}
-\end{itemize}
-
-Datorită proprietății că fiecare cod este atribuit consecutiv,
-de la cea mai scurtă lungime a codului la cea mai lungă,
-procesul de decodificare poate fi sumarizat în următoarea secvență de cod:
-
-\begin{minted}{c}
-lungime = 1;
-while (lungime <= sloturi.lungime)
-{
-    cod = citeșteBiți(fluxDeBiți, lungime);
-    slot = sloturi[lungime];
-    if (cod < slot.s + slot.n)
-    {
-        mișcăFluxulDeBiți(fluxDeBiți, lungime);
-
-        index = cod - slot.s;
-        simbol = slot.simboluri[index];
-        return simbol;
-    }
-
-    lungime += 1;
-}
-error("Cod nevalid");
-\end{minted}
-
-A se vede codul întreg pe GitHub, sau în anexa \ref{appendix:huffman_tree}.
-
-Această idee era cea mai importantă de a-și da seama în procesul de realizare a algoritmului.
-Restul algoritmului nu merită atenție, deoarece implementarea nu a avut așa insight-uri.
-Merită de menționat doar faptul că arborele este prezentat nu direct,
-dar este și acesta codificat folosind o altă codificare Huffman,
-însă acelea sunt codificate tot folosind un set de coduri prestabilit
-ca la abordarea cu codurile fixe, deci este mai ușor de implementat.
-
+Datorită acestei idei de separare a nodurilor implementarea funcționalităților
+legate cu această proprietate nu trebuie să țină cont de tipul de nod.
 
 \section{Abstracțiile înăuntru modulului parserului}
 
@@ -1895,6 +1605,111 @@ Sunt excepții ca unele stări să nu fie asociate acțiuni concrete din parser,
 însă acestea de obicei nu conțin operații de citire și țin de inițializarea nodurilor
 sau prepararea stării de o singură dată.
 
+
+\section{Arbore sintactic de fișier}
+
+\subsection{Problemele abordării inițiale}
+
+În implementarea inițială a sistemului, arhitectura a fost concepută în așa fel ca
+logica de creare a arborelui să fie cu totul independentă de logica citirii datelor din fluxul de date.
+S-a conceput ca transmiterea informațiilor despre nodul curent să fie la nivelul stării generale a citirii.
+Deci, citirea următorului element din flux de date ar presupune scrierea informațiilor interpretate
+într-un câmp prestabilit, în obiectul care reprezintă datele elementului
+din fișier care se citește la momentul dat (fie chunk-ul curent), păstrat în starea generală de citire.
+După aceasta, codul care construiește arborele sintactic ar detecta care tip de nod a fost citit la cea mai recentă etapă 
+(este o altă problemă, descrisă separat mai târziu),
+și, în dependența de stare în care se afla parserul înainte de cea mai recentă operație de citire,
+ar trebui să acceseze exact același câmp în care au fost copiate datele.
+
+Această abordare are mai multe probleme:
+\begin{enumerate}
+    \item
+        Câmpul în care au fost scrise informațiile trebuie să fie sincronizat
+        între codul de scriere și codul de citire.
+    \item
+        Determinarea din care anume câmp trebuie să fie citite datele
+        depinde de starea parserului înainte de ultima operație,
+        dar nu doar de tipul nodului produs.
+        De exemplu, nodurile generate din elementele formatului Zlib pot apărea
+        la mai multe chunk-uri \ac{PNG}, dar ar avea același tip de nod.
+    \item
+        Parserul poate produce doar un singur tip de nod la fiecare operație, deci trebuie
+        să fie oprit după fiecare operație de scriere a datelor într-un câmp.
+        Mai mult ca aceasta, parserul nu poate să treacă la următoarea stare imediat,
+        deoarece aceasta ar putea elimina unele informații necesare pentru a crea următorul nod.
+\end{enumerate}
+
+Următoarea problemă este problema detectării tipului curent de nod.
+Deoarece arhitectura sistemului a fost concepută în așa fel ca parserul să nu cunoască despre tipuri de noduri,
+aceste informații nu pot fi transmise direct din parser la codul care folosește parserul pentru
+a construi arborele sintactic.
+Deci, aceste informații trebuie să fie derivate în mod dinamic pe partea
+care intepretează informația primită de la parser.
+Pentru acest lucru, trebuie să fie posibil de detectat pentru ce stare au fost citite informații
+la ultima invocare, sau cel puțin să fie creat nodul înainte de a realiza invocarea.
+După invocare, trebuie să stabilească care noduri pot fi umplute cu informații,
+și dacă trebuie să creeze noduri noi.
+Sistemul de gestionare a acestei informații devine destul de complicat,
+și necesită ca codul care construiește arborele să cunoască despre semnificațiile stărilor parserului,
+deci are loc și duplicarea structurii stărilor.
+
+Următoarea problemă constă în ceea că faptul de creare
+și completarea nodurilor la diferite niveluri trebuie să fie înregistrată la nivel de parser.
+Într-un fel, la sfârșit parser-ul trebuie să îndeplinească operațiunile
+de bază necesare pentru a crea arborele, fără a folosi abstracția arborelui.
+
+Aceste probleme nu semnifică că abordarea nu poate fi folosită în practică,
+dar provoacă o imperativă de a căuta o soluție alternativă.
+Prima idee destul de evidentă este de schimbat puțin arhitectura,
+permițând parserului să cunoască unele concepte care țin de noduri sintactice,
+dar totuși să lase responsabilitatea de a aranja nodurile în memorie unui modul extern.
+
+Deci, ideea este ca parserul să genereze un flux de noduri,
+care să conțină informațiile interpretate,
+pe lângă intervalului citit din fișier pentru a genera aceste informații,
+și a adâncimii, pentru a putea determina la care nod părinte acesta trebuie să fie atașat.
+
+\subsection{Proiectarea abordării noi}
+
+În urmă analizei situației a devenit mai clară structura favorabilă de sistem:
+\begin{itemize}
+    \item 
+        Structura interfeței grafice rămâne neschimbată, 
+        deoarece aceasta nu este implicată în crearea arborelui.
+
+    \item
+        Modulul de gestionare a arborelui va fi separat de logica creării al arborelui.
+        De fapt, așa era și înainte, însă acum această parte de logică va fi mișcată mai aproape de parser.
+        
+    \item
+        Parserul acum va cunoaște despre existența nodurilor, însă nu va interacționa cu ele direct.
+        Adăugarea logicii de gestionare a stivei de noduri și crearea nodurilor în parser s-a părut încurcătoare,
+        din aceasta cauză s-a hotărât să fie creat încă un modul pentru această funcționalitatea.
+        Parserul va folosi acest modul, în loc de a interacționa cu stiva și cu nodurile direct.
+
+    \item
+        Acest modul va avea responsabilitatea de a crea nodurile atunci când crește adâncimea stivei în parser,
+        semnalizat de parser, și va comunica cu modulul de gestionare a nodurilor din arbore.
+        Interfața acestui modul reprezintă operațiunile cu nodul de pe un nivel concret de pe stivă, 
+        așadar a fost numită \texttt{LevelContext}.
+
+    \item
+        Interfața care permite interacționarea între \texttt{LevelContext}
+        și modulul care gestionează arborele a primit numele \texttt{NodeOperations}.
+        Acesta definește funcțiile de bază de creare și finalizare a nodurilor.
+\end{itemize}
+
+\texttt{NodeOperations} nu trebuie să fie numaidecât abstractizat în această cauză,
+adică nu numaidecât trebuie să fie folosit polimorfismul dinamic.
+Modulul \texttt{LevelContext} ar putea să interfațeze direct cu modulul de gestionare a arborelui,
+folosind direct abstracțiile lui de noduri, identificare a nodurilor,
+modul de implementare a structurii părinte-fiu, etc.
+
+În loc de aceasta, s-a hotărât să introducă încă un nivel de abstracție pentru a evidenția această separare.
+A fost definit un set de abstracții pentru identificatori de nod,
+folosit ca niște valori opace pentru a adresa la noduri de către \texttt{LevelContext}.
+În mod similar, a fost creat un tabel virtual și o implementare a acestuia pe partea modulului de gestionare a arborelui.
+
 \subsection{Adâncimea stivei de noduri și imbricarea stărilor}
 
 Structura ierarhică a parserului reflectă structura ierarhică a formatului.
@@ -1915,7 +1730,7 @@ Adâncimea este actualizată de fiecare dată când are loc intrarea în codul p
 Mai precis, acesta este incrementat.
 După părăsirea codului care procesează o anumită stare, acesta este numaidecât decrementat.
 
-Proprietatea \texttt{level} accesibilă pe orice context crează un \texttt{LevetContext}
+Proprietatea \texttt{level} accesibilă pe orice context crează un \texttt{LevelContext}
 pentru a realiza operațiile ce țin de actualizarea adâncimii (\texttt{push}),
 decrementarea adâncimii (\texttt{pop}) și de lucru cu nodurile
 din arbore (\texttt{completeNode}, \texttt{completeNodeWithData} și alte).
@@ -1978,6 +1793,193 @@ Un exemplu proeminent de această idee pot fi tablourile de culori:
     \item La ultimul nivel se află nodul componentei culoarei (\texttt{R}, \texttt{G} sau \texttt{B}).
 \end{itemize}
 
+
+\section{Modulul de gestionare a arborelui sintactic}
+
+\subsection{Introducere}
+
+În continuare, pentru a simplifica explicațiile,
+modulul de gestionare a arborelui sintactic va fi adresat după numele \textbf{arbore}.
+
+În esența, arborele permite crearea nodurilor și accesarea lor în viitor.
+
+\subsection{Structura nodurilor}
+
+Fiecare nod se află pe o poziție concretă din fișier și poate avea noduri fii.
+
+Fiecare nod are un tip asociat care indică cărei componente din fișier acesta corespunde.
+De exemplu, un nod poate avea tipul \texttt{Datele din chunk = Antet},
+indicând că nodul corespunde la elementul din fișier cu chunk-ul de antet,
+și deoarece conține niște noduri fii, acesta nu este nodul terminal.
+Dintre nodurile fii ale acestui nod se va afla nodul cu tipul \texttt{Antet = Lățimea}
+care va fi asociat datele \texttt{Number = 32}.
+
+S-a hotărât că în loc de pointeri la noduri va fi folosit un index în tablou cu nodurile.
+În cazul dat, aceasta doar face faptul că nodurile sunt păstrate într-un singur tablou mai evident,
+și permite schimbarea mărimii acestui tablou.
+În plus, aceasta permite ca nodurile să fie adresate într-un mod stabil de către \texttt{LevelContext},
+în sensul că acesta poate păstra indicii ca identificatorii fără a-și face griji că nodurile pot fi mișcate în memorie.
+Există și alte avantaje ale acestei abordări care cu toate că nu necesar se aplică pentru aplicație în cauză,
+fac folosirea indicilor în loc de pointeri ca soluția implicită în mai multe cazuri.
+
+La dezvoltarea sistemului s-a considerat dacă păstrarea nodurilor după niveluri ar fi preferată
+peste păstrarea lor liniar într-un singur bloc de memorie.
+Ideea este că această proprietate ar putea fi folosită pentru a accelera procesul de căutare
+a drumului de noduri după poziția din fișier.
+Separarea nodurilor într-un alt mod mai conștient ar putea simplifica
+și operațiile de ștergere a nodurilor trecute.
+Dacă nodurile ar fi păstrate după mai multe tablouri,
+aceasta poate fi indicat printr-un segment de biți dintr-un identificator compus.
+Însă faptul este că operațiile de căutare sunt foarte rapide,
+chiar dacă sunt realizate folosind căutarea cea mai simplă liniară după fii,
+iar ștergerea nodurilor care au trecut peste zona de vizibilitate
+n-a fost implementată deoarece n-a fost considerată importantă pentru funcționarea aplicației.
+
+\subsection{Datele nodurilor}
+
+În mod asemănător, datele din noduri sunt păstrate după un indice într-un tablou separat.
+Deoarece datele sunt reprezentate printr-o uniune etichetată (tagged union),
+ar fi prea risipitor ca acestea să fie păstrate într-un singur tablou.
+
+Problema este că fiecare instanță de o uniune etichetată are
+mărimea etichetei plus mărimea celui mai mare tip,
+chiar dacă tipul valorii păstrate în această valoare ocupă mai puțin spațiu.
+De exemplu, dacă este păstrat o valoare pe un octet,
+iar uniunea etichetată admite ca cel mai mare tip un \texttt{RGB16} pe 48 de biți,
+spațiul ocupat va fi mărimea etichetei (de exemplu, 8 biți) adăugată la mărimea acestui tip,
+deci 56 de biți (ignorând padding-ul).
+Prin urmare, este risipit foarte mult spațiu, dacă valorile sunt păstrate într-un singur tablou.
+
+O abordare mai eficientă este de a păstra fiecare tip de valoare într-un tablou,
+indicând în identificatorul cărui tablou corespunde datele după acel identificator.
+Atunci valorile de fiecare mărime posibilă pot fi păstrate într-un tablou propriu,
+ocupând doar acel număr de biți per fiecare valoare, 
+iar valoarea etichetată s-ar putea fi recreată la solicitare.
+Această abordare și a fost realizată în aplicație\ref{appendix:main__TaggedArrayList}
+
+S-ar mai putea folosi abordarea de a elimina eticheta din date,
+deducând tipul corect al etichetei din tipul nodului,
+însă s-a dorit ca aceste concepte totuși să fie mai independente pentru
+a simplifica adresarea la date și pentru a avea flexibilitatea de
+a putea păstra mai multe tipuri de date pentru același tip de nod.
+
+Unica constrângere care va fi adăugată dacă este folosită această abordare este că
+tipul inițial atribuit unui nod cu date nu poate fi schimbat pe urmă.
+Aceasta implică și faptul că dacă se dorește ca datele să fie păstrate în aceeași ordine ca și
+nodurile cu care acestea sunt asociate, ele trebuie să fie create împreună cu crearea nodului în cauză.
+Însă deoarece nodurile nu vor fi șterse în această aplicație,
+iar tipul de noduri nu trebuie să fie schimbat, aceasta nu este groaznic.
+
+
+\section{Implementarea Zlib}
+
+\subsection{Subformatul \texttt{DEFLATE}}
+
+Partea esențială a formatului Zlib este subformatul integrat \texttt{DEFLATE}.
+DEFLATE definește 3 mecanisme de comprimare: datele \textit{fără comprimare},
+și comprimarea folosind arbori Huffman, metoda \textit{fixă} și metoda \textit{dinamică}.
+
+Metoda fixă se implementează mai ușor, deoarece nu necesită constuirea unei structuri de date.
+Specificația dă niște intervale, folosind care este interpretat fluxul de biți.
+
+Metoda dinamică este mai complicată și necesită citirea arborelui Huffman
+folosit pentru a decomprima fluxului de biți în continuare.
+Este dificil de implementat codul corect pentru această metodă tocmai deoarece descrierea
+la nivel înalt al algoritmului nu corespunde direct la implementare.
+În special, proprietatea codurilor Huffman că oarecare cod nu poate apărea
+la începutul unui alt cod poate fi pe deplin apreciată numai atunci
+când persoana singură realizează o implementare.
+
+Fluxul de biți este procesat într-o secvență de simboluri,
+care reprezintă ori literale, adică singuri octeți decomprimați,
+ori referințe de o anumită lungime înapoi la octeții din bufer decomprimat,
+după anumită distanță de la poziția curentă.
+Aceste simboluri nu apar direct în fluxul de intrare,
+dar sunt codificate folosind un arbore Huffman.
+
+\subsection{Arbori Huffman pe scurt}
+
+Merită a fi menționată ideea arborilor Huffman fără a explica întregul algoritm adânc.
+
+Fiecărui simbol este atribuit un cod de o lungime în funcția frecvenței de apariție a acestui simbol
+în secvența de ieșire.
+Adică simboluri care apar mai des sunt atribuite coduri mai mici,
+iar simboluri mai rare primesc și coduri pe mai mulți biți.
+Deoarece codurile apar unul după altul în fluxul de date codificate,
+fără nici un separator, secvența de început al unui cod trebuie să ajungă pentru a determina lungimea codului,
+deoarece aceasta este necesară pentru a putea citi numărul corect de biți și a realiza transformarea din cod în simbol.
+
+În caz general, această problemă este rezolvată construind un arbore Huffman general,
+însă codurile din algoritm DEFLATE sunt distribuite într-un mod special,
+astfel încât ele sunt atribuite la simboluri în mod consecutiv și consistent.
+Aceasta permite să simplifice codul care realizează decodificarea.
+
+În abordarea generală, se realizează o traversare a arborelui Huffman,
+care ia drumul stâng dacă în secvența apare un zerou, și drept, dacă apare o unitate.
+Algoritmul se termină atunci când ajunge la un nod terminal,
+semnificând că codul s-a potrivit simbolului din acest nod.
+Însă acea proprietate de consecutivitate,
+de fapt limitând structura arborilor admisibile,
+permite o simplificare semnificativă a acestui proces.
+
+\subsection{Specificul implementării arborelui Huffman în metoda dinamică}
+
+Folosind proprietatea alocării consecutive a codurilor,
+implementarea arborilor dinamice Huffman în DEFLATE se simplifică în următorul mod:
+\begin{itemize}
+    \item 
+        Se stabilește un set de sloturi reprezentând lungimi diferite de secvențe.
+        Fiecare slot reprezintă faptul că simbolurile din acest slot
+        sunt codificate cu numărul de biți egal cu poziția secvențială a slotului, de la unu.
+    \item
+        Fiecare slot ține simbolurile care corespund codurilor, în mod consecutiv.
+        Deci, fiecare din ele ține un tablou de simboluri.
+    \item
+        Fiecare slot salvează și numărul de coduri cumulativ înaintea tuturor codurilor din sloturi precedente.
+        Deci, notând numărul acesta ca \( S_i \), iar numărul de noduri în fiecare slot ca \( N_i \),
+        se obține următoarea formulă recurentă:
+
+        \begin{gather*}
+            S_0 = 0 \\
+            S_i = S_{i - 1} + N_{i - 1}.
+        \end{gather*}
+\end{itemize}
+
+Datorită proprietății că fiecare cod este atribuit consecutiv,
+de la cea mai scurtă lungime a codului la cea mai lungă,
+procesul de decodificare poate fi sumarizat în următoarea secvență de cod:
+
+\begin{minted}{c}
+lungime = 1;
+while (lungime <= sloturi.lungime)
+{
+    cod = citeșteBiți(fluxDeBiți, lungime);
+    slot = sloturi[lungime];
+    if (cod < slot.s + slot.n)
+    {
+        mișcăFluxulDeBiți(fluxDeBiți, lungime);
+
+        index = cod - slot.s;
+        simbol = slot.simboluri[index];
+        return simbol;
+    }
+
+    lungime += 1;
+}
+error("Cod nevalid");
+\end{minted}
+
+A se vedea codul întreg care realizează arborii Huffman în anexa \ref{appendix:huffman_tree}.
+
+Această idee era cea mai importantă de a-și da seama în procesul de realizare a algoritmului.
+Restul algoritmului nu merită atenție, deoarece implementarea nu a avut așa insight-uri.
+Merită de menționat doar faptul că arborele este prezentat nu direct,
+dar este și acesta codificat folosind o altă codificare Huffman,
+însă acelea sunt codificate tot folosind un set de coduri prestabilit
+ca la abordarea cu codurile fixe, deci este mai ușor de implementat.
+
+
+
 \section{Modulul de interfață grafică}
 
 \subsection{Raylib}
@@ -1998,7 +2000,7 @@ Raylib conține numeroase funcții pentru orice tip de operație, printre care:
 Scopul principal al librării este de a prezenta o mulțime completă de funcționalități,
 rămânând în același timp o librărie simplă și intuitivă.
 
-Raylib este cross-platform rulând-se pe Windows, Mac, Linux și tocmai Android, iPhone și console.
+Raylib este cross-platform rulând-se pe Windows, Mac, Linux și tocmai Android, iPhone, console și pe Web.
 Este gratuit și cu sursa deschisă.
 
 Este clar, că nu este necesară o parte majoră a acestor capacități pentru a implementa sistemul în cauză,
@@ -2013,18 +2015,18 @@ atât și ai oricării librării C. Acesta se numește \texttt{zig build}.
 \texttt{zig build} permite utilizatorului să specifice procesul de build al unui proiect,
 cu un sprijin minunat pentru codul Zig și C.
 Include posibilitatea de a crea librării statice și dinamice, și de a compila programul în mod cross-platform,
-de exemplu, facilitând de exemplu compilarea pentru Windows de pe Linux.
+de exemplu, facilitând compilarea pentru Windows de pe Linux.
 
 Raylib folosește acest instrument pentru build-urile sale.
-Procesul lor de build este modularizat, astfel încât să fie posibil a executa funcțiile de build,
+Procesul lor de build este modularizat, astfel încât să fie posibil să execute funcțiile de build,
 importând fișierele respective și executând funcțiile din ele în mod normal în codul propriu de build.
 Aceasta permite realizarea build-ului librăriei Raylib ca un pas de compilare a aplicației.
 
 Există și un set de binding-uri, adică niște funcții declarate în Zig care sunt definite în C, pe partea Raylib.
 
-Funcțiile învelitoare sunt funcțiile facilitează modul de folosire a funcțiilor din librăria,
+Funcțiile învelitoare sunt acele funcții care facilitează modul de folosire a funcțiilor dintr-o librărie,
 făcând declarațiile mai idiomatice, sau schimând unele tipuri de parametri,
-de exemplu folosirea slice-urilor în loc de doi parametri separați de pointer și lungime,
+de exemplu folosirea slice-urilor în loc de doi parametri separați de pointer și lungime.
 Aceste funcții tot de obicei se consideră ca binding-uri.
 
 Există așa binding-uri și pentru Raylib\cite{raylib_zig}.
@@ -2038,7 +2040,7 @@ Ar fi dorit ca interfața implementată să fie demonstrată imediat,
 A se vedea \refFigure{ui_example_1.png} care este o captură de ecran luată în interfața grafică implementată.
 În partea dreaptă se observă informațiile despre chunk-ul curent,
 iar în partea stângă sunt prezentați octeții din fișier
-și este evidențiat intervalul pe octeți al elementului curent.
+și este evidențiat intervalul pe octeți al nodului curent.
 
 \imageWithCaption{ui_example_1.png}{Captura de ecran a interfeței}
 
@@ -2052,8 +2054,8 @@ Interfața va vizualiza datele asociate cu acel octet chiar dacă cursorul iese 
 
 Deoarece la orice moment de timp nu vor fi afișați toți octeții din întregul fișier,
 ci doar un interval destul de mic, afișarea textului poate fi realizată folosind o abordare primitivă,
-fără a aceasta să afecteze performanța.
-Deci, în fiecare cadru, interfața este redesenată din nou folosind operațiile primitive
+fără ca aceasta să afecteze performanța.
+Deci, în fiecare cadru, interfața este reafișată din nou folosind operațiile primitive
 de afișare a textului, de desenare a fundalului și de desenare unelor dreptunghiuri
 pentru a realiza așa elemente ale interfeței ca boxe și separarea elementelor cu linii,
 precum și evidențierea elementelor selectate.
@@ -2063,7 +2065,7 @@ dar poate fi conjecturat că la prima etapă pozițiile și ordinea afișării d
 după ce sunt desenate într-o singură etapă, sau mai multe etape consecutive.
 Poate Raylib invoacă câte un \texttt{Draw Call} pentru fiecare bucată de text.
 În orice caz, independent de cât de optimizată este librăria,
-o interfață de așa mărime nu va necesita resurse semnificative de la sistem.
+o interfață de așa mărime nu va necesita resurse semnificative de sistem.
 
 Într-o implementare optimizată, textul ar putea fi scris într-un bufer,
 desenat într-un singur pas folosind un shader specializat,
@@ -2073,8 +2075,9 @@ A fost special selectat un font \texttt{monospace} ca fiecare caracter să ocupe
 pentru a le putea aranja mai ușor într-un grid.
 Pentru a afișa textul octeților pe ecran, se ia secvența intervalului curent (din modulul \texttt{pipelines}),
 se iterează prin toți octeți folosind iteratorul de segmente,
-după ce fiecare octet se convertează în două cifre hexazecimale și este transmis la librăria Raylib,
-folosind funcția \texttt{DrawTextEx} care permite transmiterea font-ului.
+după ce fiecare octet este convertit în două cifre hexazecimale și este transmis la librăria Raylib,
+folosind funcția \texttt{DrawTextEx} care permite transmiterea font-ului pe lângă
+celorlalți parametri de poziție, mărime și culoare.
 A se vedea anexa\ref{appendix:draw_hex_grid}.
 
 \subsection{Afișarea informațiilor din fișier}
@@ -2091,7 +2094,7 @@ La prima etapă se găsește primul nod-rădăcină intervalul căruia include p
 După ce acesta a fost găsit, căutarea se continuă înăuntru nodurilor fii ale acestui nod în mod recursiv.
 
 Merită de menționat faptul că, cu toate că mai mult ca un nod nu poate ocupa aceași poziție în fișier,
-ele pot să se regăsească la același octet.
+ele pot să se regăsească pe același octet.
 Aceasta este datorită faptului că nodurile din Zlib includ poziția pe bit pe lângă poziției pe octet.
 Din această cauză, dacă căutarea se face după poziția pe octet,
 poate produce mai mult ca un singur nod la același nivel.
@@ -2102,7 +2105,7 @@ deci așa cod nu produce rezultate încurcate (nu amestecă ierarhiile de sub ma
 A se vedea anexa \ref{appendix:node_path_search_impl} unde este prezintat codul căutării.
 
 Având drumul acesta de noduri, ușor se obține tipul fiecărui
-nod din acestă listă și datele asociate cu acesta.
+nod din această listă și datele asociate cu acesta.
 Informațiile de fapt afișate la ecran corespund direct la tipuri și date.
 Afișarea se face folosind tot același font și funcția \texttt{DrawTextEx}.
 
@@ -2117,15 +2120,17 @@ De fapt nu este transmis conținutul fișierului, ci drumul fișierului.
 La nivel de sistem, aceasta este implementat folosind un eveniment care poate fi procesat în aplicație.
 
 Raylib definește niște funcții pentru procesarea acestui eveniment,
-permitând accesul la drumurile la fișiere transmise ca o listă.
+permițând accesul la drumurile fișierelor transmise ca o listă.
 Acestea sunt \texttt{IsFileDropped}, \texttt{LoadDroppedFiles} și \texttt{UnloadDroppedFiles}.
-A se vedea anexa \ref{appendix:drag_and_drop}.
+A se vedea anexa \ref{appendix:drag_and_drop} unde este prezentat codul
+care realizează funcționalitate de reîncărcare a unui fișier, reparsându-l
+și înlocuind arborele curent cu arborele din fișierul nou.
 
 \chapterConclusionSection{implementation_chapter_title}
 
 În acest capitol au fost discutate dificultățile principale legate de realizarea sistemului,
 cum acestea s-au manifestat și cum au fost depășite.
-S-a mai discutat detaliile de implementare concrete la mai multe module de sistem.
+S-au mai discutat detaliile de implementare concrete la mai multe module de sistem.
 
 Au fost descrise principiile de funcționare a modulului \texttt{pipelines},
 inclusiv operațiile de bază și transparența structurii acestora.
