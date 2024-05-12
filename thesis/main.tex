@@ -150,15 +150,15 @@ de altul. Formatul include, de asemenea, mecanisme pentru asigurarea integrită�
 octeții elementului \ac{CRC}.
 
 Reieșind din toate acestea, formatul \ac{PNG} merită să fie învățat pentru a putea manipula eficient fișierele de
-acest format, extinde formatul prin niște chunk-uri personalizate, și pentru a afla despre
+acest format, a extinde formatul prin niște chunk-uri personalizate, și pentru a afla despre
 metodele de asigurare a integrității, precum și despre algoritmii de comprimare folosite ca parte din \ac{PNG}
 (Zlib). Aceste idei pot ajuta și la crearea unor formaturi noi de fișier, nu neapărat de imagine.
 
 \textbf{Scopul și obiectivele.}
 
-Lucrarea de față are scopul educațional -- să facă cunoștința cu structura formatului \ac{PNG} și a
+Lucrarea dată are un scop educațional -- informarea despre structura formatului \acs{PNG} și a
 formatului integrat de comprimare Zlib.
-Pentru aceasta s-a decis să creeze o interfață grafică care
+Pentru aceasta s-a decis să se creeze o interfață grafică care
 să permită explorarea vizuală a formatului \ac{PNG},
 creând un parser și oarecare alte instrumente necesare în proces.
 
@@ -168,14 +168,14 @@ creând un parser și oarecare alte instrumente necesare în proces.
 Structura formatului \ac{PNG} și a formaturilor de comprimare integrate Zlib și DEFLATE
 a fost studiată din specificațiile acestora \cite{png_spec} \cite{zlib_spec} \cite{deflate_spec}.
 Programul a fost implementat în limbajul de programare Zig \cite{zig} care a fost studiat din documentație.
-Pentru implementarea formatului DEFLATE ca referință a fost într-o măsură scăzută folosit codul librăriei uzlib \cite{gzip_impl}.
-Pentru a depana implementarea DEFLATE s-a mai folosit exemplul aplicării algoritmului DEFLATE și datele test de Google \cite{deflate_tests}.
+Pentru implementarea formatului DEFLATE a fost folosit, ca referință, într-o măsură scăzută codul librăriei uzlib \cite{gzip_impl}.
+Pentru a depana implementarea DEFLATE s-a mai folosit exemplul aplicării algoritmului DEFLATE și datele test ale Google \cite{deflate_tests}.
 A fost folosită librăria Raylib \cite{raylib} drept librărie grafică.
 
 Deoarece a fost luată abordarea explorativă la dezvoltarea aplicației,
 aproape n-au fost folosite referințe externe,
 fie coduri din diferite proiecte, alte lucrări științifice, sau cărți.
-Pentru a crea aplicația ajung documentele de specificație a formaturilor necesare,
+Pentru a crea aplicația sunt suficiente documentele de specificație a formaturilor necesare,
 și o modalitate de a genera sau încărca niște imagini \ac{PNG}
 pentru verificarea corectitudinii întregului program,
 însă pentru aceasta poate fi folosit tocmai Paint care este prezent pe orice sistem Windows.
@@ -190,19 +190,19 @@ ci în explorarea formatului de fișier și construirea arborelui sintactic.
 
 \textbf{Valoarea aplicativă.}
 
-Aplicația obținută poate fi folosită pentru a-și face cunoștința cu formatul de fișier \acs{PNG}.
+Aplicația obținută poate fi folosită pentru a face cunoștința cu formatul de fișier \acs{PNG}.
 
 Cu toate acestea, scopul principal al lucrării constă
 în partea educațională și practică a acesteia pentru student,
-iar aplicația este doar produsul primit în urma implementării a codurilor necesare.
+iar aplicația este doar produsul primit în urma implementării codurilor necesare.
 Partea educațională și practică include următoarele puncte:
 \begin{itemize}
     \item Experiența adunată în procesul rezolvării problemelor întâlnite;
     \item Înțelegerea formatului de fișier \acs{PNG};
     \item
         Înțelegerea formaturilor de comprimare asociate,
-        și în particular experiența de implementare a acestor formaturi;
-    \item Folosirea arborilor sintactice pentru a realiza partea grafică a aplicației.
+        și, în particular, experiența de implementare a acestor formaturi;
+    \item Folosirea arborilor sintactici pentru a realiza partea grafică a aplicației.
 \end{itemize}
 
 Toate acestea vor avea valoare în munca profesională a studentului în viitor.
@@ -210,9 +210,9 @@ Toate acestea vor avea valoare în munca profesională a studentului în viitor.
 
 \textbf{Sumarul tezei.}
 
-Primul capitol, \nameref{intro_chapter_title}, aduce informații generale despre
+Primul capitol, \nameref{intro_chapter_title}, prezintă informații generale despre
 formaturile \acs{PNG} și formatul de comprimare Zlib folosit în \acs{PNG}.
-Este menționat și limbajul de programare Zig și de ce acesta a fost ales
+Este menționat limbajul de programare Zig și de ce acesta a fost ales
 ca limbajul principal de dezvoltare a proiectului.
 
 Al doilea capitol, \nameref{architecture_chapter_title}, schițează implementarea,
@@ -223,9 +223,9 @@ Tot aici este introdusă imaginea inițială a întregii aplicații.
 
 Al treilea capitol, \nameref{implementation_chapter_title},
 urmează implementarea iterativă a modulelor introduse,
-adică se identifică problemele abordări inițiale,
+adică se identifică problemele abordării inițiale,
 se propune o abordare îmbunătățită, și se explică detaliat varianta finală a implementării
-acolo unde implementarea merită atenție sau este interesantă.
+acolo unde aceasta merită atenție sau este interesantă.
 Acest capitol include și programarea interfeței grafice.
 
 \chapter{Introducerea fundalului informativ}\label{intro_chapter_title}
@@ -235,7 +235,7 @@ Acest capitol include și programarea interfeței grafice.
 \subsection{Introducere}
 
 Formatul de fișier \ac{PNG} este unul din cele mai răspândite formaturi de imagine.
-Formatul acesta este folosit în numeroase domenii pe scară largă, incluzând majoritatea aplicațiilor
+El este folosit în numeroase domenii pe scară largă, incluzând majoritatea aplicațiilor
 web, aplicații grafice care salvează sau încarcă imagini din fișiere, precum și în dezvoltarea de jocuri.
 
 În continuare vor fi descrise principiile de bază a acestui format,
@@ -246,22 +246,22 @@ precum și cele mai importante decizii de proiectare care au adus creatorii form
 Formatul \ac{PNG} este un format portabil destinat pentru reprezentarea imaginilor fără pierderi.
 
 Fraza ``fără pierderi'' reprezintă faptul că pixelii imaginii
-pot fi comprimate într-un fișier \ac{PNG},
-după ce decomprimate din acest fișier de către cititor,
+pot fi comprimați într-un fișier \ac{PNG},
+după ce decomprimați din acest fișier de către cititor,
 întorcându-le în forma lor inițială.
 Deci datele pixelilor vor fi \textit{exact echivalente} cu datele înainte de comprimare.
 
 Pe de altă parte, formaturile care folosesc comprimarea \textit{cu pierderi},
 ca, de exemplu, \ac{JPEG}, semnifică că aceste date pot diferi,
-însă vizual, adică pentru ochiul omului, imaginea va arăta bine.
+însă, vizual, adică pentru ochiul omului, imaginea va arăta bine.
 Deci termenul \textit{pierderi} se referă la pierderea de informație în urma comprimării.
 
 Formatul \ac{PNG} a fost inițial creat pentru a înlocui formatul \ac{GIF},
-pentru care nu era posibil de creat un comprimător de uz liber atunci\cite{gif_unusable_reason}.
-În plus, inginerii care au inventat \ac{PNG} s-au străduit să îmbunătățească algoritmul de comprimare,
-precum și structura formatului nou, adăugând unele capacități neaccesibile în \ac{GIF},
-ca posibilitatea de a comprima imagini în culori reale (truecolor images),
-posibilitatea de a folosi un canal separat pentru transparența,
+pentru care nu era posibil de creat un comprimator de uz liber atunci\cite{gif_unusable_reason}.
+În plus, inginerii care au inventat \ac{PNG} au străduit să îmbunătățească algoritmul de comprimare,
+precum și structura formatului nou, adăugând unele capacități inaccesibile în \ac{GIF}
+ca posibilitate de a comprima imagini în culori reale (truecolor images),
+posibilitate de a folosi un canal separat pentru transparența,
 robustețea ridicată împotrivă erorilor de transmisie, și altele.
 
 \subsection{Catacteristici principale}
@@ -282,7 +282,7 @@ Capacitățile păstrate din GIF:
     \item
         Afișare progresivă: un fișier de imagine pregătit corespunzător poate fi
         afișat pe măsură ce este primit pe canalul de comunicare,
-        furnizând o imagine cu o rezoluție redusă foarte repede,
+        furnizând foarte repede o imagine cu rezoluție redusă,
         urmată de îmbunătățirea graduală a detaliilor.
 
     \item
@@ -369,7 +369,7 @@ Chunk-urile auxiliare se folosesc pentru a îmbunătăți imaginea
 (ca de exemplu informații gama pentru a selecta o culoare mai favorabilă),
 sau pentru a adăuga informații suplimentare la imagine
 (ca chunk-ul text pentru titlul imaginii).
-Din această cauză, chiar dacă toate chunk-urile auxiliare ar fi ignorate de către un decodor,
+Prin urmare, chiar dacă toate chunk-urile auxiliare ar fi ignorate de către un decodor,
 acesta ar putea arăta imaginea.
 La chunk-uri critice prima literă din tip este majusculă,
 iar la cele auxiliare ea este minusculă.
@@ -378,7 +378,7 @@ Capacitatea de flexibilitate a formatului este asigurată prin această structur
 Fiecare chunk are subformatul său independent,
 și chunk-urile noi pot fi adăugate transparent și fără a afecta
 implementările existente ale decodorilor,
-dacă chunk-ul se declară ca un chunk auxiliar.
+dacă chunk-ul se declară ca fiind unul auxiliar.
 
 Urmează o listă de unele chunk-uri de bază, definite în specificația formatului:
 \begin{itemize}
@@ -387,7 +387,7 @@ Urmează o listă de unele chunk-uri de bază, definite în specificația format
       Acesta este primul chunk din orice fișier \ac{PNG}.
       Conține informații esențiale despre imagine, cum ar fi lățimea,
       înălțimea, tipul de culoare, compresia, filtrarea și întrelățarea (interlacing).
-      Este un exemplu de un chunk critic, ce poate fi dedus uitându-se
+      Este un exemplu de chunk critic, ce poate fi dedus uitându-se
       la prima literă din nume și observând că este majusculă.
 
   \item
@@ -464,8 +464,8 @@ fiecare celulă indică pasul la care este transmis acel pixel.
 Deși formatul \ac{PNG} este versatil și oferă o calitate ridicată a imaginii, are și câteva limitări.
 Nu suportă animații native (spre deosebire de formatul \ac{GIF})
 și nu este ideal pentru fotografii datorită dimensiunii mai mari a fișierului comparativ
-cu formaturile comprimate cu pierderi, cum ar fi \ac{JPEG}.
-Cu toate acestea, este foarte popular pentru grafică web,
+cu formaturile comprimate cu pierderi, spre exemplu, \ac{JPEG}.
+Cu toate acestea, este foarte popular pentru grafica web,
 datorită transparenței și calității imaginii.
 
 \subsection{Datele imaginii}
@@ -546,13 +546,13 @@ nici nu există conceptul de \ac{RAII}.
 \ac{RAII} sau, în alte cuvinte, conceptul de proprietar, este modul principal
 prin care limbajele ca C++ și Rust se străduiesc să rezolve problema siguranței memoriei.
 
-Zig apriori nu garantează suguranța memoriei.
+Zig, apriori, nu garantează suguranța memoriei.
 El dă libertatea programatorului să alege cum și când să șteargă memoria alocată,
 pentru a rămâne un limbaj de programare de sistem.
 Cu toate acestea, Zig introduce mai multe utilități și capacități care pot ajuta cu aceasta.
 
 O idee cheie în Zig este ca toate alocările memoriei să fie vizibile la utilizator.
-Pentru a aloca memoria, utilizatorul trebuie să-i transmite funcției care solicită alocarea memoriei
+Pentru a aloca memoria, utilizatorul trebuie să transmită funcției care solicită alocarea memoriei
 un obiect de alocator în mod explicit (ca parametru).
 Acest obiect poate fi înlocuit cu o implementare personalizată,
 de exemplu pentru a monitoriza alocările, în mod trivial.
@@ -562,7 +562,7 @@ Pur și simplu se transmite un obiect de alocator diferit.
 \subsection{Siguranță derivată din explicitate}
 
 Zig este mult mai strict, și de aceea mai sigur în ceea ce ține, de exemplu, de numere întregi.
-Dacă, de exemplu, codul C este compilat cu comanda de compilare implicită,
+Dacă, spre exemplu, codul C este compilat cu comanda de compilare implicită,
 adică fără flaguri \texttt{-Wconversion -Werror}, situațiile unde se pierd informații,
 ca conversiunea de la tipuri întregi cu semn la tipuri fără semn, sau conversiuni ale întregilor
 de la 64 de biți la 32 de biți, sunt acceptate de către compilator fără nici o eroare sau avertizare,
