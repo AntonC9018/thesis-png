@@ -213,8 +213,8 @@
 \def\oldappendix{} \let\oldappendix=\appendix{}
 \def\appendix{%
     \oldappendix%
-    \renewcommand{\thesection}{\arabic{section}.}%
-    \titleformat{\section}[block]{\normalfont\normalsize\bfseries\filcenter}{Anexa \thesection~}{0pt}{}%
+    \renewcommand{\thesection}{\arabic{section}}%
+    \titleformat{\section}[block]{\normalfont\normalsize\bfseries\filcenter}{Anexa \thesection.~}{0pt}{}%
     %
     % Every section on new page
     % \newcommand{\sectionbreak}{\clearpage}

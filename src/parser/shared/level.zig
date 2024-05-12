@@ -103,6 +103,20 @@ pub fn LevelContext(Context: type) type
             self.current().* += 1;
         }
 
+        pub fn createLevels(self: Self, n: usize) !void
+        {
+            var nodeData = self.data.*;
+            var level = Self
+            {
+                .context = self.context,
+                .data = &nodeData,
+            };
+            for (0 .. n) |_|
+            {
+                try level.push();
+            }
+        }
+
         pub fn push(self: Self) !void
         {
             self.pushImpl();
@@ -265,13 +279,8 @@ pub fn LevelContext(Context: type) type
             self.pushImpl();
             errdefer self.pop();
 
-            const r = try self.maybeCreateSyntaxNode();
-            if (r.created)
-            {
-                self.setNodeType(nodeType);
-            }
-
-            std.debug.assert(std.meta.eql(r.node.nodeType, nodeType));
+            _ = try self.maybeCreateSyntaxNode();
+            self.setNodeType(nodeType);
         }
 
         // Implies completing the nodes as well.

@@ -672,6 +672,8 @@ pub fn initChunkDataNode(context: *Context, chunkType: ChunkType) !void
     }
 
     chunk.object.isKnownType = true;
+    dataState.value = undefined;
+    dataState.action = undefined;
 
     // Initialize the data state
     switch (asKnown(chunkType))
@@ -701,13 +703,11 @@ pub fn initChunkDataNode(context: *Context, chunkType: ChunkType) !void
         {
             context.state.imageHeader = std.mem.zeroes(ImageHeader);
             dataState.action = .{ .ImageHeader = .Width };
-            dataState.value = undefined;
         },
         inline
         .ImageData,
         .ImageEnd,
         .Gamma,
-        .PrimaryChrom,
         .ColorSpace,
         .InternationalText,
         .Background,
@@ -718,7 +718,6 @@ pub fn initChunkDataNode(context: *Context, chunkType: ChunkType) !void
         .LastModificationTime => |t|
         {
             setChunkDataAction(dataState, t, std.mem.zeroes(ActionType(t)));
-            dataState.value = undefined;
         },
         inline
         .ICCProfile,
@@ -735,6 +734,8 @@ pub fn initChunkDataNode(context: *Context, chunkType: ChunkType) !void
             setChunkDataAction(dataState, t, std.mem.zeroes(ActionType(t)));
         },
     }
+
+    std.debug.print("Type: {}, State: {}\n", .{ chunkType, dataState });
 
     // Validate preconditions
     switch (getActiveChunkDataState(dataState, asKnown(chunkType)))
@@ -882,12 +883,18 @@ const PaletteBytesProcessor = struct
     context: *Context,
     state: *PaletteState,
 
-    pub fn each(self: *const PaletteBytesProcessor, byte: u8) !void
+    pub fn pushLevels(self: PaletteBytesProcessor) !void
     {
-        const action = &self.state.rgbAction;
+        // one for rgb color, one for the component.
+        try self.context.level().createLevels(2);
+    }
 
+    pub fn each(self: PaletteBytesProcessor, byte: u8) !void
+    {
         try self.context.level().pushNode(.RGBColor);
         defer self.context.level().pop();
+
+        const action = &self.state.rgbAction;
 
         const color = &self.state.color;
         const readFully = try readRgbComponentNode(
@@ -909,6 +916,11 @@ const TransparencyBytesProcessor = struct
 {
     context: *Context,
     allocator: std.mem.Allocator,
+
+    pub fn pushLevels(self: TransparencyBytesProcessor) !void
+    {
+        try self.context.level().createLevels(1);
+    }
 
     pub fn each(self: *const TransparencyBytesProcessor, byte: u8) !void
     {

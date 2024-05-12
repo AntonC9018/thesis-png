@@ -105,7 +105,7 @@ pub const Segment = struct
 
 fn ptrSub(a: anytype, b: @TypeOf(a)) usize
 {
-    return @divExact(@intFromPtr(a) - @intFromPtr(b), @sizeOf(@TypeOf(a))); 
+    return @divExact(@intFromPtr(a) - @intFromPtr(b), @sizeOf(@TypeOf(a.*))); 
 }
 
 pub const BufferManager = struct 
@@ -148,68 +148,117 @@ pub const BufferManager = struct
         segment: Segment,
         allocator: std.mem.Allocator) !void
     {
+        const capacityBefore = self.segments.capacity;
         try self.segments.append(allocator, segment);
+        const capacityAfter = self.segments.capacity;
+
         self.totalBytes += segment.len();
 
-        // Let's update the list here for now.
-        const s_ = self.segments.items;
-        if (s_.len >= 2)
+        if (capacityBefore != capacityAfter)
         {
-            s_[s_.len - 2].nextSegment = &s_[s_.len - 1];
+            restoreConsecutiveLinks(self.segments.items);
         }
+        else
+        {
+            // Let's update the list here for now.
+            const s_ = self.segments.items;
+            if (s_.len >= 2)
+            {
+                s_[s_.len - 2].nextSegment = &s_[s_.len - 1];
+            }
+        }
+    }
+
+    pub fn getBufferPosition(
+        self: *const BufferManager,
+        position: SequencePosition) BufferSequencePosition
+    {
+        const isEmpty = self.segments.items.len == 0;
+
+        if (position.segment == &SequencePosition.StartSentinelSegment)
+        {
+            return BufferSequencePosition.Start;
+        }
+
+        if (position.segment == &SequencePosition.EndSentinelSegment)
+        {
+            if (isEmpty)
+            {
+                return BufferSequencePosition.Start;
+            }
+
+            const i = self.segments.items.len - 1; 
+            return .{
+                .segmentIndex = i,
+                .offset = self.segments.items[i].len(),
+            };
+        }
+
+        if (isEmpty)
+        {
+            unreachable;
+        }
+
+        const startAddress = &self.segments.items[0];
+        const targetAddress = position.segment;
+        const index = ptrSub(targetAddress, startAddress);
+
+        return .{
+            .offset = position.offset,
+            .segmentIndex = index,
+        };
     }
 
     // Returns the newStart position, projected on the updated segments array.
     pub fn cleanUpUnneededSegments(
         self: *BufferManager,
         allocator: std.mem.Allocator,
-        newStart: SequencePosition) SequencePosition
+        newStart: BufferSequencePosition) BufferSequencePosition
     {
-        if (self.segments.items.len == 0)
+        const segs = &self.segments.items;
+
+        if (segs.len == 0)
         {
-            return newStart;
-        }
-        else if (newStart.segment == &SequencePosition.StartSentinelSegment)
-        {
-            return .{
-                .offset = 0,
-                .segment = &self.segments.items[0],
-            };
+            return BufferSequencePosition.Start; 
         }
 
         const firstSegmentToKeepInMemory = if (self.lowerLimitHint) |hint|
         hint:
         {
-            // TODO: Maybe binary search?
-            for (0 .., self.segments.items) |i, *s|
+            // binary search
+            var leftIndex: usize = 0;
+            var rightIndex: usize = segs.len - 1;
+
+            if (segs.*[0].getBytePosition() < hint)
             {
-                if (s.getBytePosition() + s.len() > hint)
+                unreachable;
+            }
+
+            while (leftIndex < rightIndex)
+            {
+                const midIndex = (rightIndex - leftIndex) / 2 + leftIndex;
+                const mid = &segs.*[midIndex];
+                if (mid.getBytePosition() < hint)
                 {
-                    break :hint i;
+                    leftIndex = midIndex;
+                }
+                else
+                {
+                    rightIndex = midIndex;
                 }
             }
-            // This means the specified byte position is already outside the segment space.
-            unreachable;
+            break :hint leftIndex;
         } 
         else null;
 
         const newStartSegmentIndex, const shouldResetOffset = segmentIndexOfStart:
         {
-            if (newStart.segment == &SequencePosition.EndSentinelSegment)
-            {
-                break :segmentIndexOfStart .{ self.segments.items.len, true };
-            }
-
-            const startAddress = &self.segments.items[0];
-            const targetAddress = newStart.segment;
-            const index = ptrSub(targetAddress, startAddress);
-
-            const isAtEndOfSegment = newStart.offset == newStart.segment.len();
+            const isAtEndOfSegment = newStart.offset == segs.*[newStart.segmentIndex].len();
             if (isAtEndOfSegment)
             {
-                break :segmentIndexOfStart .{ index + 1, true };
+                break :segmentIndexOfStart .{ newStart.segmentIndex + 1, true };
             }
-            break :segmentIndexOfStart .{ index, false };
+            break :segmentIndexOfStart .{ newStart.segmentIndex, false };
         };
 
         const deleteUntilSegmentIndex = if (firstSegmentToKeepInMemory) |s|
@@ -222,7 +271,6 @@ pub const BufferManager = struct
             return newStart;
         }
 
-        const segs = &self.segments.items;
         // Removed segments = from current start until the new start segment.
         for (segs.*[0 .. deleteUntilSegmentIndex]) |*s|
         {
@@ -236,7 +284,7 @@ pub const BufferManager = struct
 
         if (segs.len == 0)
         {
-            return SequencePosition.Start;
+            return BufferSequencePosition.Start; 
         }
 
         restoreConsecutiveLinks(segs.*[(deleteUntilSegmentIndex - 1) .. segs.len]);
@@ -244,7 +292,7 @@ pub const BufferManager = struct
         const index = newStartSegmentIndex - deleteUntilSegmentIndex;
         return .{
             .offset = if (shouldResetOffset) 0 else newStart.offset,
-            .segment = &segs.*[index],
+            .segmentIndex = index,
         };
     }
 
@@ -368,6 +416,19 @@ pub const SequenceRange = struct
         var start_ = range.start orelse self.start;
         var end_ = range.end orelse self.end;
 
+        if (false) start: {
+            const startLen = start_.segment.data.items.len;
+            if (startLen < 9999)
+            {
+                break :start;
+            }
+
+            const rangeStart = if (range.start) |s| s.segment.data.items.len else 0;
+            const selfStart = self.start.segment.data.items.len;
+            std.debug.print("RangeStart len {}\n", .{ rangeStart });
+            std.debug.print("SelfStart len {}\n", .{ selfStart });
+        }
+
         const local = struct
         {
             fn collapseEnds(s: *const SequenceRange, pos: *SequencePosition) void
@@ -463,7 +524,7 @@ pub const Sequence = struct
         const start_ = SequencePosition
         {
             .offset = 0,
-            .segment = buffer.getFirstSegment(),
+            .segment = &segments_[0],
         };
         const lastSegment_ = &segments_[segments_.len - 1];
         const end_ = SequencePosition
@@ -613,19 +674,13 @@ pub const Sequence = struct
         // Collapse the end position of the range into the previous segment if the offset is 0.
         if (willMoveEnd)
         {
-            // For this, we need to find the end segment.
-            // TODO: Is this ever hit, actually?
-            unreachable;
-
-            // const endSegment = self.segments.getSegment(range_.end.segment - 1);
-            // range_.end.segment -= 1;
-            // range_.end.offset = @intCast(endSegment.len);
+            range_.end = self.getPosition(range.len);
         }
 
         // If the start happened to go past the end, 
         // it's either an error, which we check with an assert,
         // or it happens to be the same position as the end after we move it into the previous segment.
-        // TODO: Maybe allow empty segments? The all of these just have to be while loops.
+        // TODO: Maybe allow empty segments? Then all of these just have to be while loops.
         if (range_.start.segment == range_.end.segment.nextSegment)
         {
             std.debug.assert(range_.start.offset == 0);
@@ -809,6 +864,17 @@ const EOFState = enum {
     AlreadySignaled,
 };
 
+const BufferSequencePosition = struct
+{
+    offset: u32,
+    segmentIndex: usize,
+
+    const Start: BufferSequencePosition = .{
+        .offset = 0,
+        .segmentIndex = 0,
+    };
+};
+
 pub fn Reader(ReaderType: type) type 
 {
     return struct
@@ -820,7 +886,10 @@ pub fn Reader(ReaderType: type) type
         dataProvider: ReaderType,
 
         _buffer: BufferManager = std.mem.zeroes(BufferManager),
-        _consumedUntilPosition: SequencePosition = SequencePosition.Start,
+        _consumedUntilPosition: BufferSequencePosition = .{ 
+            .offset = 0,
+            .segmentIndex = 0,
+        },
         _eofState: EOFState = .FirstRead,
 
         pub fn deinit(self: *Self) void
@@ -873,7 +942,12 @@ pub fn Reader(ReaderType: type) type
                 return Sequence.createEmpty(buffer_);
             }
             const wholeSequence = Sequence.create(buffer_);
-            const result = wholeSequence.sliceFrom(self._consumedUntilPosition);
+            const startPosition = SequencePosition
+            {
+                .segment = &segments_[self._consumedUntilPosition.segmentIndex],
+                .offset = self._consumedUntilPosition.offset,
+            };
+            const result = wholeSequence.sliceFrom(startPosition);
             return result;
         }
 
@@ -886,7 +960,10 @@ pub fn Reader(ReaderType: type) type
             self: *Self,
             consumedPosition: ?SequencePosition) !void
         {
-            const desiredStart = consumedPosition orelse self.currentSequence().start();
+            const desiredStart = if (consumedPosition) |c|
+                    self.buffer().getBufferPosition(c)
+                else
+                    self._consumedUntilPosition;
 
             const newStartPosition = self.buffer()
                 .cleanUpUnneededSegments(self.allocator, desiredStart);

@@ -35,7 +35,7 @@ fn parseIntoTree(allocator: std.mem.Allocator, filePath: []const u8) !TreeContex
     var parserState = png.createParserState();
     const parserSettings = png.Settings
     {
-        .logChunkStart = true,
+        .logChunkStart = false,
     };
 
     var tree = ast.AST.create(.{
@@ -470,7 +470,7 @@ pub fn main() !void
 
         defer tempBuffer.clearRetainingCapacity();
 
-        const relativePath = "test_data/test.png";
+        const relativePath = "test_data/palette.png";
         tempBuffer.items = try cwd.realpath(relativePath, tempBuffer.items.ptr[0 .. tempBuffer.capacity]);
 
         const t = try parseIntoTree(allocator, tempBuffer.items);
@@ -1041,13 +1041,15 @@ pub fn main() !void
                                 std.debug.assert(node.nodeType == .RGBComponent);
                                 const parentNodeIndex = ui.currentNodePath.items[nodeIndexIndex - 1];
                                 const parentNode = &treeContext.tree.syntaxNodes.items[parentNodeIndex];
+                                std.debug.assert(parentNode.nodeType == .RGBColor);
                                 const indexOfSelfInParent = i:
                                 {
-                                    for (parentNode.syntaxChildren.array.items) |childIndex|
+                                    const children = parentNode.syntaxChildren.array.items;
+                                    for (0 .., children) |i, childIndex|
                                     {
                                         if (childIndex == nodeIndex)
                                         {
-                                            break :i childIndex;
+                                            break :i i;
                                         }
                                     }
                                     unreachable;

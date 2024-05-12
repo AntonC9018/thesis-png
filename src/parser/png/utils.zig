@@ -200,6 +200,8 @@ pub fn removeAndProcessNextByte(
         return error.NotEnoughBytes;
     }
 
+    try functor.pushLevels();
+    
     const front = try pipelines.removeFirst(context.sequence());
 
     try functor.each(front);
