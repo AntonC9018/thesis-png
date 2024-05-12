@@ -149,7 +149,6 @@ pub fn createTree(
 {
     const t = try generateTreeCreationContext(bitLensBySymbol);
     const tree = try createTreeFromContext(&t, allocator);
-    std.debug.print("Tree: {}.\n", .{ tree });
     return tree;
 }
 

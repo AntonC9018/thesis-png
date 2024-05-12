@@ -306,10 +306,27 @@ fn readCodeLenEncodedFrequency(
                 return error.InvalidRepeatCount;
             }
 
+            const repeatedSymbol = repeatedSymbol:
+            {
+                switch (freqState.decodedLen)
+                {
+                    16 => 
+                    {
+                        if (readCount.* == 0)
+                        {
+                            return error.NothingToRepeat;
+                        }
+                        break :repeatedSymbol outputArray[readCount.* - 1];
+                    },
+                    17, 18 => break :repeatedSymbol 0,
+                    else => unreachable,
+                }
+            };
+
             for (0 .. repeatCount) |i|
             {
                 const index = readCount.* + i;
-                outputArray[index] = 0;
+                outputArray[index] = repeatedSymbol;
             }
             readCount.* += repeatCount;
             return true;
@@ -343,8 +360,6 @@ fn fullyReadCodeLenEncodedFrequency(
             }
         }
     }
-
-    std.debug.print("Read count is now at {}\n", .{ readCount.* });
 
     return readCount.* == outputArray.len;
 }
@@ -403,7 +418,6 @@ pub fn decompressSymbol(
 
             switch (value)
             {
-                // TODO: Share these constants with the fixed module.
                 0 ... 255 =>
                 {
                     try createNode.create(.Literal, value);
@@ -426,8 +440,6 @@ pub fn decompressSymbol(
         },
         .LenExtraBits =>
         {
-            std.debug.print("Extra len of size {} accessed\n", .{ state.lenCode.extraBitCount() });
-
             const len = switch (state.lenCode.extraBitCount())
             {
                 0 => 0,

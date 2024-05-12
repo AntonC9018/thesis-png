@@ -254,7 +254,14 @@ pub fn decode(context: *Context) !bool
                 .state = decompressor,
             };
 
-            const doneWithBlock = try deflate.deflate(&deflateContext);
+            const doneWithBlock = deflate.deflate(&deflateContext) catch |err|
+            {
+                if (err != error.NotEnoughBytes)
+                {
+                    deflate.skipToWholeByte(&deflateContext);
+                }
+                return err;
+            };
             if (doneWithBlock and decompressor.isFinal)
             {
                 state.action = .Adler32Checksum;

@@ -207,6 +207,7 @@ pub fn deflate(context: *Context) !bool
                 {
                     // This reads as much as possible, because there's nothing interesting going on.
                     try noCompression.decompress(context, &s.decompression);
+                    try context.level().completeNode();
                     return true;
                 },
                 .Reserved => unreachable,

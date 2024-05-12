@@ -719,7 +719,6 @@ pub fn initChunkDataNode(context: *Context, chunkType: ChunkType) !void
         {
             setChunkDataAction(dataState, t, std.mem.zeroes(ActionType(t)));
             dataState.value = undefined;
-            std.debug.print("Set the initial action to {}\n", .{std.mem.zeroes(ActionType(t))});
         },
         inline
         .ICCProfile,
