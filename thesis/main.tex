@@ -53,11 +53,11 @@ Teza constă din: Introducere, \total{num_chapters} capitole, Concluzii generale
 Textul de bază cuprinde \usefulPageCount{} de pagini și \anexeCount{} anexe.
 
 \textbf{Cuvinte-cheie:}
-\textit{\ac{PNG}, Zlib, DEFLATE, format de fișier, arbore sintactic, aplicație pentru vizualizare.}
+\textit{\acs{PNG}, Zlib, DEFLATE, format de fișier, arbore sintactic, aplicație pentru vizualizare.}
 
 \textbf{Actualitatea.}
 
-\ac{PNG} este un format de imagini folosit pe scară largă pe Internet,
+\acs{PNG} este un format de imagini folosit pe scară largă pe Internet,
 în dezoltarea aplicațiilor grafice, precum și în alte diverse domenii.
 Înțelegerea structurii formatului poate fi utilă pentru a-l putea extinde, 
 a-l utiliza într-un mod mai eficient și acesta poate servi drept referință pentru 
@@ -65,21 +65,23 @@ crearea unor formaturi noi.
 
 \textbf{Scopul și obiectivele cercetării}.
 
-Lucrarea de față are scopul educațional -- să facă cunoștința cu structura formatului \ac{PNG}.
-Obiectivele tezei constă în explorarea formatului creând o aplicație grafică de vizualizare.
+Lucrarea de față are scopul educațional -- să facă cunoștința cu structura formatului \acs{PNG}.
+Obiectivele tezei constă în explorarea formatului creând o aplicație grafică de vizualizare a formatului.
 
 Scopul tezei explicit \textit{nu constă} în afișarea imaginii pe ecran,
 nici nu în generarea unei imagini în formatul PNG,
 focusând anume la structura formatului.
 
 \textbf{Rezultatele preconizate și obținute} rezumă în: 
-(1) studierea și înțelegerea formatului \ac{PNG} și a formaturile de comprimare asociate 
+(1) studierea și înțelegerea formatului \acs{PNG} și a formaturilor de comprimare asociate 
 (2) implementarea unui parser în cod
 (3) implementarea unei aplicații grafice pe baza parser-ului.
 
-\textbf{Problemele importante rezolvate} sunt: înțelegerea slabă a formatului \ac{PNG}.
+\textbf{Problemele importante rezolvate} sunt: înțelegerea slabă a formatului \acs{PNG}.
 
-\textbf{Valoarea aplicativă.} Ca rezultat a fost implementată o aplicație care poate fi folosită pentru vizualizare a formatului \ac{PNG}.
+\textbf{Valoarea aplicativă.} Ca rezultat a fost implementată o aplicație care poate fi folosită pentru vizualizare a formatului \acs{PNG}.
+
+Toate codurile sursă a proiectului pot fi accesate pe GitHub după următorul link: \url{https://github.com/AntonC9018/thesis-png}.
 
 Rezultatele obținute au fost raportate la \textbf{\conferencesList}.
 
@@ -94,38 +96,43 @@ General conclusions and recommendations, Bibliography of \bibliographyEntryCount
 Base text takes up \usefulPageCount{} pages and has \anexeCount appendicies.
 
 \textbf{Keywords:}
-\textit{\ac{PNG}, Zlib, DEFLATE, file format, syntax tree, visualization application.}
+\textit{\acs{PNG}, Zlib, DEFLATE, file format, syntax tree, visualization application.}
 
 \textbf{Relevance.}
 
-The \ac{PNG} file format is an image format widely used on the internet,
+The \acs{PNG} file format is an image format widely used on the Internet,
 graphics application development, as well as in other various domains.
-Understanding of the structure of the format can be useful for extending it,
-using it in a more efficient way.
+Understanding of the structure of the format can prove useful for extending it
+as well as using it in a more efficient way.
 The format's structure can also serve as a reference for designing new file formats.
 
 \textbf{Purpose and objectives of this research}
 
 The scientific work has an educational purpose
--- it aims introduce the structure of the \ac{PNG} file format.
+-- it aims introduce the structure of the \acs{PNG} file format.
 The main objective of the thesis is the exploration of the file format
 through building of a graphical application designed for its visualization.
 
-The goal of the thesis is explicitly \textit{not} to show the \ac{PNG} image on to the screen,
-neither it is to generate an image encoded in the \ac{PNG} format, focusing specifically
+The goal of the thesis is explicitly \textit{not} to display the \acs{PNG} image on to the screen,
+neither it is to generate an image encoded in the \acs{PNG} format, focusing specifically
 on the structure of the format.
 
 \textbf{The planned and obtained results} are the following:
-(1) learning and understanding of the \ac{PNG} file format and of the associated compression formats
-(2) implementation a parser in code
+(1) learning and understanding of the \acs{PNG} file format and of the associated compression formats
+(2) implementation of a parser in code
 (3) implementation of a graphical application on top of the parser.
 
-\textbf{Important resolved problems} are: poor understanding of the \ac{PNG} file format.
+\textbf{Important resolved problems} are: poor understanding of the \acs{PNG} file format.
 
 \textbf{Applicative value.} 
-As a result of the work, a graphical application has been implemented which can be used for visualizing of the \ac{PNG} file format.
+As a result of the work, a graphical application has been implemented,
+which can be used to visualize the \acs{PNG} file format.
+
+The entire source code can be obtained by accessing the GitHub repository
+by the following URL: \url{https://github.com/AntonC9018/thesis-png}. 
 
 The obtained results were reported on \textbf{\conferencesList}\cite{self}.
+
 
 % I think this one's required to be capitalized.
 \unnumberedChapter{INTRODUCERE}
@@ -140,8 +147,8 @@ web, aplicații grafice care salvează sau încarcă imagini din fișiere, precu
 de altul. Formatul include, de asemenea, mecanisme pentru asigurarea integrității datelor, precum
 octeții elementului \ac{CRC}.
 
-Reieșind din toate acestea, formatul \ac{PNG} merită să se învețe pentru a manipula eficient fișierele de
-acest format, pentru a putea extinde formatul prin niște chunk-uri personalizate, și pentru a afla despre
+Reieșind din toate acestea, formatul \ac{PNG} merită să fie învățat pentru a putea manipula eficient fișierele de
+acest format, extinde formatul prin niște chunk-uri personalizate, și pentru a afla despre
 metodele de asigurare a integrității, precum și despre algoritmii de comprimare folosite ca parte din \ac{PNG}
 (Zlib). Aceste idei pot ajuta și la crearea unor formaturi noi de fișier, nu neapărat de imagine.
 
@@ -158,14 +165,15 @@ creând un parser și oarecare alte instrumente necesare în proces.
 
 Structura formatului \ac{PNG} și a formaturilor de comprimare integrate Zlib și DEFLATE
 a fost studiată din specificațiile acestora \cite{png_spec} \cite{zlib_spec} \cite{deflate_spec}.
-Programul a fost implementat în limbajul de programare Zig \cite{zig} care a fost învățat prin documentație.
+Programul a fost implementat în limbajul de programare Zig \cite{zig} care a fost studiat din documentație.
 Pentru implementarea formatului DEFLATE ca referință a fost într-o măsură scăzută folosit codul librăriei uzlib \cite{gzip_impl}.
+Pentru a depana implementarea DEFLATE s-a mai folosit exemplul aplicării algoritmului DEFLATE și datele test de Google \cite{deflate_tests}.
 A fost folosită librăria Raylib \cite{raylib} drept librăria grafică.
 
 Deoarece a fost luată abordarea explorativă la dezvoltarea aplicației,
 aproape n-au fost folosite referințe externe,
 fie coduri din diferite proiecte, alte lucrări științifice, sau cărți.
-Pentru a crea aplicația ajung documentele de specificație a formaturile necesare,
+Pentru a crea aplicația ajung documentele de specificație a formaturilor necesare,
 și o modalitate de a genera sau încărca niște imagini \ac{PNG}
 pentru verificarea corectitudinii întregului program,
 însă pentru aceasta poate fi folosit tocmai Paint care este prezent pe orice sistem Windows.
@@ -173,14 +181,14 @@ pentru verificarea corectitudinii întregului program,
 \textbf{Noutatea stiințifică/originalitatea.}
 
 Cu toate că există mai multe librării \ac{PNG},
-scopul aplicației dezvoltate în contextul acestei teze diferă de scopul librăriilor \ac{PNG} obișnuite,
-care este reprezentarea unei imagini pe ecran,
-dar nu explorarea formatului de fișier sau construirea arborelui sintactic.
+scopul aplicației dezvoltate în contextul acestei teze diferă de scopul librăriilor \ac{PNG} obișnuite.
+Scopul tezei nu este reprezentarea unei imagini pe ecran ca la alte librării,
+ci în explorarea formatului de fișier și construirea arborelui sintactic.
 Teza explicit nu are scopul de a afișa imaginea pe ecran.
 
 \textbf{Valoarea aplicativă.}
 
-Aplicația obținută poate fi folosită pentru a-și face cunoștința cu formatul de fișier \ac{PNG}.
+Aplicația obținută poate fi folosită pentru a-și face cunoștința cu formatul de fișier \acs{PNG}.
 
 Cu toate acestea, scopul principal al lucrării constă
 în partea educațională și practică a acesteia pentru student,
@@ -188,14 +196,14 @@ iar aplicația este doar produsul primit în urma implementării a codurilor nec
 Partea educațională și practică include următoarele puncte:
 \begin{itemize}
     \item Experiența adunată în procesul rezolvării problemelor întâlnite;
-    \item Înțelegerea formatului de fișier \ac{PNG};
+    \item Înțelegerea formatului de fișier \acs{PNG};
     \item
         Înțelegerea formaturilor de comprimare asociate,
         și în particular experiența de implementare a acestor formaturi;
     \item Folosirea arborilor sintactice pentru a realiza partea grafică a aplicației.
 \end{itemize}
 
-Toate acestea vor avea valoare în munca profesională a sudentului în viitor.
+Toate acestea vor avea valoare în munca profesională a studentului în viitor.
 
 
 \textbf{Sumarul tezei.}
@@ -207,7 +215,7 @@ ca limbajul principal de dezvoltare a proiectului.
 
 Al doilea capitol, \nameref{architecture_chapter_title}, schițează implementarea,
 subliniind ideile la începutul dezvoltării și explică abordările selectate.
-Este explicat procesul de gândire în ceea ce ține divizarea aplicații la module,
+Este explicat procesul de gândire în ceea ce ține divizarea aplicației la module,
 și luarea deciziilor în ceea ce ține arhitectura la nivel înalt a proiectului.
 Tot aici este introdusă imaginea inițială a întregii aplicații.
 
@@ -222,7 +230,7 @@ Acest capitol include și programarea interfeței grafice.
 
 \section{Descriere la nivel înalt a formatului de fișier \acs{PNG}}
 
-\subsection{Scopul formatului}
+\subsection{Introducere}
 
 Formatul de fișier \ac{PNG} este unul din cele mai răspândite formaturi de imagine.
 Formatul acesta este folosit în numeroase domenii pe scară largă, incluzând majoritatea aplicațiilor
@@ -231,9 +239,11 @@ web, aplicații grafice care salvează sau încarcă imagini din fișiere, precu
 În continuare vor fi descrise principiile de bază a acestui format,
 precum și cele mai importante decizii de proiectare care au adus creatorii formatului la structura lui actuală.
 
+\subsection{Scopul formatului}
+
 Formatul \ac{PNG} este un format portabil destinat pentru reprezentarea imaginilor fără pierderi.
 
-Fraza ``fără pierderi'' reprezintă faptul că pixelile imaginii
+Fraza ``fără pierderi'' reprezintă faptul că pixelii imaginii
 pot fi comprimate într-un fișier \ac{PNG},
 după ce decomprimate din acest fișier de către cititor,
 întorcându-le în forma lor inițială.
@@ -246,11 +256,11 @@ Deci termenul \textit{pierderi} se referă la pierderea de informație în urma 
 
 Formatul \ac{PNG} a fost inițial creat pentru a înlocui formatul \ac{GIF},
 pentru care nu era posibil de creat un comprimător de uz liber atunci\cite{gif_unusable_reason}.
-În plus, inginerii care au inventat \ac{PNG} s-a străduit să îmbunătățească algoritmul de comprimare,
-precum și structura formatului nou, și unele capacități neaccesibile în \ac{GIF},
+În plus, inginerii care au inventat \ac{PNG} s-au străduit să îmbunătățească algoritmul de comprimare,
+precum și structura formatului nou, adăugând unele capacități neaccesibile în \ac{GIF},
 ca posibilitatea de a comprima imagini în culori reale (truecolor images),
 posibilitatea de a folosi un canal separat pentru transparența,
-robustețea împotrivă erorilor de transmisie, și altele.
+robustețea ridicată împotrivă erorilor de transmisie, și altele.
 
 \subsection{Catacteristici principale}
 
@@ -291,7 +301,7 @@ Capacitățile păstrate din GIF:
 Caracteristicile noi ale PNG, indisponibile în GIF, includ:
 
 \begin{itemize}
-    \item Imagini truecolor de până la 48 de biți per pixel.
+    \item Imagini de culoarea reală (truecolor) de până la 48 de biți per pixel.
 
     \item Imagini gri de până la 16 biți per pixel.
 
@@ -299,10 +309,10 @@ Caracteristicile noi ale PNG, indisponibile în GIF, includ:
 
     \item 
         Informații gamma ale imaginii, care permit afișarea automată a imaginilor
-        cu luminozitate/contrast corecte indiferent de mașinile utilizate
-        pentru a origina și afișa imaginea.
+        cu luminozitate sau contrast corecte indiferent de mașinile utilizate
+        pentru a genera sau afișa imaginea.
 
-    \item Asigurarea integrității imaginii printr-un algoritm simplu.
+    \item Asigurarea integrității imaginii printr-un algoritm simplu (\ac{CRC}).
 
     \item Prezentare inițială mai rapidă în modul de afișare progresivă.
 \end{itemize}
@@ -321,7 +331,7 @@ PNG este conceput să fie:
         Bine comprimat: atât imaginile cu paletă de culori,
         cât și imaginile cu culoarea reală (truecolor images)
         sunt comprimate la fel de eficient ca și în alte
-        algorimte existente de comprimare fără pierderi,
+        algoritmi existenți de comprimare fără pierderi,
         dar des și mai eficient.
 
     \item
@@ -362,6 +372,13 @@ acesta ar putea arăta imaginea.
 La chunk-uri critice prima literă din tip este majusculă,
 iar la cele auxiliare ea este minusculă.
 
+Capacitatea de flexibilitate a formatului este asigurată prin această structură fundamentală de chunk-uri.
+Fiecare chunk are subformatul său independent,
+și chunk-urile noi pot fi adăugate transparent și fără a afecta
+implementările existente ale decodorilor,
+dacă chunk-ul se declară ca un chunk auxiliar.
+
+Urmează o listă de unele chunk-uri de bază, definite în specificația formatului:
 \begin{itemize}
   \item
       \textbf{Antetul imaginii (Image Header sau \texttt{IHDR})}:
@@ -398,9 +415,9 @@ iar la cele auxiliare ea este minusculă.
 
 \subsection{Structura unui chunk}
 
-Chunk-ul este alcătuit din 4 câmpuri:
+Orice chunk este alcătuit din 4 câmpuri:
 \begin{itemize}
-    \item \textbf{Lungimea}. Este un număr întreg pe 4 octeți care indică numărul de octeți în câmpul datelor chunk-ului;
+    \item \textbf{Lungimea}. Este un număr întreg pe 4 octeți care indică numărul de octeți în câmpul de date al chunk-ului;
     \item \textbf{Tipul chunk-ului}. Acestea sunt 4 octeți, de obicei 4 litere, care identifică tipul chunk-ului.
     \item \textbf{Datele chunk-ului}. Conțin datele specifice tipului de chunk dat, de lungimea dată.
     \item \textbf{\ac{CRC}}.
@@ -470,11 +487,9 @@ ceea ce se folosește pentru prezentarea imaginii dar nu este util pentru vizual
 
 \subsection{Informații generale}
 
-Zlib este formatul de comprimare folosit în scopul unelor chunk-uri din formatul \ac{PNG}.
+Zlib este formatul de comprimare folosit în scopul unor chunk-uri din formatul \ac{PNG}.
 De exemplu, chunk-ul \texttt{zTXt} definește câmpul \texttt{Compressed text},
 care include direct șirul compresat în formatul Zlib.
-
-Toate datele pixelilor, adică datele chunk-urilor \texttt{IDAT}, sunt comprimate folosind acest algoritm.
 
 Asemănătoare cu formatul \ac{PNG}, Zlib include un câmp folosit pentru verificarea integrității datelor.
 Algoritmul folosit pentru calcularea acestui câmp este numit Adler32.
@@ -494,7 +509,8 @@ Câmpurile cu aceste date însă sunt citite și validate în mod normal, confor
 
 Formatul \ac{PNG} folosește comprimarea datelor prin algoritmul Zlib.
 Comprimarea se folosește pentru chunk-urile \texttt{zTXt} (text comprimat),
-\texttt{iCCP} (profil \ac{ICC}), \texttt{IDAT} (datele pixelilor), precum și altele.
+\texttt{iCCP} (profil \ac{ICC}), precum și altele.
+Toate datele pixelilor, adică datele chunk-urilor \texttt{IDAT}, sunt comprimate folosind acest algoritm.
 
 Structura acestui format se explică în mai multe detalii în capitolul \ref{implementation_chapter_title},
 deoarece este strâns legată de implementare.
@@ -505,7 +521,7 @@ deoarece este strâns legată de implementare.
 
 Limbajul de programare Zig este un limbaj de programare de nivel scăzut, aproape de C.
 Zig se conține într-un spațiu special, în acel sens că scopul lui este de
-a îmbunătăți securitatea programelor eliminând neajunsurile limbajului C
+a îmbunătăți securitatea programelor, eliminând neajunsurile limbajului C
 și adăugând diverse tipuri de verificări stricte la compilare,
 dar fără a deveni un limbaj de nivel înalt.
 
@@ -518,7 +534,7 @@ tipuri întregi de orice mărime fixă și foarte multe alte.
 moștenirea tipurilor, capacitățile programării funcționale ca expresii lambda,
 capturarea stivei implicită.
 
-Zig încă este nestabil și este tânăr, fiind în procesul de continuă dezvolare și optimizare.
+Zig încă este nestabil și tânăr, fiind în procesul de continuă dezvolare și optimizare.
 Însă, aceasta nu-l impiedică să fie un limbaj de programare bun.
 
 \subsection{Siguranța memoriei}
@@ -527,10 +543,8 @@ Deoarece nu există constructori și destructori la structuri,
 nici nu există conceptul de \ac{RAII}.
 \ac{RAII} sau, în alte cuvinte, conceptul de proprietar, este modul principal
 prin care limbajele ca C++ și Rust se străduiesc să rezolve problema siguranței memoriei.
-Zig rezolvă această problemă și multe alte folosind verificări meticuloase
-la compilare și în timpul rulării, dacă este compilat în mod de depanare.
 
-Însă, Zig apriori nu garantează suguranța memoriei.
+Zig apriori nu garantează suguranța memoriei.
 El dă libertatea programatorului să alege cum și când să șteargă memoria alocată,
 pentru a rămâne un limbaj de programare de sistem.
 Cu toate acestea, Zig introduce mai multe utilități și capacități care pot ajuta cu aceasta.
@@ -538,8 +552,8 @@ Cu toate acestea, Zig introduce mai multe utilități și capacități care pot 
 O idee cheie în Zig este ca toate alocările memoriei să fie vizibile la utilizator.
 Pentru a aloca memoria, utilizatorul trebuie să-i transmite funcției care solicită alocarea memoriei
 un obiect de alocator în mod explicit (ca parametru).
-Acest obiect poate fi înlocuit cu o implementare personalizată
-pentru a monitoriza alocările, de exemplu, în mod trivial.
+Acest obiect poate fi înlocuit cu o implementare personalizată,
+de exemplu pentru a monitoriza alocările, în mod trivial.
 Pur și simplu se transmite un obiect de alocator diferit.
 
 
@@ -548,7 +562,7 @@ Pur și simplu se transmite un obiect de alocator diferit.
 Zig este mult mai strict, și de aceea mai sigur în ceea ce ține, de exemplu, de numere întregi.
 Dacă, de exemplu, codul C este compilat cu comanda de compilare implicită,
 adică fără flaguri \texttt{-Wconversion -Werror}, situațiile unde se pierd informații,
-ca conversiunea de la tipuri întregi cu semn la tipuri fără semn, sau conversiuni întregilor
+ca conversiunea de la tipuri întregi cu semn la tipuri fără semn, sau conversiuni ale întregilor
 de la 64 de biți la 32 de biți, sunt acceptate de către compilator fără nici o eroare sau avertizare,
 iar cazurile unde așa conversiuni de fapt se întâmplă în timpul rulării
 sunt specificate ca ``undefined behavior'' în C!
