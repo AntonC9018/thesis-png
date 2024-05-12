@@ -5,6 +5,7 @@ const zlib = parser.zlib;
 const deflate = zlib.deflate;
 const chunks = parser.chunks;
 const ast = parser.ast;
+const TaggedArrayList = @import("TaggedArrayList.zig").TaggedArrayList;
 
 const resourcesDir = "raylib/raylib/examples/text/resources/";
 
@@ -29,16 +30,25 @@ pub const SyntaxChildrenList = struct
 pub const ChunkDataNodeType = parser.ChunkType;
 
 pub const NodeIndex = ast.NodeId;
-pub const DataIndex = ast.NodeDataId;
 
 pub const invalidNodeIndex: NodeIndex = ast.invalidNodeId;
-pub const invalidDataIndex: DataIndex = ast.invalidNodeDataId;
+pub const invalidDataId: DataId = @bitCast(@as(usize, std.math.maxInt(usize)));
+
+pub fn isDataIdInvalid(id: DataId) bool
+{
+    return @as(usize, @bitCast(id)) == @as(usize, std.math.maxInt(usize));
+}
+pub fn isDataIdValid(id: DataId) bool
+{
+    return !isDataIdInvalid(id);
+}
 
 pub const NodeType = ast.NodeType;
 pub const NodeValue = ast.NodeData;
 
 // Maybe add a reference count here to be able to know when to delete things.
 pub const NodeData = ast.NodeData;
+pub const DataId = TaggedArrayList(NodeData).Id;
 
 pub const SemanticListNode = struct
 {
@@ -60,7 +70,7 @@ pub const Node = struct
     // Points to the root data of the semantic linked list.
     // If there's no semantic list, just points to the data.
     // There's always at least one data in that case.
-    data: DataIndex = invalidDataIndex, 
+    data: DataId = invalidDataId, 
     syntaxChildren: SyntaxChildrenList = .{},
     
     // This is only going to be used for the image data nodes, probably.
@@ -71,24 +81,24 @@ fn nodeIdToIndex(id: ast.NodeId) NodeIndex
 {
     return id;
 }
-fn dataIdToIndex(id: ast.NodeDataId) DataIndex
+fn decodeDataId(id: ast.NodeDataId) DataId
 {
-    return id;
+    return @bitCast(id);
 }
 fn nodeIndexToId(index: NodeIndex) ast.NodeId
 {
     return index;
 }
-fn dataIndexToId(index: DataIndex) ast.NodeDataId
+fn encodeDataId(id: DataId) ast.NodeDataId
 {
-    return index;
+    return @bitCast(id);
 }
 
 pub const AST = struct
 {
     rootNodes: std.ArrayList(NodeIndex),
     syntaxNodes: std.ArrayList(Node),
-    nodeDatas: std.ArrayList(NodeData),
+    nodeDatas: TaggedArrayList(NodeData),
 
     const NodeOperations = parser.NodeOperations;
 
@@ -102,7 +112,7 @@ pub const AST = struct
         return .{
             .rootNodes = std.ArrayList(NodeIndex).init(allocators.rootNode),
             .syntaxNodes = std.ArrayList(Node).init(allocators.syntaxNode),
-            .nodeDatas = std.ArrayList(NodeData).init(allocators.nodeData),
+            .nodeDatas = TaggedArrayList(NodeData).init(allocators.nodeData),
         };
     }
 
@@ -119,7 +129,7 @@ pub const AST = struct
         {
             .span = .{
                 .start = params.start,
-                .endInclusive = params.start,
+                .endExclusive = params.start,
             },
         });
 
@@ -144,16 +154,10 @@ pub const AST = struct
         NodeOperations.Error!void
     {
         const nodeIndex = nodeIdToIndex(params.id);
-        const dataIndex = dataIdToIndex(params.dataId);
-
-        // data exists?
-        if (dataIndex != invalidDataIndex)
-        {
-            std.debug.assert(self.nodeDatas.items.len > dataIndex);
-        }
+        const dataIndex = decodeDataId(params.dataId);
 
         const node = &self.syntaxNodes.items[nodeIndex];
-        node.span.endInclusive = end:
+        node.span.endExclusive = end:
         {
             const comparison = params.endExclusive.compareTo(node.span.start);
             std.debug.assert(comparison >= 0);
@@ -164,22 +168,11 @@ pub const AST = struct
             }
             else
             {
-                break :end params.endExclusive.add(.{ .bit = -1 });
+                break :end params.endExclusive;
             }
         };
         node.nodeType = params.nodeType;
-        std.debug.assert(node.data == dataIndex);
-
-        if (dataIndex != invalidDataIndex)
-        {
-            const data = &self.nodeDatas.items[dataIndex];
-            if (data.* == .None)
-            {
-                std.debug.print("Data was created but is empty on node completion."
-                    ++ "Something might be wrong. The node type is {}", 
-                    .{ node.nodeType });
-            }
-        }
+        std.debug.assert(node.data.eql(dataIndex));
     }
 
     pub fn linkSemanticParent(self: *AST, params: NodeOperations.SyntaxNodeSemanticLinkParams)
@@ -211,148 +204,40 @@ pub const AST = struct
         if (node) |n|
         {
             // Not already created.
-            std.debug.assert(n.data == invalidDataIndex);
+            std.debug.assert(n.data.eql(invalidDataId));
         }
 
-        const dataIndex = self.nodeDatas.items.len;
-        const data = try self.nodeDatas.addOne();
-        data.* = params.value;
-
+        const dataId = try self.nodeDatas.append(params.value);
         if (node) |n|
         {
-            n.data = dataIndex;
+            n.data = dataId;
         }
 
-        return dataIndexToId(dataIndex);
+        return encodeDataId(dataId);
     }
 
     pub fn setNodeDataValue(self: *AST, params: NodeOperations.NodeDataParams) 
         NodeOperations.Error!void
     {
-        const dataIndex = dataIdToIndex(params.id);
-        // TODO: Maybe use a multiarray.
-        const data = &self.nodeDatas.items[dataIndex];
+        const dataId = decodeDataId(params.id);
+        const data = self.nodeDatas.get(dataId);
         
         // Changing the type halfway is disallowed, unless it's not been set yet.
-        if (data.* != .None)
         {
-            const currentTag = @intFromEnum(data.*);
+            const currentTag = @intFromEnum(data);
             const newTag = @intFromEnum(params.value);
             std.debug.assert(currentTag == newTag);
         }
 
-        data.* = params.value;
+        self.nodeDatas.set(dataId, params.value);
     }
 
     pub fn deinit(self: *AST, parserAllocator: std.mem.Allocator) void
     {
-        for (self.nodeDatas.items) |*data|
+        for (self.nodeDatas.items(.OwnedString)) |*s|
         {
-            switch (data)
-            {
-                .OwnedString => |s|
-                {
-                    s.deinit(parserAllocator);
-                },
-                else => {},
-            }
+            s.deinit(parserAllocator);
         }
     }
 };
 
-pub fn createTestTree(allocator: std.mem.Allocator) !AST
-{
-    var tree: AST = .{
-        .rootNodes = std.ArrayList(usize).init(allocator),
-        .nodes = std.ArrayList(Node).init(allocator),
-        .nodeData = std.ArrayList(NodeData).init(allocator),
-    };
-    const data = try tree.nodeDatas.addManyAsArray(10);
-    const defaultType = NodeType { .TopLevel = .Chunk };
-    data.*[0] = .{
-        .type = defaultType,
-        .value = .{
-            .String = "Test",
-        },
-    };
-    data.*[1] = .{
-        .type = defaultType,
-        .value = .{
-            .String = "Hello world, this is a longer piece of text",
-        },
-    };
-    for (2 .. data.len) |i|
-    {
-        data.*[i] = .{
-            .type = defaultType,
-            .value = .{
-                .Number = i,
-            },
-        };
-    }
-
-    var position = parser.ast.Position
-    {
-        .byte = 0,
-        .bit = 0,
-    };
-
-    {
-        const endPosition = position.add(.{ .byte = 1 });
-        const node = Node
-        {
-            .span = parser.ast.NodeSpan.fromStartAndEndExclusive(position, endPosition),
-            .nodeData = null,
-            .children = .{},
-        };
-        try tree.syntaxNodes.append(node);
-        position = endPosition;
-    }
-    // Make a couple nodes to serve as children.
-    const childrenCount = 3;
-    const parentNode = try tree.syntaxNodes.addOne();
-
-    var children: SyntaxChildrenList = .{};
-    try children.array.ensureTotalCapacity(tree.childrenAllocator(), childrenCount);
-
-    for (0 .. childrenCount) |i|
-    {
-        const endPosition = position.add(.{
-            .byte = @intCast(i + 1),
-            .bit = @intCast(i * 6),
-        });
-        // std.debug.print("From: {d},{d}\n", .{ position.byte, position.bit });
-        // std.debug.print("To: {d},{d}\n", .{ endPosition.byte, endPosition.bit });
-        const node = Node
-        {
-            .span = parser.ast.NodeSpan.fromStartAndEndExclusive(position, endPosition),
-            .nodeData = i,
-            .children = .{},
-        };
-        const currentIndex = tree.syntaxNodes.items.len;
-        try children.array.append(tree.childrenAllocator(), currentIndex);
-        try tree.syntaxNodes.append(node);
-        position = endPosition;
-    }
-
-    {
-        const childIndices = children.array.items;
-        const firstChild = childIndices[0];
-        const lastChild = childIndices[childIndices.len - 1];
-
-        const start = tree.syntaxNodes.items[firstChild].span.start;
-        const end = tree.syntaxNodes.items[lastChild].span.endInclusive;
-        parentNode.* = Node
-        {
-            .span = .{
-                .start = start,
-                .endInclusive = end,
-            },
-            .nodeData = null,
-            .children = children,
-        };
-    }
-
-    (try tree.rootNodes.addManyAsArray(2)).* = .{ 0, 1 };
-    return tree;
-}

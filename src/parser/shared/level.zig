@@ -207,9 +207,9 @@ pub fn LevelContext(Context: type) type
             }
         }
 
-        pub fn setSemanticValue(self: Self, value: ast.NodeData) !void
+        pub fn setDataValue(self: Self, value: ast.NodeData) !void
         {
-            // TODO: Check value and type compatibility.
+            // TODO: Check value and node type compatibility.
             const currentNode_: *SyntaxNodeInfo = self.currentNode();
             const nodeContext_ = self.nodeContext();
             const ops = nodeContext_.operations; 
@@ -232,8 +232,11 @@ pub fn LevelContext(Context: type) type
 
         pub fn completeNodeWithValue(self: Self, value: ast.NodeData) !void
         {
-            std.debug.print("Node {} {} \n", .{ self.currentNode().nodeType, value });
-            try self.setSemanticValue(value);
+            if (self.context.settings().logChunkStart)
+            {
+                std.debug.print("Node {} {} \n", .{ self.currentNode().nodeType, value });
+            }
+            try self.setDataValue(value);
             try self.completeNode();
         }
 

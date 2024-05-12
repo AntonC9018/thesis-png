@@ -46,9 +46,8 @@ pub const State = struct
 
 pub fn isParserStateTerminal(context: *Context) bool 
 {
-    return context.state.action == .Chunk
-        and context.state.chunk.action == .Length
-        and context.state.isEnd;
+    return context.state.isEnd
+        and context.nodeContext().syntaxNodeStack.items.len == 0;
 }
 
 pub const Context = struct
@@ -152,11 +151,59 @@ pub const Chunk = struct
     crc: CyclicRedundancyCheck,
 };
 
+// Segment CRC begin
+const crcTable = crcTable:
+{
+    var result: [256]u32 = undefined;
+    @setEvalBranchQuota(256 * 8 * 2);
+
+    for (0 .., &result) |i, *r|
+    {
+        var c: u32 = i;
+        for (0 .. 8) |_|
+        {
+            if (c % 2 == 1)
+            {
+                c = 0xedb88320 ^ (c >> 1);
+            }
+            else
+            {
+                c >>= 1;
+            }
+        }
+
+        r.* = c;
+    }
+
+    break :crcTable result;
+};
+
+pub fn updateCrc(state: u32, sequence: pipelines.Sequence) u32
+{
+    var iter = sequence.iterate() orelse return state;
+    var c = state;
+    while (true)
+    {
+        for (iter.current()) |byte|
+        {
+            const index = (c ^ byte) & 0xFF;
+            c = crcTable[index] ^ c >> 8;
+        }
+
+        if (!iter.advance())
+        {
+            return c;
+        }
+    }
+}
+// Segment CRC end
+
 pub const ChunkState = struct
 {
     action: ChunkAction = .Length,
     object: Chunk,
     dataState: chunks.ChunkDataState,
+    crcState: u32 = @bitCast(@as(i32, -1)),
     bytesRead: u32 = 0,
 };
 

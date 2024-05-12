@@ -107,13 +107,13 @@ pub const SyntaxNodeSemanticLinkParams = struct
 pub const NodeDataCreationParams = struct
 {
     associatedNode: ast.NodeId = ast.invalidNodeId,
-    value: ast.NodeData = .None,
+    value: ast.NodeData,
 };
 
 pub const NodeDataParams = struct
 {
     id: ast.NodeDataId,
-    value: ast.NodeData = .None,
+    value: ast.NodeData,
 };
 
 pub const Error = std.mem.Allocator.Error;
@@ -141,7 +141,7 @@ pub const Vtable = struct
     // The value given is the initial value and might be changed later.
     createNodeData: *const fn(context: *Context, value: NodeDataCreationParams) Error!ast.NodeDataId,
 
-    // Updates the value of a semantic node.
+    // Updates the value of a node's data.
     setNodeDataValue: *const fn(context: *Context, value: NodeDataParams) Error!void,
 };
 

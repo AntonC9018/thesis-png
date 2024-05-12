@@ -5,6 +5,7 @@ pub const pipelines = parser.pipelines;
 pub const DeflateContext = deflate.Context;
 pub const std = @import("std");
 pub const huffman = @import("huffmanTree.zig");
+pub const symbolLimits = @import("symbolLimits.zig");
 
 pub const levels = parser.level;
 
@@ -111,7 +112,6 @@ pub fn peekNBits(context: PeekNBitsContext) !PeekNBitsResult(u32)
                 const c = context.bitsCount - bitsRead - 1;
                 for (0 .. bitCountWillRead) |i|
                 {
-
                     const bit = (readBitsAsResultType >> @intCast(i)) & 1;
                     result |= bit << @intCast(c - i);
                 }
@@ -283,7 +283,7 @@ test "Peek bits test"
 
     testContext.reset();
 
-    // Test the limit: reading 32 bytes.
+    // Test the limit: reading 32 bits.
     {
         const r = try peekNBits(.{
             .bitsCount = 32,
@@ -453,7 +453,7 @@ pub const HuffmanContext = struct
     tree: *huffman.Tree,
     // Could make this store the currently read number as well if needed for optimization.
     // Adding on just a single bit is easier than rereading the whole thing.
-    // So this ideally should be wrapped in a HuffamState sort of struct.
+    // So this ideally should be wrapped in a HuffmanState sort of struct.
     currentBitCount: *u5,
 };
 
@@ -497,7 +497,7 @@ pub const CommonContext = struct
     {
         return self.common.allocator;
     }
-    pub fn settings(self: *CommonContext) *Settings
+    pub fn settings(self: *CommonContext) *const Settings
     {
         return self.common.settings;
     }
@@ -544,9 +544,6 @@ pub const OutputBuffer = struct
 
     pub fn copyFromSelf(self: *OutputBuffer, backRef: BackReference) !void
     {
-        std.debug.print("Buffer len: {}, distance: {}, windowSize: {}\n", 
-            .{self.buffer().len, backRef.distance, self.windowSize.*});
-
         if (self.buffer().len < backRef.distance)
         {
             return error.BackReferenceDistanceTooLarge;
@@ -573,8 +570,8 @@ pub const OutputBuffer = struct
 
 pub const BackReference = struct
 {
-    distance: u16,
-    len: u16,
+    distance: symbolLimits.Distance,
+    len: symbolLimits.Len,
 };
 
 pub const Symbol = union(enum)
@@ -617,3 +614,218 @@ fn writeSymbolToOutput_switch(context: *DeflateContext, symbol: Symbol) !bool
     return false;
 }
 
+pub const DecompressionValueType = enum
+{
+    Literal,
+    Len,
+    EndBlock,
+    Distance,
+
+    // TODO: allow semantic nodes to store more useful data.
+    LenCodeExtra,
+    DistanceExtra,
+};
+
+pub const DecompressionNodeWriter = struct
+{
+    context: *DeflateContext,
+
+    pub fn create(self: @This(), t: DecompressionValueType, value: usize) !void
+    {
+        self.context.level().setNodeType(.{
+            .SymbolDecompression = t,
+        });
+        try self.context.level().completeNodeWithValue(.{
+            .Number = value,
+        });
+    }
+};
+
+
+pub const TestContext = struct
+{
+    allocator: std.mem.Allocator,
+    segment: pipelines.Segment = undefined,
+    sequence: pipelines.Sequence = undefined,
+    fakeAst: FakeNodeOperations = undefined,
+    nodeContext: parser.NodeContext = undefined,
+    settings: parser.Settings = .{ .logChunkStart = false },
+    outputBufferMem: std.ArrayListUnmanaged(u8) = .{},
+    windowSize: usize = 32000,
+    outputBuffer: OutputBuffer = undefined,
+    zlibState: @import("zlib.zig").State = .{},
+    deflateState: deflate.State = .{},
+    commonContext: CommonContext = undefined,
+
+    pub fn init(self: *TestContext, data: []const u8) void
+    {
+        self.segment = pipelines.Segment
+        {
+            .data = .{
+                .bytePosition = 0,
+                .capacity = data.len,
+                .items = data,
+            },
+            .nextSegment = null,
+        };
+        self.sequence = pipelines.Sequence
+        {
+            .range = .{
+                .len = @intCast(data.len),
+                .start = .{
+                    .offset = 0,
+                    .segment = &self.segment, 
+                },
+                .end = .{
+                    .offset = @intCast(data.len),
+                    .segment = &self.segment,
+                },
+            },
+        };
+        self.fakeAst = .{
+            .allocator = self.allocator,
+        };
+        self.nodeContext = .{
+            .allocator = self.allocator,
+            .operations = parser.NodeOperations.create(&self.fakeAst),
+        };
+        self.outputBuffer = .{
+            .allocator = self.allocator,
+            .array = &self.outputBufferMem,
+            .windowSize = &self.windowSize,
+        };
+        self.commonContext = .{
+            .common = .{
+                .allocator = self.allocator,
+                .level = .{},
+                .nodeContext = &self.nodeContext,
+                .settings = &self.settings,
+                .sequence = &self.sequence,
+            },
+            .output = &self.outputBuffer,
+        };
+    }
+
+    pub fn getDeflateContext(self: *TestContext) DeflateContext
+    {
+        return .{
+            .common = &self.commonContext,
+            .state = &self.deflateState,
+        };
+    }
+
+    pub fn getZlibContext(self: *TestContext) @import("zlib.zig").Context
+    {
+        return .{
+            .common = &self.commonContext,
+            .state = &self.zlibState,
+        };
+    }
+};
+
+const FakeNodeOperations = struct
+{
+    const h = parser.NodeOperations;
+    const Self = @This();
+
+    dataId: parser.ast.NodeDataId = 1,
+    nodeId: parser.ast.NodeId = 1,
+    mappings: std.ArrayListUnmanaged(struct
+        {
+            nodeId: parser.ast.NodeId,
+            dataId: parser.ast.NodeDataId,
+            value: parser.ast.NodeData,
+        }) = .{},
+    allocator: std.mem.Allocator,
+
+    pub fn createSyntaxNode(self: *Self, _: h.SyntaxNodeCreationParams) h.Error!parser.ast.NodeId
+    {
+        const result = self.nodeId;
+        self.nodeId += 1;
+
+        try self.mappings.append(self.allocator, .{
+            .nodeId = result,
+            .dataId = parser.ast.invalidNodeDataId,
+            .value = undefined,
+        });
+
+        return result;
+    }
+    pub fn completeSyntaxNode(self: *Self, value: h.SyntaxNodeCompletionParams) h.Error!void
+    {
+        for (0 .., self.mappings.items) |i, *m|
+        {
+            if (m.nodeId == value.id)
+            {
+                if (m.dataId != parser.ast.invalidNodeDataId)
+                {
+                    std.debug.print("Value {}\n", .{ m.value });
+                }
+                // std.debug.print("Type {}, Value {?}\n", .{
+                //     value.nodeType,
+                //     if (m.dataId != parser.ast.invalidNodeDataId)
+                //         m.value
+                //     else
+                //         null
+                // });
+                _ = self.mappings.orderedRemove(i);
+                return;
+            }
+        }
+    }
+    pub fn linkSemanticParent(_: *Self, _: h.SyntaxNodeSemanticLinkParams) h.Error!void
+    {
+    }
+    pub fn createNodeData(self: *Self, params: h.NodeDataCreationParams) h.Error!parser.ast.NodeDataId
+    {
+        if (params.associatedNode == parser.ast.invalidNodeId)
+        {
+            return 0;
+        }
+
+        for (self.mappings.items) |*m|
+        {
+            if (m.nodeId == params.associatedNode)
+            {
+                const result = self.dataId;
+                m.dataId = result;
+                m.value = params.value;
+                self.dataId += 1;
+                return result;
+            }
+        }
+        return 0;
+    }
+    pub fn setNodeDataValue(self: *Self, params: h.NodeDataParams) h.Error!void
+    {
+        for (self.mappings.items) |*m|
+        {
+            if (m.dataId == params.id)
+            {
+                m.value = params.value;
+                return;
+            }
+        }
+    }
+};
+
+pub fn readAllTextAllocRelative(allocator: std.mem.Allocator, relativePath: []const u8) ![]u8
+{
+    const cwd = std.fs.cwd();
+    const absolutePath = try cwd.realpathAlloc(allocator, relativePath);
+    defer allocator.free(absolutePath);
+
+    var file = try std.fs.openFileAbsolute(absolutePath, .{
+        .mode = .read_only,
+    });
+    defer file.close();
+
+    const maxBytes = 99999;
+    const compressedBytes = try file.readToEndAlloc(allocator, maxBytes);
+    return compressedBytes;
+}
+
+test
+{
+    _ = symbolLimits;
+}

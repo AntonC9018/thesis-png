@@ -23,7 +23,7 @@ pub const Tree = struct
         for (&self.decodedCharactersLookup) |*arr|
         {
             allocator.free(arr.*);
-            arr.* = &[_]DecodedCharacter{};
+            arr.* = &.{};
         }
     }
     
@@ -107,6 +107,7 @@ pub const Tree = struct
         return self.getNextBitCount(0).?;
     }
 
+    // Segment HuffmanDecode begin
     pub fn tryDecode(self: *const Tree, code: u16, bitCount: u5)
         !union(enum)
         {
@@ -117,12 +118,11 @@ pub const Tree = struct
         const bitIndex: u4 = @intCast(bitCount - 1);
 
         const prefix = self.prefixes[bitIndex];
-
-        const index = code -% prefix;
         const lookup = self.decodedCharactersLookup[bitIndex];
 
-        if (code >= prefix and index < lookup.len)
+        if (code >= prefix and code < prefix + lookup.len)
         {
+            const index = code - prefix;
             return .{ 
                 .DecodedCharacter = lookup[index],
             };
@@ -130,13 +130,17 @@ pub const Tree = struct
         else
         {
             const nextBitCount = self.getNextBitCount(bitCount)
-                orelse return error.InvalidCode;
+                orelse
+                {
+                    return error.InvalidCode;
+                };
 
             return .{
                 .NextBitCount = nextBitCount
             };
         }
     }
+    // Segment HuffmanDecode end
 };
 
 pub fn createTree(
@@ -145,6 +149,7 @@ pub fn createTree(
 {
     const t = try generateTreeCreationContext(bitLensBySymbol);
     const tree = try createTreeFromContext(&t, allocator);
+    std.debug.print("Tree: {}.\n", .{ tree });
     return tree;
 }
 
@@ -193,7 +198,10 @@ fn generateTreeCreationContext(bitLensBySymbol: []const u5)
     });
     for (bitLensBySymbol) |bitLength|
     {
-        r.numberOfCodesByCodeLen()[bitLength - 1] += 1;
+        if (bitLength != 0)
+        {
+            r.numberOfCodesByCodeLen()[bitLength - 1] += 1;
+        }
     }
 
     var code: u16 = 0;
@@ -202,11 +210,14 @@ fn generateTreeCreationContext(bitLensBySymbol: []const u5)
         const count = r.numberOfCodesByCodeLen()[bitIndex];
         r.codeStartingValuesByLen()[bitIndex] = code;
 
-        // I think this needs an overflow check?
-        const allowedMask = ~@as(u16, 0) >> @intCast(16 - bitIndex - 1);
-        if ((code & allowedMask) != code)
-        {
-            return error.InvalidHuffmanTree;
+        if (false) {
+            // I think this needs an overflow check?
+            // TODO: Something is wrong with this check, I can't quite put my finger on it.
+            const allowedMask = (~@as(u16, 0)) >> @intCast(16 - bitIndex - 1);
+            if ((code & allowedMask) != code)
+            {
+                return error.InvalidHuffmanTree;
+            }
         }
 
         code = (code + count) << 1;
@@ -214,6 +225,7 @@ fn generateTreeCreationContext(bitLensBySymbol: []const u5)
     return r;
 }
 
+// Segment CreateTree begin
 fn createTreeFromContext(
     t: *const TreeCreationContext,
     allocator: std.mem.Allocator) !Tree
@@ -246,6 +258,7 @@ fn createTreeFromContext(
 
     return codes;
 }
+// Segment CreateTree end
 
 test "huffman tree correct"
 {

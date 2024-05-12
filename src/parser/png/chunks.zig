@@ -772,8 +772,6 @@ pub fn initChunkDataNode(context: *Context, chunkType: ChunkType) !void
             {
                 return error.NonZeroLengthForIEND;
             }
-
-            context.state.isEnd = true;
         },
         .ImageData =>
         {
@@ -781,6 +779,8 @@ pub fn initChunkDataNode(context: *Context, chunkType: ChunkType) !void
             {
                 context.state.isData = true;
             }
+
+            context.state.isEnd = true;
         },
         .Transparency => |s|
         {
@@ -1156,11 +1156,6 @@ fn parseImageData(context: *Context) !bool
             // Double carry overs are not implemented yet.
             std.debug.assert(!usesCarryOverSegment);
 
-
-            {
-                try context.level().captureSemanticContextForHierarchy(&imageData.zlibStreamSemanticContext);
-            }
-
             {
                 if (sequence.len() == 0)
                 {
@@ -1180,7 +1175,9 @@ fn parseImageData(context: *Context) !bool
             return true;
         };
 
-    return context.isLastChunkSequenceSlice and sequence.len() == 0;
+    const isDone = context.isLastChunkSequenceSlice and sequence.len() == 0; 
+
+    return isDone;
 }
 
 pub fn parseChunkData(context: *Context) !bool
@@ -1375,6 +1372,8 @@ pub fn parseChunkData(context: *Context) !bool
             const done = try parseImageData(context);
             if (done)
             {
+                try context.level().captureSemanticContextForHierarchy(
+                    &context.state.imageData.zlibStreamSemanticContext);
                 try context.level().completeNode();
             }
 

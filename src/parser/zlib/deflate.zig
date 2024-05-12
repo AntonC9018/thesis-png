@@ -9,6 +9,7 @@ pub const noCompression = @import("noCompression.zig");
 pub const fixed = @import("fixed.zig");
 pub const dynamic = @import("dynamic.zig");
 pub const Symbol = helper.Symbol;
+pub const DecompressionValueType = helper.DecompressionValueType;
 
 pub const BlockType = enum(u2)
 {
@@ -52,6 +53,10 @@ pub const Context = struct
     pub fn nodeContext(self: *Context) *parser.NodeContext
     {
         return self.common.nodeContext();
+    }
+    pub fn settings(self: *Context) *const helper.Settings
+    {
+        return self.common.settings();
     }
 };
 
@@ -111,7 +116,6 @@ pub fn deflate(context: *Context) !bool
             const blockType = try helper.readBits(.{ .context = context }, u2);
             const typedBlockType: BlockType = @enumFromInt(blockType);
 
-            std.debug.print("Block type value: {}\n", .{typedBlockType});
             try context.level().completeNodeWithValue(.{
                 .BlockType = typedBlockType,
             });
@@ -255,4 +259,41 @@ pub fn skipToWholeByte(context: *Context) void
 test
 {
     _ = huffman;
+    _ = helper;
+}
+
+test "Romeo dynamic"
+{
+    const allocator = std.heap.page_allocator;
+
+    const compressedBytes = try helper.readAllTextAllocRelative(allocator, "test_data/romeo.txt.deflate");
+    defer allocator.free(compressedBytes);
+
+    const decompressedBytes = try helper.readAllTextAllocRelative(allocator, "test_data/romeo.txt");
+    defer allocator.free(decompressedBytes);
+
+    var testContext = helper.TestContext
+    {
+        .allocator = allocator,
+    };
+    testContext.init(compressedBytes);
+    var deflateContext = testContext.getDeflateContext();
+    while (true)
+    {
+        const done = try deflate(&deflateContext);
+        const currentPosition = deflateContext.getStartBytePosition();
+        const endPosition = parser.ast.NodePositionOffset
+        {
+            .byte = @intCast(compressedBytes.len),
+        };
+        const diff = endPosition.sub(currentPosition.asOffset()).normalized();
+        if (done and diff.byte == 0)
+        {
+            break;
+        }
+    }
+
+    const testing = std.testing;
+
+    try testing.expectEqualStrings(decompressedBytes, testContext.outputBufferMem.items);
 }

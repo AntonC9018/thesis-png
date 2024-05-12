@@ -32,11 +32,10 @@ pub const NodeType = union(enum)
     Deflate: deflate.Action,
     DeflateCode: void,
     NoCompression: deflate.noCompression.InitStateAction,
-    FixedHuffmanDecompression: deflate.fixed.DecompressionValueType,
+    SymbolDecompression: deflate.DecompressionValueType,
     ZlibSymbol: void,
     DynamicHuffman: union(enum)
     {
-        DecompressionValue: deflate.dynamic.DecompressionValueType,
         CodeDecoding: deflate.dynamic.CodeDecodingAction,
         CodeFrequency: deflate.dynamic.CodeFrequencyAction,
         EncodedFrequency: void,
@@ -59,8 +58,6 @@ pub const NodeType = union(enum)
 
 pub const NodeData = union(enum)
 {
-    None: void,
-
     LiteralString: []const u8,
     // The memory is from the context's allocator.
     OwnedString: std.ArrayListUnmanaged(u8),
@@ -123,6 +120,11 @@ pub const NodePositionOffset = struct
         };
     }
 
+    pub fn sub(a: NodePositionOffset, b: NodePositionOffset) NodePositionOffset
+    {
+        return a.add(b.negate());
+    }
+
     pub fn normalized(self: NodePositionOffset) NodePositionOffset
     {
         return .{
@@ -178,7 +180,7 @@ pub const Position = struct
         return bitDiff;
     }
 
-    fn asOffset(self: Position) NodePositionOffset
+    pub fn asOffset(self: Position) NodePositionOffset
     {
         return .{
             .byte = @intCast(self.byte),
@@ -214,34 +216,29 @@ pub const Position = struct
 pub const NodeSpan = struct
 {
     start: Position,
-    endInclusive: Position,
+    endExclusive: Position,
 
-    pub fn bitLen(span: *const NodeSpan) usize
+    pub fn bitLen(span: NodeSpan) usize
     {
-        const difference = span.start.offsetTo(span.endInclusive);
-        const bitsDiff = difference.byte * @bitSizeOf(u8) + difference.bit + 1;
-        return bitsDiff;
+        const difference = span.start.offsetTo(span.endExclusive);
+        const bitsDiff = difference.byte * @bitSizeOf(u8) + difference.bit;
+        return @intCast(bitsDiff);
     }
 
-    pub fn fromStartAndEndExclusive(startPos: Position, endPosExclusive: Position) NodeSpan
+    pub fn includesPosition(span: NodeSpan, pos: Position) bool
     {
-        const comparison = endPosExclusive.compareTo(startPos);
-        std.debug.assert(comparison > 0);
-        const endInclusive_ = endPosExclusive.add(.{ .bit = -1 });
-        return .{
-            .start = startPos,
-            .endInclusive = endInclusive_,
-        };
+        return span.start.compareTo(pos) <= 0
+            and pos.compareTo(span.endExclusive) < 0;
     }
 
     pub fn fromStartAndLen(startPos: Position, len: NodePositionOffset) NodeSpan
     {
-        const endOffset = len.addBits(-1);
+        const endOffset = len;
         std.debug.assert(!endOffset.isLessThanOrEqualToZero());
 
         return .{
             .start = startPos,
-            .endInclusive = startPos.add(endOffset),
+            .endExclusive = startPos.add(endOffset),
         };
     }
 };

@@ -302,6 +302,7 @@ const SliceHelper = struct
     }
 };
 
+// Segment CRCCalculation begin
 pub fn parseChunkItem(context: *Context) !bool
 {
     const chunk = &context.state.chunk;
@@ -311,6 +312,15 @@ pub fn parseChunkItem(context: *Context) !bool
         .context = context,
     });
     defer context.level().pop();
+
+    const shouldComputeCrc = chunk.action != .Length and chunk.action != .CyclicRedundancyCheck;
+    const previousSequence = context.sequence().*;
+    defer if (shouldComputeCrc)
+    {
+        const consumedSequence = previousSequence.sliceToExclusive(context.sequence().start());
+        chunk.crcState = common.updateCrc(chunk.crcState, consumedSequence);
+    };
+    // Segment CRCCalculation end
 
     switch (chunk.action)
     {
@@ -386,9 +396,9 @@ pub fn parseChunkItem(context: *Context) !bool
             }
             return false;
         },
+        // Segment CRCCheck begin
         .CyclicRedundancyCheck =>
         {
-            // Just skip for now
             const value = try pipelines.readNetworkUnsigned(context.sequence(), u32);
             const crc = .{ .value = value };
             chunk.object.crc = crc;
@@ -397,8 +407,15 @@ pub fn parseChunkItem(context: *Context) !bool
                 .U32 = value,
             });
 
+            const computedCrc = ~chunk.crcState;
+            if (computedCrc != value)
+            {
+                return error.CyclicRedundancyCheckMismatch;
+            }
+
             return true;
         },
+        // Segment CRCCheck end
     }
 }
 

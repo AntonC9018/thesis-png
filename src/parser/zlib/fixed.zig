@@ -1,5 +1,8 @@
 const helper = @import("helper.zig");
 const std = helper.std;
+const symbolLimits = helper.symbolLimits;
+const DistanceCode = symbolLimits.DistanceCode;
+const LenCode = symbolLimits.LenCode;
 
 pub const SymbolDecompressionAction = enum
 {
@@ -15,146 +18,16 @@ pub const CodeState = u4;
 pub const SymbolDecompressionState = struct
 {
     action: SymbolDecompressionAction = .Code,
-    codeLen: CodeState = 7,
-    lenCode: u8,
-    len: u8,
-    distanceLenCode: u5,
-    distance: u16,
+    lenCodeLen: CodeState = 7,
+    lenCode: symbolLimits.LenCode,
+    len: symbolLimits.Len,
+    distanceCode: symbolLimits.DistanceCode,
 
     pub const Initial = std.mem.zeroInit(SymbolDecompressionState, .{
-        .codeLen = 7,
+        .lenCodeLen = 7,
         .action = .Code,
     });
 };
-
-const lengthCodeStart = 257;
-
-fn adjustStart(offset: u16) u8
-{
-    return @intCast(offset - lengthCodeStart);
-}
-
-fn getLengthBitCount(code: u8) u6
-{
-    return switch (code)
-    {
-        adjustStart(257) ... adjustStart(264), adjustStart(285) => 0,
-        else => @intCast((code - adjustStart(265)) / 4 + 1),
-    };
-}
-
-
-fn testLengthBitCount(expected: u6, code: u16) !void
-{
-    const expect = std.testing.expectEqual;
-    try expect(expected, getLengthBitCount(adjustStart(code)));
-}
-
-test
-{
-    try testLengthBitCount(0, 257);
-    try testLengthBitCount(1, 267);
-    try testLengthBitCount(4, 280);
-    try testLengthBitCount(5, 281);
-    try testLengthBitCount(5, 282);
-}
-
-const baseLengthLookup = l:
-{
-    const count = 285 - lengthCodeStart;
-    var result: [count + 1]u8 = undefined;
-    for (0 .. 8) |i|
-    {
-        result[i] = i;
-    }
-
-    var a = 8;
-    for (8 .. count) |i|
-    {
-        result[i] = a;
-        const bitCount = getLengthBitCount(i);
-        const representableNumberCount = 1 << bitCount;
-        a += representableNumberCount;
-    }
-
-    result[count] = 255;
-
-    // for (0 .., result) |i, v|
-    // {
-    //     @compileLog(lengthCodeStart + i, @as(u32, v) + 3);
-    // }
-
-    break :l result;
-};
-
-fn getBaseLength(code: u9) u8
-{
-    return baseLengthLookup[code];
-}
-
-fn testBaseLength(expected: u16, code: u16) !void
-{
-    const expect = std.testing.expectEqual;
-    try expect(expected, @as(u16, getBaseLength(adjustStart(code))) + 3);
-}
-
-test "Base length"
-{
-    try testBaseLength(3, 257);
-    try testBaseLength(11, 265);
-    try testBaseLength(19, 269);
-    try testBaseLength(23, 270);
-    try testBaseLength(227, 284);
-    try testBaseLength(258, 285);
-}
-
-fn getDistanceBitCount(distanceCode: u5) u6
-{
-    return switch (distanceCode)
-    {
-        0 ... 1 => 0,
-        else => distanceCode / 2 - 1,
-    };
-}
-
-const baseDistanceLookup = l:
-{
-    const count = 30;
-    var result: [count]u16 = undefined;
-    for (0 .. 2) |i|
-    {
-        result[i] = i;
-    }
-    var a = 2;
-    for (2 .. count) |i|
-    {
-        result[i] = a;
-        const bitCount = getDistanceBitCount(i);
-        const representableNumberCount = 1 << bitCount;
-        a += representableNumberCount;
-    }
-    break :l result;
-};
-
-fn getBaseDistance(distanceCode: u5) u16
-{
-    return baseDistanceLookup[distanceCode];
-}
-
-fn testBaseDistance(expected: u16, code: u5) !void
-{
-    const expect = std.testing.expectEqual;
-    try expect(expected, getBaseDistance(code) + 1);
-}
-
-test "Base distance"
-{
-    try testBaseDistance(1, 0);
-    try testBaseDistance(5, 4);
-    try testBaseDistance(33, 10);
-    try testBaseDistance(1025, 20);
-    try testBaseDistance(24577, 29);
-}
 
 const DeflateContext = helper.DeflateContext;
 
@@ -193,7 +66,7 @@ pub fn decompressSymbolImpl(
         .reverse = true,
     };
 
-    const nodeCreator = DecompressionNodeWriter
+    const nodeCreator = helper.DecompressionNodeWriter
     {
         .context = context,
     };
@@ -206,11 +79,11 @@ pub fn decompressSymbolImpl(
             {
                 const code = try helper.peekNBits(.{
                     .context = context,
-                    .bitsCount = state.codeLen,
+                    .bitsCount = state.lenCodeLen,
                     .reverse = true,
                 });
 
-                switch (state.codeLen)
+                switch (state.lenCodeLen)
                 {
                     7 =>
                     {
@@ -225,10 +98,10 @@ pub fn decompressSymbolImpl(
                         if (code.bits <= lengthCodeUpperLimit)
                         {
                             code.apply(context);
-                            state.lenCode = @intCast(code.bits - 1);
+                            state.lenCode = @enumFromInt(code.bits - 1);
                             state.action = .Len;
 
-                            try nodeCreator.create(.LenCodeLen, state.lenCode);
+                            try nodeCreator.create(.LenCodeExtra, @intFromEnum(state.lenCode));
 
                             return null;
                         }
@@ -251,12 +124,12 @@ pub fn decompressSymbolImpl(
                             code.apply(context);
 
                             const codeRemapped = code.bits - lengthLowerLimit2 + lengthCodeUpperLimit;
-                            state.lenCode = @intCast(codeRemapped);
+                            state.lenCode = @enumFromInt(codeRemapped);
                             state.action = .Len;
 
-                            try nodeCreator.create(.LenCodeLen, codeRemapped);
+                            try nodeCreator.create(.LenCodeExtra, codeRemapped);
 
-                            if (codeRemapped >= adjustStart(286))
+                            if (codeRemapped > LenCode.lastCode)
                             {
                                 return error.LengthCodeTooLarge;
                             }
@@ -279,19 +152,19 @@ pub fn decompressSymbolImpl(
                     },
                     else => unreachable,
                 }
-                state.codeLen += 1;
+                state.lenCodeLen += 1;
             }
         },
         .Len =>
         {
-            const lengthBitCount = getLengthBitCount(state.lenCode);
+            const lengthBitCount = state.lenCode.extraBitCount();
             const extraBits = if (lengthBitCount == 0)
                     0
                 else
                     try helper.readNBits(context, lengthBitCount);
 
-            const baseLength = getBaseLength(state.lenCode);
-            const len = baseLength + extraBits;
+            const baseLength = state.lenCode.base();
+            const len = @as(symbolLimits.Len, @intCast(baseLength)) + extraBits;
             state.len = @intCast(len);
 
             try nodeCreator.create(.Len, len);
@@ -302,9 +175,9 @@ pub fn decompressSymbolImpl(
         {
             const distanceCode = try helper.readBits(readCodeBitsContext, u5);
             state.action = .Distance;
-            state.distanceLenCode = distanceCode;
+            state.distanceCode = @enumFromInt(distanceCode);
 
-            try nodeCreator.create(.DistanceLenCode, distanceCode);
+            try nodeCreator.create(.Distance, distanceCode);
 
             if (distanceCode >= 30)
             {
@@ -313,24 +186,23 @@ pub fn decompressSymbolImpl(
         },
         .Distance =>
         {
-            const distanceBitCount = getDistanceBitCount(state.distanceLenCode);
+            const distanceBitCount = state.distanceCode.extraBitCount();
             const extraBits = if (distanceBitCount == 0)
                     0
                 else
                     try helper.readNBits(context, distanceBitCount);
 
-            const baseDistance = getBaseDistance(state.distanceLenCode);
-            const distance = baseDistance + @as(u16, @intCast(extraBits));
-            state.distance = distance;
+            const baseDistance = state.distanceCode.base();
+            const distance = baseDistance + @as(symbolLimits.Distance, @intCast(extraBits));
 
-            try nodeCreator.create(.Distance, distance);
+            try nodeCreator.create(.DistanceExtra, extraBits);
 
             state.action = .Code;
 
             return .{
                 .BackReference = .{
-                    .distance = @intCast(distance + 1),
-                    .len = @as(u16, state.len) + 3,
+                    .distance = distance,
+                    .len = state.len,
                 },
             };
         },
@@ -338,30 +210,3 @@ pub fn decompressSymbolImpl(
 
     return null;
 }
-
-pub const DecompressionValueType = enum
-{
-    Literal,
-    Len,
-    EndBlock,
-    Distance,
-
-    // TODO: allow semantic nodes to store more useful data.
-    LenCodeLen,
-    DistanceLenCode,
-};
-
-const DecompressionNodeWriter = struct
-{
-    context: *DeflateContext,
-
-    pub fn create(self: @This(), t: DecompressionValueType, value: usize) !void
-    {
-        self.context.level().setNodeType(.{
-            .FixedHuffmanDecompression = t,
-        });
-        try self.context.level().completeNodeWithValue(.{
-            .Number = value,
-        });
-    }
-};
