@@ -735,8 +735,6 @@ pub fn initChunkDataNode(context: *Context, chunkType: ChunkType) !void
         },
     }
 
-    std.debug.print("Type: {}, State: {}\n", .{ chunkType, dataState });
-
     // Validate preconditions
     switch (getActiveChunkDataState(dataState, asKnown(chunkType)))
     {
