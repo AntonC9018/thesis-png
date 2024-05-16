@@ -364,8 +364,8 @@ fn drawTextMultiline(p: DrawMultilineTextArgs) !void
 const UiState = struct
 {
     rangeSize: RangeSize = .{
-        .rows = 10,
-        .cols = 10,
+        .rows = 16,
+        .cols = 16,
     },
     rangeIndex: usize = 0,
     clickedPosition: ?raylib.Vector2i = null,
@@ -470,7 +470,7 @@ pub fn main() !void
 
         defer tempBuffer.clearRetainingCapacity();
 
-        const relativePath = "test_data/palette.png";
+        const relativePath = "test_data/parot_chromaticities.png";
         tempBuffer.items = try cwd.realpath(relativePath, tempBuffer.items.ptr[0 .. tempBuffer.capacity]);
 
         const t = try parseIntoTree(allocator, tempBuffer.items);
