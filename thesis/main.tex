@@ -26,29 +26,9 @@
 \tableofcontents
 
 \clearpage
-\unnumberedChapter{Lista Abrevierilor}
-\begin{acronym}[JPEG]
-    \acro{GUI}{Graphical User Interface}
-    \acro{PNG}{Portable Network Graphics}
-    \acro{I/O}{Input/Output}
-    \acro{MVP}{Produs Minim Viabil}
-    \acro{ICC}{International Color Consortium}
-    \acro{WSL}{Windows Subsystem for Linux}
-    \acro{CRC}{Cyclic Redundancy Check}
-    \acro{JPEG}{Joint Photographic Experts Group}
-    \acro{GIF}{Graphics Interchange Format}
-    \acro{RAII}{Resource Acquisition Is Initialization}
-    \acro{POO}{Programarea orientată pe obiect}
-    \acro{RGB}{Red Green Blue}
-    \acro{2D}{2-dimensional}
-    \acro{3D}{3-dimensional}
-\end{acronym}
-
-
-\clearpage
 \unnumberedChapter{Adnotare}
 
-\textbf{la teza de \thesisType{} ``\thesisTitle'', a studentului \authorName{}, grupa \uniGroupName{}, programul de studii \programulDeStudii.}
+\textbf{la teza de \thesisType{} ``\thesisTitle{}'', a studentului \authorName{}, grupa \uniGroupName{}, programul de studii \programulDeStudii.}
 
 \textbf{Structura tezei.}
 Teza constă din: Introducere, \chapterCount{} capitole, Concluzii generale și recomandări, Bibliografie \bibliographyEntryCount{} titluri.
@@ -65,7 +45,7 @@ Textul de bază cuprinde \usefulPageCount{} de pagini și \anexeCount{} anexe.
 a-l utiliza într-un mod mai eficient și acesta poate servi drept referință pentru 
 crearea unor formaturi noi.
 
-\textbf{Scopul și obiectivele cercetării}.
+\textbf{Scopul și obiectivele cercetării.}
 
 Lucrarea dată are un scop educațional -- informarea despre structura formatului \acs{PNG}.
 Obiectivele tezei constau în explorarea formatului, creând o aplicație grafică de vizualizare a formatului.
@@ -92,7 +72,7 @@ Rezultatele obținute au fost raportate la \textbf{\conferencesList}\cite{self}.
 
 \textbf{of the \thesisType{} thesis  ``\thesisTitleEng'' of the student \authorName{}, group \uniGroupName{}, \programulDeStudii{} study program.}
 
-\textbf{The structure of the thesis}
+\textbf{The structure of the thesis.}
 The thesis is made up of: Introduction, \chapterCount{} chapters,
 General conclusions and recommendations, Bibliography of \bibliographyEntryCount{} titles.
 Base text takes up \usefulPageCount{} pages and has \anexeCount{} appendicies.
@@ -108,7 +88,7 @@ Understanding of the structure of the format can prove useful for extending it
 as well as using it in a more efficient way.
 The format's structure can also serve as a reference for designing new file formats.
 
-\textbf{Purpose and objectives of this research}
+\textbf{Purpose and objectives of this research.}
 
 The scientific work has an educational purpose
 -- it aims to inform on the structure of the \acs{PNG} file format.
@@ -133,7 +113,26 @@ which can be used to visualize the \acs{PNG} file format.
 The entire source code can be obtained by accessing the GitHub repository
 by the following URL: \github. 
 
-The obtained results were reported on \textbf{\conferencesList}\cite{self}.
+The obtained results were reported at \textbf{\conferencesList}\cite{self}.
+
+\clearpage
+\unnumberedChapter{Lista Abrevierilor}
+\begin{acronym}[JPEG]
+    \acro{GUI}{Graphical User Interface}
+    \acro{PNG}{Portable Network Graphics}
+    \acro{I/O}{Input/Output}
+    \acro{MVP}{Produs Minim Viabil}
+    \acro{ICC}{International Color Consortium}
+    \acro{WSL}{Windows Subsystem for Linux}
+    \acro{CRC}{Cyclic Redundancy Check}
+    \acro{JPEG}{Joint Photographic Experts Group}
+    \acro{GIF}{Graphics Interchange Format}
+    \acro{RAII}{Resource Acquisition Is Initialization}
+    \acro{POO}{Programarea orientată pe obiect}
+    \acro{RGB}{Red Green Blue}
+    \acro{2D}{2-dimensional}
+    \acro{3D}{3-dimensional}
+\end{acronym}
 
 
 % I think this one's required to be capitalized.
@@ -257,7 +256,7 @@ ca, de exemplu, \ac{JPEG}, semnifică că aceste date pot diferi,
 Deci termenul \textit{pierderi} se referă la pierderea de informație în urma comprimării.
 
 Formatul \ac{PNG} a fost inițial creat pentru a înlocui formatul \ac{GIF},
-pentru care nu era posibil de creat un comprimator de uz liber atunci\cite{gif_unusable_reason}.
+pentru care nu era posibil de creat un comprimator de uz liber atunci\cite[12.2.]{png_spec}\cite{gif_unusable_reason}.
 În plus, inginerii care au inventat \ac{PNG} au străduit să îmbunătățească algoritmul de comprimare,
 precum și structura formatului nou, adăugând unele capacități inaccesibile în \ac{GIF}
 ca posibilitate de a comprima imagini în culori reale (truecolor images),
@@ -266,7 +265,7 @@ robustețea ridicată împotrivă erorilor de transmisie, și altele.
 
 \subsection{Catacteristici principale}
 
-Mai jos sunt enumerate capacitățile principale ale formatului \ac{PNG} (reinterpretat din specificație).
+Mai jos sunt enumerate capacitățile principale ale formatului \ac{PNG} (reinterpretat din specificație)\cite[1.]{png_spec}.
 
 Capacitățile păstrate din GIF:
 
@@ -357,7 +356,7 @@ pe larg pentru imagini în Internet, însă este o alegere bună și în artă d
 \subsection{Structura formatului}
 
 Structura fișierelor \ac{PNG} este bazată pe o serie de blocuri,
-cunoscute sub numele de \textbf{chunk-uri}.
+cunoscute sub numele de \textbf{chunk-uri}\cite[3.]{png_spec}.
 Fiecare chunk are o structură specifică și o funcție definită,
 contribuind la crearea și interpretarea corectă a imaginii.
 
@@ -470,7 +469,7 @@ datorită transparenței și calității imaginii.
 
 \subsection{Datele imaginii}
 
-Datele imaginii, adică valorile de culoare pentru fiecare pixel, se regăsesc în chunk-uri \texttt{IDAT}.
+Datele imaginii, adică valorile de culoare pentru fiecare pixel, se regăsesc în chunk-uri \texttt{IDAT}\cite[4.1.3.]{png_spec}.
 Fiecare chunk \texttt{IDAT} atașat unul după altul conține fluxul de aceste date, mereu comprimat cu formatul Zlib.
 
 Pentru a restabili culorile pixelilor, pe fiecare linie se aplică câte un filtru.
@@ -491,7 +490,7 @@ ceea ce se folosește pentru prezentarea imaginii dar nu este util pentru vizual
 
 Zlib este formatul de comprimare folosit în scopul unor chunk-uri din formatul \ac{PNG}.
 De exemplu, chunk-ul \texttt{zTXt} definește câmpul \texttt{Compressed text},
-care include direct șirul compresat în formatul Zlib.
+care include direct șirul compresat în formatul Zlib\cite[4.1.3.]{zlib_spec}.
 
 La fel ca și formatul \ac{PNG}, Zlib include un câmp folosit pentru verificarea integrității datelor.
 Algoritmul folosit pentru calcularea acestui câmp este numit Adler32.
@@ -500,12 +499,12 @@ deci poate fi folosit pentru a verifica și integritatea datelor, și corectitud
 
 Zlib are și alte capacități ca suportul pentru dicționare, permite setarea parametrilor de comprimare, etc.
 Însă, acestea nu sunt relevante pentru interpretarea unui fișier \ac{PNG}.
-Dicționarele absolut nu sunt folosite, și chiar sunt interzise după specificație \cite{png_spec}.
+Dicționarele absolut nu sunt folosite, și chiar sunt interzise după specificație \cite[5.]{png_spec}.
 Parametrii de comprimare sunt folositori doar pentru procesul de comprimare,
 adică, în context-ul formatului \ac{PNG}, generarea unui fișier din datele pixelilor.
 Deoarece scopul aplicației este de a realiza \textit{citirea} unui fișier \ac{PNG},
 dar nu generarea unui așa fișier, acestea nu vor fi menționate în continuare.
-Câmpurile cu aceste date, însă, sunt citite și validate în mod normal, conform specificației.
+Câmpurile cu aceste date, însă, sunt citite și validate în mod normal, conform specificației Zlib.
 
 \subsection{Zlib în \acs{PNG}}
 
@@ -521,7 +520,7 @@ deoarece este strâns legată de implementare.
 
 \subsection{Descriere generală}
 
-Limbajul de programare Zig este un limbaj de programare de nivel scăzut, aproape de C.
+Limbajul de programare Zig\cite{zig} este un limbaj de programare de nivel scăzut, aproape de C.
 Zig se conține într-un spațiu special, în acel sens că scopul lui este de
 a îmbunătăți securitatea programelor, eliminând neajunsurile limbajului C
 și adăugând diverse tipuri de verificări stricte la compilare,
@@ -650,7 +649,7 @@ Dezvoltarea pe Linux eclipsează dezvoltarea pe Windows -- aceasta este un fapt 
         După instalarea pachetelor necesare, build-urile lucrează ideal în aproape 100\% din cazuri.
 
     \item
-        Unele aplicații nu sunt pe Windows.
+        Unele aplicații nu există pe Windows.
         De exemplu, \texttt{Valgrind} și \texttt{MSan}.
 
     \item
@@ -660,7 +659,7 @@ Dezvoltarea pe Linux eclipsează dezvoltarea pe Windows -- aceasta este un fapt 
         deoarece dezvoltatorul oricum trebuie să folosescă Unix pentru a fi productiv.
 \end{itemize}
 
-Din fericire, Windows a introdus capacitatea minunată \ac{WSL}.
+Din fericire, Windows a introdus capacitatea minunată \ac{WSL}\cite{wsl}.
 Fără a intra în mecanisme funcționării acesteia, deoarece aceasta nu este în scopul lucrării,
 pe scurt \ac{WSL} poate fi explicat ca un sistem de Linux integrat în Windows, care poate citi fișierele din Windows.
 
@@ -758,7 +757,7 @@ iar implicațiile utilizării acestuia au fost analizate pe parcursul dezvoltăr
 \subsection{Avantajele unui arbore sintactic}
 
 Folosirea unui arbore sintactic este o abordare bună pentru problemele 
-unde datele sunt structurate în mod ierarhic și se cere a fi analizate sau, într-un fel, accesate pe urmă.
+unde datele sunt structurate în mod ierarhic și se cere a fi analizate sau cumva accesate pe urmă.
 Proprietatea cheie a acestei abordări este faptul că arborele poate fi \textit{abstract},
 ceea ce înseamnă că acesta este o reprezentare la un nivel mai înalt a informațiilor despre datele
 din care a fost construit.
@@ -884,7 +883,7 @@ mecanismul dinamic, pentru depanare\cite{deflate_tests}.
 
 \chapterConclusionSection{architecture_chapter_title}
 
-În acest capitol a fost stabilită fundamentul teoretic al sistemului care urmează a fi implementat.
+În acest capitol a fost stabilit fundamentul teoretic al sistemului care urmează a fi implementat.
 A fost decisă structura aplicației la nivel înalt, a fost discutată funcționalitatea modulelor interne.
 Fondarea acestei temelii face posibilă abordarea programării sistemului,
 însă structura proiectată rămâne relaxată, deoarece mai multe detalii
@@ -1522,7 +1521,7 @@ acesta numaidecât va avea și o referință la nodul care îl continuă,
 iar acel nod va avea o legătură înapoi la primul nod.
 Aceasta poate fi util pentru a arăta utilizatorului, de exemplu, poziția nodului de continuare.
 
-Interesant este și faptul că această structură poate fi expresată în mod general,
+Interesant este și faptul că această structură poate fi exprimată în mod general,
 nu doar pentru nodurile din acest chunk.
 Datorită acestei idei de separare a nodurilor implementarea funcționalităților
 legate cu această proprietate nu trebuie să țină cont de tipul de nod.
@@ -1880,7 +1879,7 @@ iar tipul de noduri nu trebuie să fie schimbat, aceasta nu este groaznic.
 
 \subsection{Subformatul \texttt{DEFLATE}}
 
-Partea esențială a formatului Zlib este subformatul integrat \texttt{DEFLATE}.
+Partea esențială a formatului Zlib este subformatul integrat \texttt{DEFLATE}\cite{deflate_spec}.
 DEFLATE definește 3 mecanisme de comprimare: datele \textit{fără comprimare},
 și comprimarea folosind arbori Huffman, metoda \textit{fixă} și metoda \textit{dinamică}.
 
@@ -2175,7 +2174,7 @@ Au fost discutate modulele intermediare \texttt{pipelines} și modulul parserulu
 se folosesc pentru a realiza derivarea arborelui sintactic.
 
 Toate codurile sursă, inclusiv codurile de program și textul lucrării
-în forma înainte de randare pot fi accesate pe GitHub după următorul link: \github.
+în forma înainte de randare, pot fi accesate pe GitHub după următorul link: \github.
 
 Rezultatele obținute au fost raportate la \textbf{\conferencesList}\cite{self}.
 

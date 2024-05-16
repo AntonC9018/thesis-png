@@ -149,6 +149,13 @@
 
 % SIGN HERE: _______ sort of field
 \def\underscores#1{\leavevmode \leaders\hrule\hskip#1\relax}
+% https://tex.stackexchange.com/questions/55698/text-under-a-line
+\newcommand{\signatureField}[1]{%
+  \ensuremath{%
+    \vphantom{\underscores{#1}}%
+    \smash{\underset{\text{(semnătură)}}{\underscores{#1}}}%
+  }%
+}
 
 % does math on counters
 \newcommand{\usefulPageCount}{%
