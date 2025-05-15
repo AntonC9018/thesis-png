@@ -67,13 +67,37 @@
 % capitalize the last name in that system without reimplementing everything.
 \RequirePackage[
   backend=biber
-  ,style=iso-numeric
+  ,style=ieee
   ,bibencoding=UTF8
 ]{biblatex}
 \addbibresource{bibliography.bib}
 
+\DefineBibliographyStrings{\languageCustom}{url = {}}
+\DeclareFieldFormat{url}{\url{#1}}
+\DeclareFieldFormat{urlseen}{}
+
+\DefineBibliographyStrings{romanian}{urlseen = {accesat în}}
+\DeclareFieldFormat{urldate}{%
+  \mkbibparens{\datepart{year}{\thefield{urldate}}}%
+}
+
+\DeclareNameFormat{author}{%
+\ifthenelse{\value{listcount}=1}
+{\MakeUppercase{\namepartfamily}%
+\ifdefvoid{\namepartgiven}{}{\space\namepartgiven}}
+{\ifdefvoid{\namepartgiven}{}{\namepartgiven\space}%
+\namepartfamily}%
+\ifthenelse{\value{listcount}<\value{liststop}}
+{\addsemicolon\space}
+{}}
+
+% \renewcommand*{\mkbibnamefamily}{\MakeUppercase}
+
+% \DeclareDelimFormat{multinamedelim}{}
+% \DeclareDelimFormat{finalnamedelim}{\addsemicolon\space}
+
 % Make uppercase names only in bibliography.
-\let\familynameformat=\textsc
+% \let\familynameformat=\textsc
 
 % Appendices
 \RequirePackage[toc,page]{appendix}
@@ -119,7 +143,7 @@
 
 % Add dots to numbers, only applies to TOC
 \let\savenumberline=\numberline
-\def\numberline#1{\savenumberline{#1.}}
+\def\numberline#1{\savenumberline{#1.}~}
 
 % Chapters must be left aligned and 14 pt.
 % There's no 14 pt available, though, only 14.4 (\large)
