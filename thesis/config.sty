@@ -1,4 +1,22 @@
+\NeedsTeXFormat{LaTeX2e}
 \ProvidesPackage{config}
+
+\DeclareOption{romanian}{%
+  \newcommand{\languageCustom}{romanian}%
+  \newcommand{\signLabel}{semnătură}%
+  \newcommand{\chapterConclusionLabel}{Concluzii pentru capitol \arabic{chapter}}%
+  \newcommand{\figureShortLabel}{Fig.}%
+  \newcommand{\anexaLabel}{Anexa}%
+}
+\DeclareOption{russian}{%
+  \newcommand{\languageCustom}{russian}%
+  \newcommand{\signLabel}{подпись}%
+  \newcommand{\chapterConclusionLabel}{Выводы для главы \arabic{chapter}}%
+  \newcommand{\figureShortLabel}{Фиг.}%
+  \newcommand{\anexaLabel}{Приложение}%
+}
+\DeclareOption*{\PackageError{config}{Invalid option '\CurrentOption'}{Pass the language option}}
+\ProcessOptions\relax
 
 % https://tex.stackexchange.com/a/63393
 \makeatletter
@@ -25,35 +43,53 @@
 \makeatother
 
 % spacings
-\usepackage[a4paper,right=15mm,left=25mm,top=20mm,bottom=20mm]{geometry}
+\RequirePackage[a4paper,right=15mm,left=25mm,top=20mm,bottom=20mm]{geometry}
 
 % 1.5 line spacing
-\usepackage{setspace}
+\RequirePackage{setspace}
 \setstretch{1.5}
 
 % Being able to copy-paste from the document
 % Display the diacritics correctly
-\usepackage{fontspec}
+\RequirePackage{fontspec}
 % Times New Roman font
 \setmainfont{Times New Roman}
 
 % Romanian language support
-\usepackage[romanian]{babel}
+\def\x{romanian}
+\edef\babeloptions{\x}
+\RequirePackage[\babeloptions]{babel}
+\RequirePackage{csquotes}
+
+% Bibliography package.
+% This is different from the default system, because we need to configure the format.
+% The default system (bibtex) has its own DSL and it's actually impossible to 
+% capitalize the last name in that system without reimplementing everything.
+\RequirePackage[
+  backend=biber
+  ,style=iso-numeric
+  ,bibencoding=UTF8
+]{biblatex}
+\addbibresource{bibliography.bib}
+
+% Make uppercase names only in bibliography.
+\let\familynameformat=\textsc
 
 % Appendices
-\usepackage[toc,page]{appendix}
+\RequirePackage[toc,page]{appendix}
 
 % Lista abrevierelor
-\usepackage[printonlyused]{acronym}
+\RequirePackage[printonlyused]{acronym}
 
 % Format urls in the bibliography
-% \usepackage{url}
-\usepackage{hyperref}
+% Must be after biblatex
+% \RequirePackage{url}
+\RequirePackage{hyperref}
 % Clickable table of contents
 \hypersetup{linktoc=all}
 
 % Code blocks
-\usepackage{minted}
+\RequirePackage{minted}
 \setminted{%
   autogobble=true,
   codetagify=true,
@@ -88,7 +124,7 @@
 % Chapters must be left aligned and 14 pt.
 % There's no 14 pt available, though, only 14.4 (\large)
 % https://tex.stackexchange.com/questions/24599/what-point-pt-font-size-are-large-etc/24600#24600
-\usepackage{titlesec}    
+\RequirePackage{titlesec}    
 % \titleformat{〈command 〉}[〈shape〉]{〈format〉}{〈label 〉}{〈sep〉}{〈before-code〉}[〈after-code〉]
 % https://mirror.marwan.ma/ctan/macros/latex/contrib/titlesec/titlesec.pdf#page=4&zoom=200,67,627
 % It gets pretty involved...
@@ -103,11 +139,11 @@
 \titlespacing*{\subsection}{0pt}{12pt}{6pt}
 
 % Aliniat de 1 cm.
-\usepackage{indentfirst}
+\RequirePackage{indentfirst}
 \setlength{\parindent}{1.0cm}
 
 % https://tex.stackexchange.com/questions/163451/total-number-of-citations
-\usepackage{totcount}
+\RequirePackage{totcount}
 \newtotcounter{citnum} % From the package documentation
 \def\oldbibitem{} \let\oldbibitem=\bibitem{}
 \def\bibitem{\stepcounter{citnum}\oldbibitem}
@@ -134,13 +170,12 @@
 
 % Extracting the name of chapters.
 % https://tex.stackexchange.com/questions/62241/how-to-get-the-current-chapter-name-section-name-subsection-name-etc
-\usepackage{nameref}
+\RequirePackage{nameref}
 
 % No spacing for lists.
 % https://tex.stackexchange.com/questions/10684/vertical-space-in-lists
-\usepackage{enumitem}
+\RequirePackage{enumitem}
 \setlist{nosep}
-
 
 % Helper functions for some stuff
 \newcommand{\unnumberedChapter}[1]{%
@@ -153,7 +188,7 @@
 \newcommand{\signatureField}[1]{%
   \ensuremath{%
     \vphantom{\underscores{#1}}%
-    \smash{\underset{\text{(semnătură)}}{\underscores{#1}}}%
+    \smash{\underset{\text{(\signLabel)}}{\underscores{#1}}}%
   }%
 }
 
@@ -162,25 +197,26 @@
   % this evaluates a math expression, which is `end - begin`
   \the\numexpr\getpagemark{usefulStuffEnd}-\getpagemark{usefulStuffBegin}\relax}
 
-\newcommand\chapterConclusionSection[1]{\section{Concluzii pentru capitol \arabic{chapter}}}
+\newcommand\chapterConclusionSection[1]{\section{\chapterConclusionLabel\relax}}
 \newcommand{\bibliographyEntryCount}{\total{citnum}}
 
 % Some math stuff? I don't even know.
-\usepackage{amsmath}
+\RequirePackage{amsmath}
 
 % Make figures use Fig. instead of Figura.
 % Has to be set per-language, otherwise it gets overridden.
-\addto\captionsromanian{\renewcommand{\figurename}{Fig.}}
+\addto\captionsromanian{\renewcommand{\figurename}{\figureShortLabel}}
+% \addto\captionsrussian{\renewcommand{\figurename}{\figureShortLabel}}
 % Their numbering has to use the chapter number.
 \renewcommand{\thefigure}{\arabic{chapter}.\arabic{figure}}
 
 % Use . instead of : in figures
-\usepackage{caption}
+\RequirePackage{caption}
 \captionsetup[figure]{labelsep=period}
 \captionsetup[table]{labelsep=period}
 
 % Inserting pictures
-\usepackage{graphicx}
+\RequirePackage{graphicx}
 
 \graphicspath{{./images/}}
 
@@ -199,7 +235,7 @@
   \end{figure}}
 
 
-\newcommand\refFigure[1]{fig. \ref{fig:#1}}
+\newcommand\refFigure[1]{\MakeLowercase{\figureShortLabel} \ref{fig:#1}}
 
 % See the python script.
 % It inserts the minted listing text.
@@ -217,7 +253,7 @@
 \def\appendix{%
     \oldappendix%
     \renewcommand{\thesection}{\arabic{section}}%
-    \titleformat{\section}[block]{\normalfont\normalsize\bfseries\filcenter}{Anexa \thesection.~}{0pt}{}%
+    \titleformat{\section}[block]{\normalfont\normalsize\bfseries\filcenter}{\anexaLabel{} \thesection.~}{0pt}{}%
     %
     % Every section on new page
     % \newcommand{\sectionbreak}{\clearpage}

@@ -1,5 +1,6 @@
 \documentclass[a4paper,12pt]{report}
-\usepackage{config}
+
+\usepackage[romanian]{config}
 
 % Description
 \newcommand{\authorName}{CURMANSCHII Anton}
@@ -2183,8 +2184,7 @@ Rezultatele obținute au fost raportate la \textbf{\conferencesList}\cite{self}.
 
 
 % Bibliography
-\bibliographystyle{ieeetr}
-\bibliography{bibliography}
+\printbibliography
 \addcontentsline{toc}{chapter}{\bibname}
 
 % Appendices
@@ -2192,82 +2192,31 @@ Rezultatele obținute au fost raportate la \textbf{\conferencesList}\cite{self}.
 
 \unnumberedChapter{Anexe}
 
-\section{Funcția actualizării valorii CRC}\label{appendix:crc} %407
+\section{Funcția actualizării valorii CRC}\label{appendix:crc}
 \inputMintedSegment{../src/parser/png/common.zig}{CRC}
 
-\section{Iteratorul segmentelor unei secvențe}\label{appendix:sequence_iterator} %1044
+\section{Iteratorul segmentelor unei secvențe}\label{appendix:sequence_iterator}
 \inputMintedSegment{../src/parser/pipelines.zig}{SegmentIterator}
 
-\section{Calculul CRC în parser}\label{appendix:crc_sequence_defer_example} %1077
+\section{Calculul CRC în parser}\label{appendix:crc_sequence_defer_example}
 \inputMintedSegment{../src/parser/png/parser.zig}{CRCCalculation}
 \inputMintedSegment{../src/parser/png/parser.zig}{CRCCheck}
 
-\section{TaggedArrayList.zig}\label{appendix:main__TaggedArrayList} %1678
+\section{TaggedArrayList.zig}\label{appendix:main__TaggedArrayList}
 \inputminted{zig}{../src/TaggedArrayList.zig}
 
-\section{Codul cheie arborelui Huffman}\label{appendix:huffman_tree}%1792
+\section{Codul cheie arborelui Huffman}\label{appendix:huffman_tree}
 \inputMintedSegment{../src/parser/zlib/huffmanTree.zig}{HuffmanDecode}
 \inputMintedSegment{../src/parser/zlib/huffmanTree.zig}{CreateTree}
 
-\section{Afișarea editorului hex}\label{appendix:draw_hex_grid}%2062
+\section{Afișarea editorului hex}\label{appendix:draw_hex_grid}
 \inputMintedSegment{../src/main.zig}{HexGrid}
 
-\section{Căutarea drumului de noduri în arbore}\label{appendix:node_path_search_impl}%2086
+\section{Căutarea drumului de noduri în arbore}\label{appendix:node_path_search_impl}
 \inputMintedSegment{../src/main.zig}{TreeSearch}
 
-\section{Drag-and-drop}\label{appendix:drag_and_drop}%2106
+\section{Drag-and-drop}\label{appendix:drag_and_drop}
 \inputMintedSegment{../src/main.zig}{DragAndDrop}
-
-% \section{common.zig}\label{appendix:main__parser_png_common}
-% \inputminted{zig}{../src/parser/png/common.zig}
-
-% \section{chunks.zig}\label{appendix:main__parser_png_chunks}
-% \inputminted{zig}{../src/parser/png/chunks.zig}
-
-% \section{parser.zig}\label{appendix:main__parser_png_parser}
-% \inputminted{zig}{../src/parser/png/parser.zig}
-
-% \section{utils.zig}\label{appendix:main__parser_png_utils}
-% \inputminted{zig}{../src/parser/png/utils.zig}
-
-% \section{zlib.zig}\label{appendix:main__parser_zlib_zlib}
-% \inputminted{zig}{../src/parser/zlib/zlib.zig}
-
-% \section{helper.zig}\label{appendix:main__parser_zlib_helper}
-% \inputminted{zig}{../src/parser/zlib/helper.zig}
-
-% \section{deflate.zig}\label{appendix:main__parser_zlib_deflate}
-% \inputminted{zig}{../src/parser/zlib/deflate.zig}
-
-% \section{huffmanTree.zig}\label{appendix:main__parser_zlib_huffmanTree}
-% \inputminted{zig}{../src/parser/zlib/huffmanTree.zig}
-
-% \section{noCompression.zig}\label{appendix:main__parser_zlib_noCompression}
-% \inputminted{zig}{../src/parser/zlib/noCompression.zig}
-
-% \section{dynamic.zig}\label{appendix:main__parser_zlib_dynamic}
-% \inputminted{zig}{../src/parser/zlib/dynamic.zig}
-
-% \section{fixed.zig}\label{appendix:main__parser_zlib_fixed}
-% \inputminted{zig}{../src/parser/zlib/fixed.zig}
-
-% \section{ast.zig}\label{appendix:main__parser_shared_ast}
-% \inputminted{zig}{../src/parser/shared/ast.zig}
-
-% \section{Settings.zig}\label{appendix:main__parser_shared_Settings}
-% \inputminted{zig}{../src/parser/shared/Settings.zig}
-
-% \section{level.zig}\label{appendix:main__parser_shared_level}
-% \inputminted{zig}{../src/parser/shared/level.zig}
-
-% \section{NodeOperations.zig}\label{appendix:main__parser_shared_NodeOperations}
-% \inputminted{zig}{../src/parser/shared/NodeOperations.zig}
-
-% \section{CommonContext.zig}\label{appendix:main__parser_shared_CommonContext}
-% \inputminted{zig}{../src/parser/shared/CommonContext.zig}
-
-% \section{pngDebug.zig}\label{appendix:main__pngDebug}
-% \inputminted{zig}{../src/pngDebug.zig}
 
 \end{document}
 % vim: fdm=syntax

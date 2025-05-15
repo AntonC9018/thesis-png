@@ -89,7 +89,7 @@ FUNCTION {default.is.use.url} { #1 }
 
 % #0 turns off the forced use of "et al."
 % #1 enables
-FUNCTION {default.is.forced.et.al} { #0 }
+FUNCTION {default.is.forced.et.al} { #1 }
 
 
 % The maximum number of names that can be present beyond which an "et al."
@@ -98,12 +98,12 @@ FUNCTION {default.is.forced.et.al} { #0 }
 % Note: There are many instances of references in IEEE journals which have
 % a very large number of authors as well as instances in which "et al." is
 % used profusely.
-FUNCTION {default.max.num.names.before.forced.et.al} { #10 }
+FUNCTION {default.max.num.names.before.forced.et.al} { #1 }
 
 
 % The number of names that will be shown with a forced "et al.".
 % Must be less than or equal to max.num.names.before.forced.et.al
-FUNCTION {default.num.names.shown.with.forced.et.al} { #1 }
+FUNCTION {default.num.names.shown.with.forced.et.al} { #2 }
 
 
 % #0 turns off the alternate interword spacing for entries with URLs.
@@ -125,12 +125,23 @@ FUNCTION {default.ALTinterwordstretchfactor} { "4" }
 % #0 turns off the "dashification" of repeated (i.e., identical to those
 % of the previous entry) names. The IEEE normally does this.
 % #1 enables
-FUNCTION {default.is.dash.repeated.names} { #1 }
+FUNCTION {default.is.dash.repeated.names} { #0 }
 
 
 % The default name format control string.
-FUNCTION {default.name.format.string}{ "{f.~}{vv~}{ll}{, jj}" }
+% FUNCTION {default.name.format.string}
+FUNCTION {default.name.format.string}{ "{ll~}{ff}{, jj}" }
+% {
+%   's :=
+%   s #1 "{ll}" format.name$       % extract last name
+%   'lastName :=
+%   s #1 "{ff}" format.name$       % extract first name initials
+%   'firstName :=
 
+%   "\MakeUppercase{" * lastName * "}"   % concatenate \MakeUppercase{Lastname}
+%   " " *                                % add space
+%   firstName *
+% }
 
 % The default LaTeX font command for the names.
 FUNCTION {default.name.latex.cmd}{ "" }
@@ -1197,7 +1208,6 @@ FUNCTION {format.address.org.or.pub.date}
   if$
 }
 
-
 FUNCTION {format.names}
 { 'bibinfo :=
   duplicate$ empty$ 'skip$ {
@@ -1215,34 +1225,34 @@ FUNCTION {format.names}
       bibinfo bibinfo.check
       't :=
       nameptr #1 >
-        { nameptr num.names.shown.with.forced.et.al #1 + =
+      { nameptr num.names.shown.with.forced.et.al #1 + =
           numnames max.num.names.before.forced.et.al >
           is.forced.et.al and and
-            { "others" 't :=
+          { "others" 't :=
               #1 'namesleft :=
-            }
-            { skip$ }
+          }
+          { skip$ }
           if$
           namesleft #1 >
-            { ", " * t do.name.latex.cmd * }
-            { s nameptr "{ll}" format.name$ duplicate$ "others" =
-                { 't := }
-                { pop$ }
+          { ", " * t do.name.latex.cmd * }
+          { s nameptr "{ll}" format.name$ duplicate$ "others" =
+              { 't := }
+              { pop$ }
               if$
               t "others" =
-                { " " * bbl.etal emphasize * }
-                { numnames #2 >
-                    { "," * }
-                    { skip$ }
+              { " " * bbl.etal emphasize * }
+              { numnames #2 >
+                  { "," * }
+                  { skip$ }
                   if$
                   bbl.and
                   space.word * t do.name.latex.cmd *
-                }
+              }
               if$
-            }
+          }
           if$
-        }
-        { t do.name.latex.cmd }
+      }
+      { t do.name.latex.cmd }
       if$
       nameptr #1 + 'nameptr :=
       namesleft #1 - 'namesleft :=
@@ -1415,7 +1425,7 @@ FUNCTION {format.article.title}
 { title duplicate$ empty$ 'skip$
     { this.to.prev.status
       this.status.std
-      "t" change.case$
+      % "t" change.case$
     }
   if$
   "title" bibinfo.check
@@ -1437,7 +1447,7 @@ FUNCTION {format.article.title.electronic}
     { this.to.prev.status
       this.status.std
       cap.status.std
-      "t" change.case$ 
+      % "t" change.case$ 
     }
   if$
   "title" bibinfo.check
