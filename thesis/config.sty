@@ -74,12 +74,8 @@
 
 \DefineBibliographyStrings{\languageCustom}{url = {}}
 \DeclareFieldFormat{url}{\url{#1}}
-\DeclareFieldFormat{urlseen}{}
 
-\DefineBibliographyStrings{romanian}{urlseen = {accesat în}}
-\DeclareFieldFormat{urldate}{%
-  \mkbibparens{\datepart{year}{\thefield{urldate}}}%
-}
+\renewcommand*{\mkbibnamefamily}{\MakeUppercase}
 
 \DeclareNameFormat{author}{%
 \ifthenelse{\value{listcount}=1}
@@ -90,14 +86,6 @@
 \ifthenelse{\value{listcount}<\value{liststop}}
 {\addsemicolon\space}
 {}}
-
-% \renewcommand*{\mkbibnamefamily}{\MakeUppercase}
-
-% \DeclareDelimFormat{multinamedelim}{}
-% \DeclareDelimFormat{finalnamedelim}{\addsemicolon\space}
-
-% Make uppercase names only in bibliography.
-% \let\familynameformat=\textsc
 
 % Appendices
 \RequirePackage[toc,page]{appendix}
