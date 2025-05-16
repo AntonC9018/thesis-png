@@ -1,5 +1,4 @@
-if [ "$1" = "rerun" ]; then
-    'latexmk' '--shell-escape' '-xelatex' 'main.tex' '-g'
-else
-    'latexmk' '--shell-escape' '-xelatex' 'main.tex'
+if [ "$1" = "-f" ]; then
+    git clean -Xfd
 fi
+'latexmk' '--shell-escape' '-xelatex' 'main.tex'

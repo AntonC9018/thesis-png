@@ -547,7 +547,7 @@ nici nu există conceptul de \ac{RAII}.
 prin care limbajele ca C++ și Rust se străduiesc să rezolve problema siguranței memoriei.
 
 Zig, apriori, nu garantează suguranța memoriei.
-El dă libertatea programatorului să, aleagă, cum și când să șteargă memoria alocată,
+El dă libertatea programatorului să aleagă cum și când să șteargă memoria alocată,
 pentru a rămâne un limbaj de programare de sistem.
 Cu toate acestea, Zig introduce mai multe utilități și capacități care pot ajuta cu aceasta.
 
@@ -814,12 +814,12 @@ reprezentarea informațiilor despre câmpul selectat din fișier, și drag-and-d
 
 \subsection{Zlib în \acs{PNG}}
 
-Pentru a înțelege problema mai bine, ar fi benefic să se înțeleagă cum funcționează algoritmul Zlib.
+Pentru a înțelege problema mai bine, ar fi benefic să înțeleagă cum funcționează algoritmul Zlib.
 În plus, deoarece algorimul face parte din standardul \ac{PNG},
 și structura acestuia poate fi decodificată și analizată,
-ar fi benefic să fie realizat un fel de parser special pentru Zlib pentru a putea vizualiza nodurile Zlib
+ar fi benefic să realizeze un fel de parser special pentru Zlib pentru a putea vizualiza nodurile Zlib
 în mod bogat în interfață.
-Din aceast motiv, s-a decis să se realizeze implementarea unui decodor Zlib de la zero.
+Din acest motiv, s-a decis să realizeze un decodor Zlib de la zero.
 
 Structura parserului menționată până acum poate fi aplicată și pentru formatul Zlib.
 Singura diferență este că formatul Zlib este bazat pe biți, dar nu pe octeți.
@@ -829,7 +829,7 @@ Starea parserului Zlib poate să țină cont de poziția pe biți ca o variabil�
 acest concept nu se răsfrânge asupra procesării \ac{PNG}.
 Însă, poziția pe biți ar trebui să fie utilă pentru a vizualiza formatul.
 
-În structura finală a aplicației, poziția pe biți a componentelor din fluxul de date a fost salvată la crearea nodurilor.
+În structura finală a aplicației, poziția pe biți a componentelor din fluxul de date se salvează la crearea nodurilor.
 
 Mai complicat conceptual este sistemul de decomprimare,
 deoarece acesta trebuie să păstreze octeții decodificați pentru a putea referi la acestea
@@ -861,10 +861,10 @@ Sunt două variante care ar putea fi folosite:
         Adică, dacă se găsește o eroare pentru un samplu corect -- testul eșuează,
         și invers, pentru un samplu incorect decompresia trebuie să eșueze.
         Una din referințe \cite{gzip_impl} folosește așa abordare pentru teste negative,
-        însă are datele pentru formatul gzip, dar nu zlib, din care cauză acestea nu au putut fi folosite.
+        însă are datele pentru formatul gzip, dar nu Zlib, din care cauză acestea nu au putut fi folosite.
 \end{enumerate}
 
-De fapt, există și încă o abordare -- să nu facă testarea la modulul zlib direct.
+De fapt, există și încă o abordare -- să nu facă testarea la modulul Zlib direct.
 La început, această abordare este cea mai aplicabilă pentru a putea să se miște cât mai repede cu versiunea inițială.
 
 Testarea indirectă oricum va fi folosită la testarea intrărilor diferite ale formatului \ac{PNG},
@@ -998,7 +998,7 @@ while (true)
     }
 
     // Este ultimul segment care va fi citit.
-    // Apelări la read.read() nu mai sunt valide.
+    // Apelări la reader.read() nu mai sunt valide.
     if (readResult.isEnd)
     {
         // Procesorul de octeți nu a consumat întreaga intrare.
@@ -1334,7 +1334,7 @@ dar totodată afișând și interfața obișnuită.
 Uitându-se la interfață, utilizatorul poate deduce ce a căuzat eroarea,
 deoarece arborele s-ar termina în acea poziție.
 
-\section{Oportunitate de abstracrizare a parser-ului}
+\section{Oportunitate de abstractizare a parser-ului}
 
 \subsection{Originea ideii}
 
