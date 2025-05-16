@@ -316,3 +316,13 @@
 }
 
 \newcommand{\anexeCount}{\total{num_appendices}}
+
+\RequirePackage{xstring}
+\newcommand{\correctName}[1]{%
+  % Split #1 at the first space into \firstpart and \secondpart
+  \StrBefore{#1}{ }[\lastName]%
+  \StrBehind{#1}{ }[\firstName]%
+  % Capitalize first part, print second part as is
+  \MakeUppercase{\lastName}~\firstName%
+}
+
