@@ -18,7 +18,14 @@
 \newcommand{\github}{\url{https://github.com/AntonC9018/thesis-png}}
 \newcommand{\chapterCount}{3}
 
+\usepackage{xassoccnt}
+\RegisterTotalDocumentCounter{chapter}
+
 \begin{document}
+
+Test random text: \TotalValue{chapter}
+
+\IsTotalCounterTF{chapter}{yes, total counter}{no, not total counter}
 
 \input{foaie_de_titlu_ro}
 
@@ -2216,6 +2223,8 @@ Rezultatele obținute au fost raportate la \textbf{\conferencesList}\cite{self}.
 
 \section{Drag-and-drop}\label{appendix:drag_and_drop}
 \inputMintedSegment{../src/main.zig}{DragAndDrop}
+
+Test random text: \TotalValue{chapter}
 
 \end{document}
 % vim: fdm=syntax
