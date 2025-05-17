@@ -36,7 +36,7 @@
 \clearpage
 \unnumberedChapter{Adnotare}
 
-\textbf{la \thesisType{} \textquote{\thesisTitle{}}, a studentului \authorName{}, grupa \uniGroupName{}, programul de studii \programulDeStudii.}
+\textbf{la \thesisType{} ``\thesisTitle{''}, a studentului \authorName{}, grupa \uniGroupName{}, programul de studii \programulDeStudii.}
 
 \textbf{Structura tezei.}
 Teza constă din: Introducere, \chapterCount{} capitole, Concluzii generale și recomandări, Bibliografie \bibliographyEntryCount{} titluri.
@@ -78,7 +78,7 @@ Rezultatele obținute au fost raportate la \textbf{\conferencesList}\cite{self}.
 \clearpage
 \unnumberedChapter{Annotation}
 
-\textbf{of the \thesisType{} thesis  \textquote{\thesisTitleEng} of the student \authorName{}, group \uniGroupName{}, \programulDeStudii{} study program.}
+\textbf{of the \thesisType{} thesis  ``\thesisTitleEng'' of the student \authorName{}, group \uniGroupName{}, \programulDeStudii{} study program.}
 
 \textbf{The structure of the thesis.}
 The thesis is made up of: Introduction, \chapterCount{} chapters,
@@ -248,7 +248,7 @@ precum și cele mai importante decizii de proiectare care au adus creatorii form
 
 Formatul \ac{PNG} este un format portabil destinat pentru reprezentarea imaginilor fără pierderi.
 
-Fraza \textquote{fără pierderi} reprezintă faptul că pixelii imaginii
+Fraza ``fără pierderi'' reprezintă faptul că pixelii imaginii
 pot fi comprimați într-un fișier \ac{PNG},
 după ce decomprimați din acest fișier de către cititor,
 întorcându-le în forma lor inițială.
@@ -570,12 +570,12 @@ adică fără flaguri \texttt{-Wconversion -Werror}, situațiile unde se pierd i
 ca conversiunea de la tipuri întregi cu semn la tipuri fără semn, sau conversiuni ale întregilor
 de la 64 de biți la 32 de biți, sunt acceptate de către compilator fără nici o eroare sau avertizare,
 iar cazurile unde așa conversiuni de fapt se întâmplă în timpul rulării
-sunt specificate ca \textquote{undefined behavior} în C!
+sunt specificate ca ``undefined behavior'' în C!
 Deci ele nici nu sunt detectate în timpul rulării și produc rezultate necunoscute.
 
 În Zig, compilatorul înserează verificări în timpul rulării pentru așa cazuri.
 Dacă oarecare pierdere de informație neașteptată are loc,
-programul va da eroarea (ar \textquote{panica}) cu stack trace-ul execuției.
+programul va da eroarea (ar ``panica'') cu stack trace-ul execuției.
 În plus, fiecare loc unde pierderea de informație este posibilă trebuie numaidecât
 să fie notată explicit în cod, altfel compilatorul nu-l va accepta.
 
@@ -639,7 +639,7 @@ Dezvoltarea pe Linux eclipsează dezvoltarea pe Windows -- aceasta este un fapt 
         Cu toate că pe versiuni noi există aplicația WinGet, 
         aceasta nu este atât de stabilă și dezvoltată ca apt-get de pe Ubuntu.
         Există și Chocolatey, însă acesta nu permite instalarea pachetelor de ultimă versiune,
-        dacă această versiune nu este în lista lor a \textquote{pachetelor de încredere},
+        dacă această versiune nu este în lista lor a ``pachetelor de încredere'',
         și nu include toate capacitățile în versiunea gratuită.
         (Aceste afirmații sunt fără referințe bibliografice deoarece 
         au fost aflate în trecut și sursele care le confirmă au fost pierdute.)
@@ -648,7 +648,7 @@ Dezvoltarea pe Linux eclipsează dezvoltarea pe Windows -- aceasta este un fapt 
         Este practic imposibil să facă un build la orice aplicație în mod fiabil.
         Windows este foarte sensibil la configurări globale ale sistemului,
         mereu lipsește careva pachete instalate, sau tocmai nu suportă unele pachete, etc.
-        Compilarea aplicațiilor pe Windows mereu implică \textquote{probleme pe cap}.
+        Compilarea aplicațiilor pe Windows mereu implică ``probleme pe cap''.
         Pe de altă parte, pe Linux aceasta este trivial.
         După instalarea pachetelor necesare, build-urile lucrează ideal în aproape 100\% din cazuri.
 
@@ -961,7 +961,7 @@ Librăria folosește următoarele idei de bază:
     \item
         După ce datele din secvență sunt procesate,
         funcția \texttt{advance} a cititorului este invocată pentru
-        a \textquote{mișca} poziția de început curentă la poziția de început 
+        a ``mișca'' poziția de început curentă la poziția de început 
         a secvenței după ce datele din aceasta au fost procesate.
 
     \item
@@ -1060,7 +1060,7 @@ A se vedea anexa \ref{appendix:sequence_iterator}.
 
 \subsection{Operații pe secvențe}
 
-Operația de \textquote{mișcare} a secvenței este destul de simplă -- se suprascrie poziția de început a secvenței.
+Operația de ``mișcare'' a secvenței este destul de simplă -- se suprascrie poziția de început a secvenței.
 Începutul nou poate fi derivat ori în urma iterării prin iterator,
 ori calculat prin numărul de octeți care trebuie să fie omiși,
 adică poziția de început va fi mișcată înainte cu acel număr de octeți
@@ -1094,7 +1094,7 @@ A se vedea anexa \ref{appendix:crc_sequence_defer_example} unde este realizat ac
 \subsection{Suprascrierea temporară a segmentelor}
 
 Datorită faptului că structura segmentelor și a secvențelor este atât de transparentă,
-este posibil de a \textquote{deturna} o secvență, definind, de exemplu, segmentul propriu de început.
+este posibil de a ``deturna'' o secvență, definind, de exemplu, segmentul propriu de început.
 Principal este faptul ca ca acest segment să fie legat la restul listei de segmente pentru a putea ajunge la poziția de sfârșit.
 
 Codul de mai jos ilustrează ideea.
@@ -1444,12 +1444,12 @@ ar fi complicată și ar reduce semnificativ meritul acestei abordări.
 
 \section{Complicațiile asociate cu citirea chunk-ului \texttt{IDAT}}
 
-\subsection{Descrierea problemei de \textquote{sărituri}}
+\subsection{Descrierea problemei de ``sărituri''}
 
-Posibilitatea de a putea păstra informațiile despre originea fiecărui \textquote{nod},
+Posibilitatea de a putea păstra informațiile despre originea fiecărui ``nod'',
 adică poziția a acestuia absolută din fișier,
 precum și posibilitatea de a trata fluxul de date ca unul linear nu sunt direct compatibile
-atunci când fluxul de date poate \textquote{sări}, adică atunci când pozițiile absolute
+atunci când fluxul de date poate ``sări'', adică atunci când pozițiile absolute
 între diferitele segmente nu sunt consecutive.
 Deoarece unul singur nod poate să se afle la marginea a două segmente, iar potențial și mai mult ca două,
 ideea că locația fiecărui nod poate fi descrisă de locația lui absolută în fișier și
@@ -1507,7 +1507,7 @@ Poate o abordare mai bună ar fi ca acele segmente veche să fie păstrate în l
 pentru a putea adresa la acestea din secvențe,
 și ca segmentele din secvențe să-și poată specifica ofset-uri,
 cu însele date păstrate separat, doar în buferi principali.
-Atunci ar trebui să adauge și un fel de \textquote{comsumed position hint} la cititor,
+Atunci ar trebui să adauge și un fel de ``comsumed position hint'' la cititor,
 ca el să păstreze segmentele care încă n-au fost procesate până la capăt.
 
 De fapt, așa idee se folosește și în biblioteca \texttt{System.IO.Pipelines} din C\#,

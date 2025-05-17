@@ -70,14 +70,14 @@
 % Display the diacritics correctly
 \RequirePackage{fontspec}
 % Times New Roman font
-\setmainfont{Times New Roman}
+\setmainfont{Times New Roman}[Ligatures=TeX]
 \setmonofont{Liberation Mono}[Scale=MatchLowercase]
 
 % Romanian language support
 \usepackage{polyglossia}{}
 \setmainlanguage{\mainLanguage}
 \setotherlanguage{\otherLanguage}
-\newfontfamily\cyrillicfont{Times New Roman}
+\newfontfamily\cyrillicfont{Times New Roman}[Ligatures=TeX]
 \newfontfamily\cyrillicfonttt{Liberation Mono}[Scale=MatchLowercase]
 
 % Language-specific quote config
