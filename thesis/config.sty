@@ -59,14 +59,17 @@
 % Times New Roman font
 \setmainfont{Times New Roman}
 
+% By default, the first paragraph after 
+% a subsection and such is not indented.
+% Must be imported BEFORE polyglossia.
+\RequirePackage{indentfirst}
+
 % Romanian language support
-\usepackage{polyglossia}
+\usepackage{polyglossia}{}
 \setmainlanguage{\mainLanguage}
 \setotherlanguage{\otherLanguage}
 
-% \def\x{romanian}
-% \edef\babeloptions{\x}
-% \RequirePackage[\babeloptions]{babel}
+% Language-specific quote config
 \RequirePackage{csquotes}
 
 % Counters
@@ -93,6 +96,8 @@
 ]{biblatex}
 \addbibresource{bibliography.bib}
 
+% Count bibliography entries.
+% NOTE: Only works if you don't clone, as mentioned in the answer:
 % https://tex.stackexchange.com/a/536720
 \newcommand*{\listcounted}{}
 \makeatletter
@@ -114,7 +119,9 @@
 % This removes the parentheses around.
 \DeclareFieldFormat{urldate}{\bibstring{urlseen}~#1}
 
-% CURMANSCHII Anton; another author
+% if 1 author: CURMANSCHII Anton
+% if 2 authors: CURMANSCHII Anton; another author
+% if >2 authors: CURMANSCHII Anton et al.
 \def\authorNameHelper{
   \MakeUppercase{\namepartfamily}%
   \ifdefvoid{\namepartgiven}{}{\space\namepartgiven}%
@@ -138,7 +145,10 @@
   \fi
 }
 
-\DeclareBibliographyDriver{online}{%
+% Configure the order that the info appears.
+% I'm not sure which format must be used.
+% NOTE: other types of documents will have the default format.
+\def\helperFormat{%
   \printnames{author}%
   \newunit\newblock
   \printfield{title}%
@@ -150,19 +160,8 @@
   \printurldate%
   \finentry
 }
-
-\DeclareBibliographyDriver{manual}{%
-  \printnames{author}%
-  \newunit\newblock
-  \printfield{title}%
-  \newunit\newblock
-  \printfield{url}%
-  \newunit\newblock
-  \printfield{year}%
-  \addperiod\space
-  \printurldate%
-  \finentry
-}
+\DeclareBibliographyDriver{online}{\helperFormat}
+\DeclareBibliographyDriver{manual}{\helperFormat}
 
 % Appendices
 \RequirePackage[toc,page]{appendix}
@@ -278,9 +277,9 @@
   }%
 }
 
-% does math on counters
+% Does math on counters
 \newcommand{\usefulPageCount}{%
-  % this evaluates a math expression, which is `end - begin`
+  % This evaluates a math expression, which is `end - begin`
   \the\numexpr\getpagemark{usefulStuffEnd}-\getpagemark{usefulStuffBegin}\relax}
 
 \newcommand\chapterConclusionSection[1]{\section{\chapterConclusionLabel\relax}}
@@ -319,7 +318,8 @@
       \caption{#2}\label{fig:#1}
   \end{figure}}
 
-
+% Short figure reference.
+% TODO: Add helper for long figure reference?
 \newcommand\refFigure[1]{\MakeLowercase{\figureShortLabel} \ref{fig:#1}}
 
 % See the python script.
@@ -333,6 +333,8 @@
 }
 
 \def\appendixChapter{%
+  % Appendices don't have the dot when referencing.
+  % If you have multiple chapters in appendices, you'll have to reconfigure this.
   \renewcommand{\thesection}{\arabic{section}}%
   \titleformat{\section}[block]{\normalfont\normalsize\bfseries\filcenter}{\anexaLabel{} \thesection.~}{0pt}{}%
   \appendix
@@ -345,12 +347,14 @@
   % Makes little sense, but ok I guess.
   \setcounter{chapter}{1}%
   %
+  % Counter, again, looks at sections rather than subsections.
   \def\oldsection{} \let\oldsection=\section{}%
   \def\section{\stepcounter{num_appendices}\oldsection}%
 
   \unnumberedChapter{Anexe}
 }
 
+% Helper for the title pages
 \RequirePackage{xstring}
 \newcommand{\correctName}[1]{%
   % Split #1 at the first space into \firstpart and \secondpart
@@ -360,7 +364,6 @@
   \MakeUppercase{\lastName}~\firstName%
 }
 
-% 
 \newcommand{\bibliographyChapter}{%
   \setcounter{num_chapters}{\value{chapter}}
   \newpage
