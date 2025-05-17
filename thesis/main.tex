@@ -16,16 +16,8 @@
 \newcommand{\conferencesList}{Conferința Studențească, Editia XXVIII-a, \year}
 \newcommand{\conducatorName}{Pereteatcu Sergiu}
 \newcommand{\github}{\url{https://github.com/AntonC9018/thesis-png}}
-\newcommand{\chapterCount}{3}
-
-\usepackage{xassoccnt}
-\RegisterTotalDocumentCounter{chapter}
 
 \begin{document}
-
-Test random text: \TotalValue{chapter}
-
-\IsTotalCounterTF{chapter}{yes, total counter}{no, not total counter}
 
 \input{foaie_de_titlu_ro}
 
@@ -141,11 +133,7 @@ The obtained results were reported at \textbf{\conferencesList}\cite{self}.
     \acro{3D}{3-dimensional}
 \end{acronym}
 
-
-% I think this one's required to be capitalized.
-\unnumberedChapter{INTRODUCERE}
-
-\markpage{usefulStuffBegin}
+\introChapter
 
 \textbf{Actualitatea și importanța temei.}
 
@@ -2185,18 +2173,9 @@ Toate codurile sursă, inclusiv codurile de program și textul lucrării
 
 Rezultatele obținute au fost raportate la \textbf{\conferencesList}\cite{self}.
 
-\newpage
-\markpage{usefulStuffEnd}
+\bibliographyChapter
 
-
-% Bibliography
-\printbibliography
-\addcontentsline{toc}{chapter}{\bibname}
-
-% Appendices
-\appendix
-
-\unnumberedChapter{Anexe}
+\appendixChapter
 
 \section{Funcția actualizării valorii CRC}\label{appendix:crc}
 \inputMintedSegment{../src/parser/png/common.zig}{CRC}
@@ -2223,8 +2202,6 @@ Rezultatele obținute au fost raportate la \textbf{\conferencesList}\cite{self}.
 
 \section{Drag-and-drop}\label{appendix:drag_and_drop}
 \inputMintedSegment{../src/main.zig}{DragAndDrop}
-
-Test random text: \TotalValue{chapter}
 
 \end{document}
 % vim: fdm=syntax

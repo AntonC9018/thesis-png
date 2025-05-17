@@ -8,6 +8,7 @@
   \newcommand{\chapterConclusionLabel}{Concluzii pentru capitol \arabic{chapter}}%
   \newcommand{\figureShortLabel}{Fig.}%
   \newcommand{\anexaLabel}{Anexa}%
+  \newcommand{\introLabel}{Introducere}%
 }
 \DeclareOption{russian}{%
   \newcommand{\mainLanguage}{russian}%
@@ -16,6 +17,7 @@
   \newcommand{\chapterConclusionLabel}{Выводы для главы \arabic{chapter}}%
   \newcommand{\figureShortLabel}{Фиг.}%
   \newcommand{\anexaLabel}{Приложение}%
+  \newcommand{\introLabel}{Введение}%
 }
 \DeclareOption*{\PackageError{config}{Invalid option '\CurrentOption'}{Pass the language option}}
 \ProcessOptions\relax
@@ -67,6 +69,16 @@
 % \RequirePackage[\babeloptions]{babel}
 \RequirePackage{csquotes}
 
+% Counters
+\RequirePackage{totcount}
+\newtotcounter{num_bib_entries}
+\newtotcounter{num_appendices}
+\newtotcounter{num_chapters}
+% See the places these get mentioned to see how it's implemented.
+\newcommand{\bibliographyEntryCount}{\total{num_bib_entries}}
+\newcommand{\anexeCount}{\total{num_appendices}}
+\newcommand{\chapterCount}{\total{num_chapters}}
+
 % Bibliography package.
 % This is different from the default system, because we need to configure the format.
 % The default system (bibtex) has its own DSL and it's actually impossible to 
@@ -81,20 +93,50 @@
 ]{biblatex}
 \addbibresource{bibliography.bib}
 
+% https://tex.stackexchange.com/a/536720
+\newcommand*{\listcounted}{}
+\makeatletter
+\AtDataInput{%
+  \xifinlist{\abx@field@entrykey}\listcounted
+    {}
+    {\stepcounter{num_bib_entries}%
+     \listxadd\listcounted{\abx@field@entrykey}}%
+}
+\makeatother
+
+% Removes Address: or Adresa: before the url
 \DefineBibliographyStrings{\mainLanguage}{url = {}}
 \DeclareFieldFormat{url}{\url{#1}}
 
+% "{title}", with quotes specific to the language
 \DeclareFieldFormat{title}{\mkbibquote{#1}}
-\DeclareFieldFormat{year}{#1}
-\DeclareFieldFormat[online]{year}{#1}
+% Accesat în {date}
+% This removes the parentheses around.
 \DeclareFieldFormat{urldate}{\bibstring{urlseen}~#1}
 
+% CURMANSCHII Anton; another author
+\def\authorNameHelper{
+  \MakeUppercase{\namepartfamily}%
+  \ifdefvoid{\namepartgiven}{}{\space\namepartgiven}%
+}
 \DeclareNameFormat{author}{%
-\MakeUppercase{\namepartfamily}%
-\ifdefvoid{\namepartgiven}{}{\space\namepartgiven}%
-\ifthenelse{\value{listcount}<\value{liststop}}
-{\addsemicolon\space}
-{}}
+  \ifnum\value{listtotal}=1
+    \authorNameHelper
+  \else
+    \ifnum\value{listtotal}=2
+      \authorNameHelper
+      \ifnum\value{listcount}=1
+        \addsemicolon\space
+      \fi
+    \else
+      % Three or more authors
+      \ifnum\value{listcount}=1
+        \authorNameHelper
+        \addspace et al.%
+      \fi
+    \fi
+  \fi
+}
 
 \DeclareBibliographyDriver{online}{%
   \printnames{author}%
@@ -190,12 +232,6 @@
 \RequirePackage{indentfirst}
 \setlength{\parindent}{1.0cm}
 
-% https://tex.stackexchange.com/questions/163451/total-number-of-citations
-\RequirePackage{totcount}
-\newtotcounter{citnum} % From the package documentation
-\def\oldbibitem{} \let\oldbibitem=\bibitem{}
-\def\bibitem{\stepcounter{citnum}\oldbibitem}
-
 % Thank you to @paante on LaTeX Discord.
 % Makes it possible to mark pages and then do math on them.
 % usage: \markpage{key}
@@ -216,6 +252,7 @@
 \def\getpagemark#1{\ifcsname pagecount/#1\endcsname \csname pagecount/#1\endcsname \else 0\fi}
 
 
+
 % Extracting the name of chapters.
 % https://tex.stackexchange.com/questions/62241/how-to-get-the-current-chapter-name-section-name-subsection-name-etc
 \RequirePackage{nameref}
@@ -226,9 +263,10 @@
 \setlist{nosep}
 
 % Helper functions for some stuff
-\newcommand{\unnumberedChapter}[1]{%
+\newcommand{\unnumberedChapter}[1]{
   \chapter*{#1}
-  \addcontentsline{toc}{chapter}{#1}}
+  \addcontentsline{toc}{chapter}{#1}
+}
 
 % SIGN HERE: _______ sort of field
 \def\underscores#1{\leavevmode \leaders\hrule\hskip#1\relax}
@@ -246,7 +284,6 @@
   \the\numexpr\getpagemark{usefulStuffEnd}-\getpagemark{usefulStuffBegin}\relax}
 
 \newcommand\chapterConclusionSection[1]{\section{\chapterConclusionLabel\relax}}
-\newcommand{\bibliographyEntryCount}{\total{citnum}}
 
 % Some math stuff? I don't even know.
 \RequirePackage{amsmath}
@@ -295,27 +332,24 @@
     \input{|python3 findSegment.py #1 #2}%
 }
 
-% Redefine \appendix to do some more stuff.
-\newtotcounter{num_appendices}
-\def\oldappendix{} \let\oldappendix=\appendix{}
-\def\appendix{%
-    \oldappendix%
-    \renewcommand{\thesection}{\arabic{section}}%
-    \titleformat{\section}[block]{\normalfont\normalsize\bfseries\filcenter}{\anexaLabel{} \thesection.~}{0pt}{}%
-    %
-    % Every section on new page
-    % \newcommand{\sectionbreak}{\clearpage}
-    %
-    % Since we've got just a single chapter in the appedices,
-    % but which is also the name of the Appendix chapter, it should be omitted.
-    % Makes little sense, but ok I guess.
-    \setcounter{chapter}{1}%
-    %
-    \def\oldsection{} \let\oldsection=\section{}%
-    \def\section{\stepcounter{num_appendices}\oldsection}%
-}
+\def\appendixChapter{%
+  \renewcommand{\thesection}{\arabic{section}}%
+  \titleformat{\section}[block]{\normalfont\normalsize\bfseries\filcenter}{\anexaLabel{} \thesection.~}{0pt}{}%
+  \appendix
+  %
+  % Every section on new page
+  % \newcommand{\sectionbreak}{\clearpage}
+  %
+  % Since we've got just a single chapter in the appedices,
+  % but which is also the name of the Appendix chapter, it should be omitted.
+  % Makes little sense, but ok I guess.
+  \setcounter{chapter}{1}%
+  %
+  \def\oldsection{} \let\oldsection=\section{}%
+  \def\section{\stepcounter{num_appendices}\oldsection}%
 
-\newcommand{\anexeCount}{\total{num_appendices}}
+  \unnumberedChapter{Anexe}
+}
 
 \RequirePackage{xstring}
 \newcommand{\correctName}[1]{%
@@ -326,3 +360,25 @@
   \MakeUppercase{\lastName}~\firstName%
 }
 
+% 
+\newcommand{\bibliographyChapter}{%
+  \setcounter{num_chapters}{\value{chapter}}
+  \newpage
+  \markpage{usefulStuffEnd}
+  \printbibliography
+  \addcontentsline{toc}{chapter}{\bibname}
+}
+
+% This is how you capitalize a piece of text in latex. Yikes.
+\ExplSyntaxOn
+\RequirePackage{xparse}
+\NewDocumentCommand{\introLabelUpper}{} {
+  \tl_upper_case:n {\introLabel}
+}
+\ExplSyntaxOff
+
+\newcommand{\introChapter}{
+  % I think this one's required to be capitalized.
+  \unnumberedChapter{\introLabelUpper}
+  \markpage{usefulStuffBegin}
+}
