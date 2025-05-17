@@ -4,20 +4,27 @@
 \DeclareOption{romanian}{%
   \newcommand{\mainLanguage}{romanian}%
   \newcommand{\otherLanguage}{russian}%
-  \newcommand{\signLabel}{semnătură}%
   \newcommand{\chapterConclusionLabel}{Concluzii pentru capitol \arabic{chapter}}%
   \newcommand{\figureShortLabel}{Fig.}%
   \newcommand{\anexaLabel}{Anexa}%
   \newcommand{\introLabel}{Introducere}%
+  \newcommand{\titlePage}{\input{parts/foaie_de_titlu_ro}}%
+  \newcommand{\declarationPage}{\input{parts/declaratie_ro}}%
 }
 \DeclareOption{russian}{%
   \newcommand{\mainLanguage}{russian}%
   \newcommand{\otherLanguage}{romanian}%
-  \newcommand{\signLabel}{подпись}%
   \newcommand{\chapterConclusionLabel}{Выводы для главы \arabic{chapter}}%
   \newcommand{\figureShortLabel}{Фиг.}%
   \newcommand{\anexaLabel}{Приложение}%
   \newcommand{\introLabel}{Введение}%
+  \newcommand{\titlePage}{
+    % Always include
+    \input{parts/foaie_de_titlu_ro}
+    % Only include if the language is RU
+    \input{parts/foaie_de_titlu_ru}
+  }%
+  \newcommand{\declarationPage}{\input{parts/declaratie_ru}}%
 }
 \DeclareOption*{\PackageError{config}{Invalid option '\CurrentOption'}{Pass the language option}}
 \ProcessOptions\relax
@@ -46,6 +53,7 @@
   }}
 \makeatother
 
+
 % spacings
 \RequirePackage[a4paper,right=15mm,left=25mm,top=20mm,bottom=20mm]{geometry}
 
@@ -53,21 +61,24 @@
 \RequirePackage{setspace}
 \setstretch{1.5}
 
-% Being able to copy-paste from the document
-% Display the diacritics correctly
-\RequirePackage{fontspec}
-% Times New Roman font
-\setmainfont{Times New Roman}
-
 % By default, the first paragraph after 
 % a subsection and such is not indented.
 % Must be imported BEFORE polyglossia.
 \RequirePackage{indentfirst}
 
+% Being able to copy-paste from the document
+% Display the diacritics correctly
+\RequirePackage{fontspec}
+% Times New Roman font
+\setmainfont{Times New Roman}
+\setmonofont{Liberation Mono}[Scale=MatchLowercase]
+
 % Romanian language support
 \usepackage{polyglossia}{}
 \setmainlanguage{\mainLanguage}
 \setotherlanguage{\otherLanguage}
+\newfontfamily\cyrillicfont{Times New Roman}
+\newfontfamily\cyrillicfonttt{Liberation Mono}[Scale=MatchLowercase]
 
 % Language-specific quote config
 \RequirePackage{csquotes}
@@ -218,9 +229,14 @@
 % https://mirror.marwan.ma/ctan/macros/latex/contrib/titlesec/titlesec.pdf#page=4&zoom=200,67,627
 % It gets pretty involved...
 \def\tabSize{1cm}
-\titleformat{\chapter}[block]{\normalfont\large\bfseries\filcenter}{\thechapter~}{\tabSize}{\MakeUppercase}
+\newif\ifchapterupper
+\chapteruppertrue
+
+\titleformat{\chapter}[block]{\normalfont\large\bfseries\filcenter}{\thechapter~}{\tabSize}{\ifchapterupper \MakeUppercase \fi}
 \titleformat{\section}[block]{\normalfont\normalsize\bfseries\filright}{\thesection~}{\tabSize}{}
 \titleformat{\subsection}[block]{\normalfont\normalsize\bfseries\filright}{\thesubsection~}{\tabSize}{}
+
+\newcommand\restoreChapterCasing{\chapterupperfalse}
 
 % Skips before and after the title
 \titlespacing*{\chapter}{0pt}{12pt}{6pt}
@@ -269,11 +285,14 @@
 
 % SIGN HERE: _______ sort of field
 \def\underscores#1{\leavevmode \leaders\hrule\hskip#1\relax}
+
+% First parameter is the size
+% Second parameter is the text
 % https://tex.stackexchange.com/questions/55698/text-under-a-line
-\newcommand{\signatureField}[1]{%
+\newcommand{\textUnderLine}[2]{%
   \ensuremath{%
     \vphantom{\underscores{#1}}%
-    \smash{\underset{\text{(\signLabel)}}{\underscores{#1}}}%
+    \smash{\underset{\text{#2}}{\underscores{#1}}}%
   }%
 }
 
@@ -356,12 +375,21 @@
 
 % Helper for the title pages
 \RequirePackage{xstring}
-\newcommand{\correctName}[1]{%
-  % Split #1 at the first space into \firstpart and \secondpart
+% Helper
+\newcommand{\SplitFirstTwoWords}[1]{%
   \StrBefore{#1}{ }[\lastName]%
-  \StrBehind{#1}{ }[\firstName]%
+  \StrBehind{#1}{ }[\rest]%
+  \StrBefore{\rest}{ }[\firstName]%
+  \IfStrEq{\firstName}{}{\def\firstName{\rest}}{}%
+}
+\newcommand{\correctName}[1]{%
+  \SplitFirstTwoWords{#1}%
   % Capitalize first part, print second part as is
   \MakeUppercase{\lastName}~\firstName%
+}
+\newcommand{\firstNameLastName}[1]{%
+  \SplitFirstTwoWords{#1}%
+  \firstName{}~\lastName{}%
 }
 
 \newcommand{\bibliographyChapter}{%
@@ -385,3 +413,6 @@
   \unnumberedChapter{\introLabelUpper}
   \markpage{usefulStuffBegin}
 }
+
+\usepackage[useregional=text]{datetime2}
+
